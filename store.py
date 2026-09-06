@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import time
 from typing import Any
 from uuid import UUID
 
@@ -37,6 +38,7 @@ class SupabaseStore:
         from supabase import create_client
         from supabase.client import ClientOptions
 
+        self._public_cache: dict[tuple, tuple[float, Any]] = {}
         self.client = create_client(
             url,
             service_key,
@@ -50,6 +52,39 @@ class SupabaseStore:
 
     def _table(self, name: str):
         return self.client.schema(PICKEM_SCHEMA).table(name)
+
+    def _cache_get(self, key: tuple) -> Any | None:
+        cache = getattr(self, "_public_cache", None)
+        if not cache:
+            return None
+        item = cache.get(key)
+        if not item:
+            return None
+        expires_at, value = item
+        if time.monotonic() >= expires_at:
+            cache.pop(key, None)
+            return None
+        return value
+
+    def _cache_set(self, key: tuple, value: Any, ttl_seconds: float) -> Any:
+        cache = getattr(self, "_public_cache", None)
+        if cache is None:
+            cache = {}
+            self._public_cache = cache
+        cache[key] = (time.monotonic() + ttl_seconds, value)
+        return value
+
+    def clear_week_cache(self, week_id: str | None = None) -> None:
+        cache = getattr(self, "_public_cache", None)
+        if not cache:
+            return
+        if week_id is None:
+            cache.clear()
+            return
+        week_id = str(week_id)
+        for key in list(cache):
+            if week_id in {str(part) for part in key}:
+                cache.pop(key, None)
 
     def healthcheck(self) -> bool:
         try:
@@ -176,6 +211,10 @@ class SupabaseStore:
     # Gate 2 weekly game data
     # -------------------------
     def get_real_week(self) -> dict[str, Any] | None:
+        cache_key = ("real_week",)
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
         res = (
             self._table("weeks")
             .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo")
@@ -186,12 +225,16 @@ class SupabaseStore:
         )
         rows = list(res.data or [])
         if not rows:
-            return None
+            return self._cache_set(cache_key, None, 15)
         now = datetime.now(UTC)
         current_or_future = [r for r in rows if (parse_timestamp(r.get("locks_at")) or now) >= now]
-        return (current_or_future or rows[-1:])[0]
+        return self._cache_set(cache_key, (current_or_future or rows[-1:])[0], 30)
 
     def get_demo_week(self) -> dict[str, Any] | None:
+        cache_key = ("demo_week",)
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
         res = (
             self._table("weeks")
             .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo")
@@ -200,9 +243,14 @@ class SupabaseStore:
             .limit(1)
             .execute()
         )
-        return res.data[0] if res.data else None
+        value = res.data[0] if res.data else None
+        return self._cache_set(cache_key, value, 60)
 
     def get_week(self, week_id: str) -> dict[str, Any] | None:
+        cache_key = ("week", str(week_id))
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
         res = (
             self._table("weeks")
             .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo")
@@ -210,18 +258,25 @@ class SupabaseStore:
             .limit(1)
             .execute()
         )
-        return res.data[0] if res.data else None
+        value = res.data[0] if res.data else None
+        return self._cache_set(cache_key, value, 30)
 
-    def get_week_pool(self, week_id: str) -> list[dict[str, Any]]:
-        res = (
+    def get_week_pool(self, week_id: str, *, visible_only: bool = True) -> list[dict[str, Any]]:
+        cache_key = ("week_pool", str(week_id), bool(visible_only))
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return list(cached)
+        query = (
             self._table("player_pool")
             .select("id,week_id,position,slot_rank,player_name,team_abbr,opponent_abbr,kickoff_at,is_visible,availability_status")
             .eq("week_id", week_id)
-            .order("position")
-            .order("slot_rank")
-            .execute()
         )
-        return list(res.data or [])
+        if visible_only:
+            query = query.eq("is_visible", True)
+        res = query.order("position").order("slot_rank").execute()
+        rows = list(res.data or [])
+        self._cache_set(cache_key, rows, 20)
+        return list(rows)
 
     def get_lineup(self, week_id: str, player_id: str) -> dict[str, Any] | None:
         res = (
@@ -245,22 +300,39 @@ class SupabaseStore:
         )
         return list(res.data or [])
 
+    def get_lineup_state(self, week_id: str, player_id: str) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+        """Fetch a player's lineup and all five picks in one PostgREST round trip."""
+        res = (
+            self._table("lineups")
+            .select(
+                "id,week_id,player_id,confirmed_at,created_at,updated_at,"
+                "lineup_picks(id,lineup_id,position,pool_player_id,emergency_pool_player_id,updated_at)"
+            )
+            .eq("week_id", week_id)
+            .eq("player_id", player_id)
+            .limit(1)
+            .execute()
+        )
+        if not res.data:
+            return None, []
+        row = dict(res.data[0])
+        picks = list(row.pop("lineup_picks", []) or [])
+        return row, picks
+
     def ensure_lineup(self, week_id: str, player_id: str) -> dict[str, Any]:
-        existing = self.get_lineup(week_id, player_id)
-        if existing:
-            return existing
+        # Normal UI calls pass an existing lineup id after the first pick. Avoid a
+        # preflight SELECT on the first pick: try the insert and only re-read if
+        # another device/session created the unique row first.
         try:
             res = self._table("lineups").insert({"week_id": week_id, "player_id": player_id}).execute()
             return res.data[0]
         except Exception:
-            # If two taps raced, re-read the authoritative unique row.
             existing = self.get_lineup(week_id, player_id)
             if existing:
                 return existing
             raise
 
-    def _assert_week_open_for_picks(self, week_id: str) -> dict[str, Any]:
-        week = self.get_week(week_id)
+    def _assert_week_value_open_for_picks(self, week: dict[str, Any] | None) -> dict[str, Any]:
         if not week:
             raise StoreError("This week is unavailable.")
         locks_at = parse_timestamp(week.get("locks_at"))
@@ -271,6 +343,9 @@ class SupabaseStore:
             raise StoreError("Picks are not open yet.")
         return week
 
+    def _assert_week_open_for_picks(self, week_id: str) -> dict[str, Any]:
+        return self._assert_week_value_open_for_picks(self.get_week(week_id))
+
     def save_pick(
         self,
         *,
@@ -279,12 +354,19 @@ class SupabaseStore:
         position: str,
         pool_player_id: str,
         emergency_pool_player_id: str | None = None,
+        lineup_id: str | None = None,
+        known_week: dict[str, Any] | None = None,
+        known_pool: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         if position not in POSITIONS:
             raise StoreError("Invalid lineup position.")
-        self._assert_week_open_for_picks(week_id)
+        week = self._assert_week_value_open_for_picks(known_week) if known_week is not None else self._assert_week_open_for_picks(week_id)
 
-        pool = self.get_week_pool(week_id)
+        # UI callers already have the current weekly pool. Reuse it instead of
+        # downloading the same 25 visible player rows again on every tap. The
+        # database trigger remains the authoritative guard for lock, position,
+        # visibility, week membership, and OUT status.
+        pool = known_pool if known_pool is not None else self.get_week_pool(week_id)
         by_id = {str(row["id"]): row for row in pool}
         starter = by_id.get(str(pool_player_id))
         if not starter or starter.get("position") != position or not bool(starter.get("is_visible")):
@@ -302,9 +384,14 @@ class SupabaseStore:
             if safe_status(emergency.get("availability_status")) == "OUT":
                 raise StoreError("That emergency backup is OUT. Choose someone else.")
 
-        lineup = self.ensure_lineup(week_id, player_id)
+        if lineup_id:
+            resolved_lineup_id = str(lineup_id)
+        else:
+            lineup = self.ensure_lineup(week_id, player_id)
+            resolved_lineup_id = str(lineup["id"])
+
         payload = {
-            "lineup_id": str(lineup["id"]),
+            "lineup_id": resolved_lineup_id,
             "position": position,
             "pool_player_id": str(starter["id"]),
             "emergency_pool_player_id": str(emergency["id"]) if emergency else None,
@@ -320,7 +407,24 @@ class SupabaseStore:
         player_id: str,
         position: str,
         emergency_pool_player_id: str,
+        starter_pool_player_id: str | None = None,
+        lineup_id: str | None = None,
+        known_week: dict[str, Any] | None = None,
+        known_pool: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        if starter_pool_player_id and lineup_id:
+            return self.save_pick(
+                week_id=week_id,
+                player_id=player_id,
+                position=position,
+                pool_player_id=str(starter_pool_player_id),
+                emergency_pool_player_id=emergency_pool_player_id,
+                lineup_id=str(lineup_id),
+                known_week=known_week,
+                known_pool=known_pool,
+            )
+
+        # Compatibility fallback for non-UI callers.
         lineup = self.get_lineup(week_id, player_id)
         if not lineup:
             raise StoreError("Choose your starter first.")
@@ -334,16 +438,34 @@ class SupabaseStore:
             position=position,
             pool_player_id=str(current["pool_player_id"]),
             emergency_pool_player_id=emergency_pool_player_id,
+            lineup_id=str(lineup["id"]),
+            known_week=known_week,
+            known_pool=known_pool,
         )
 
-    def confirm_lineup(self, week_id: str, player_id: str) -> dict[str, Any]:
-        self._assert_week_open_for_picks(week_id)
-        lineup = self.ensure_lineup(week_id, player_id)
+    def confirm_lineup(
+        self,
+        week_id: str,
+        player_id: str,
+        *,
+        lineup_id: str | None = None,
+        known_week: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if known_week is not None:
+            self._assert_week_value_open_for_picks(known_week)
+        else:
+            self._assert_week_open_for_picks(week_id)
+        if lineup_id:
+            resolved_lineup_id = str(lineup_id)
+        else:
+            lineup = self.ensure_lineup(week_id, player_id)
+            resolved_lineup_id = str(lineup["id"])
         stamp = _iso(datetime.now(UTC))
         res = (
             self._table("lineups")
             .update({"confirmed_at": stamp, "updated_at": stamp})
-            .eq("id", str(lineup["id"]))
+            .eq("id", resolved_lineup_id)
             .execute()
         )
         return res.data[0]
+

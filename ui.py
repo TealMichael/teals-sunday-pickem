@@ -38,14 +38,19 @@ h1,h2,h3 { letter-spacing:-.025em; color:var(--ink); }
 .meta { color:var(--muted); font-size:.84rem; margin-top:.12rem; }
 .badge-q { display:inline-block; padding:.12rem .42rem; border-radius:999px; background:#FFF2D8; color:#8A5100; font-size:.72rem; font-weight:850; margin-left:.35rem; }
 .badge-out { display:inline-block; padding:.12rem .42rem; border-radius:999px; background:#FDE8E7; color:#A22B24; font-size:.72rem; font-weight:850; margin-left:.35rem; }
-.pick-status-row { display:flex; justify-content:center; align-items:center; margin:.2rem 0 .28rem; }
-.pick-status-row .badge-q, .pick-status-row .badge-out { margin-left:0; font-size:.76rem; padding:.18rem .5rem; }
-/* Player-selection cards: status badge + tap target are one visual card. */
-div[class*="st-key-pickcard_"] { background:#FFFFFF !important; border-radius:16px !important; border-color:#D6DEE3 !important; padding:.2rem .45rem .42rem !important; margin:.48rem 0 !important; }
-div[class*="st-key-pickcard_"] .pick-status-row { margin:.25rem 0 -.12rem; }
-div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"] { width:100% !important; min-height:64px !important; padding:.5rem .6rem !important; border-radius:12px !important; color:var(--ink) !important; -webkit-text-fill-color:var(--ink) !important; }
-div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"] * { color:var(--ink) !important; -webkit-text-fill-color:var(--ink) !important; }
-div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"]:hover { background:#F3F5F7 !important; }
+/* Player-selection cards: custom visible content + one invisible full-card tap target. */
+.pick-card-content { position:relative; z-index:1; text-align:center; padding:.62rem .7rem .66rem; pointer-events:none; }
+.pick-card-name-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:.34rem; line-height:1.25; }
+.pick-card-name { font-size:1rem; font-weight:820; color:var(--ink); }
+.pick-card-meta { margin-top:.28rem; color:var(--ink); font-size:.92rem; }
+.pick-check { font-weight:900; color:#155E56; font-size:1.05rem; }
+div[class*="st-key-pickcard_"] { position:relative !important; background:#FFFFFF !important; border-radius:16px !important; border-color:#D6DEE3 !important; padding:0 !important; margin:.48rem 0 !important; overflow:hidden !important; }
+div[class*="st-key-pickcard_selected_"] { border-color:#8FD3CA !important; background:#F7FCFB !important; }
+div[class*="st-key-pickcard_"] [data-testid="stButton"] { position:absolute !important; inset:0 !important; z-index:3 !important; margin:0 !important; width:100% !important; height:100% !important; }
+div[class*="st-key-pickcard_"] [data-testid="stButton"] > div { width:100% !important; height:100% !important; }
+div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"] { position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; min-height:100% !important; padding:0 !important; opacity:0 !important; cursor:pointer !important; }
+div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"]:disabled { cursor:not-allowed !important; }
+div[class*="st-key-pickcard_"]:has([data-testid="stBaseButton-tertiary"]:hover) { background:#F3F7F7 !important; border-color:#BFC9CF !important; }
 .lineup-row { display:flex; align-items:center; gap:.65rem; padding:.58rem 0; border-bottom:1px solid #EEF1F3; }
 .lineup-row:last-child { border-bottom:0; }
 .onboard-grid { display:grid; grid-template-columns:1fr; gap:.6rem; margin:.7rem 0 1rem; }

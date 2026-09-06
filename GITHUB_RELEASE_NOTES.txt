@@ -1,12 +1,12 @@
-v0.2.0 — Gate 2 Weekly Game
+v0.2.6 — Gate 2 Performance Pass + Player Card Polish
 
-Builds the full weekly lineup experience: Tuesday opening, Sunday 1 PM ET lock, five-position step-by-step picks, autosave, stable shuffle, review/save flow, Questionable-player emergency backups, and a database-enforced lock boundary. Includes an isolated Gate 2 Test Week for acceptance testing before real Week 1 data is connected in Gate 3.
+Audits and reduces redundant Supabase traffic before Gate 3. Public weekly data is briefly cached, lineup+picks load together, existing on-screen week/pool/lineup data is reused during autosave, and short session-local snapshots eliminate immediate re-reads after a successful pick. Also places Questionable/OUT badges inline beside player names while keeping the entire card one-tap selectable.
 
 Commit message:
-v0.2.0 — Gate 2 Weekly Game
+v0.2.6 — Gate 2 Performance Pass
 
 Commit changes:
-Adds the complete weekly lineup loop with Tuesday opening, five-position autosave builder, emergency backups, review/save flow, countdowns, and database-enforced Sunday lock.
+Cuts redundant Supabase reads from lineup building/editing, preserves one-write autosave behavior, and puts injury-status badges inline beside player names.
 
 Tag:
-v0.2.0
+v0.2.6

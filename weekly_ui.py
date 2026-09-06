@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import random
+import time
 from datetime import datetime, timezone
 
 import streamlit as st
@@ -158,10 +159,39 @@ def _stable_order(player_id: str, week_id: str, position: str, rows: list[dict])
     return [by_id[i] for i in existing if i in by_id]
 
 
-def _load_lineup(store, week: dict, player: dict) -> tuple[dict | None, list[dict], list[dict], dict[str, dict]]:
-    pool = store.get_week_pool(str(week["id"]))
-    lineup = store.get_lineup(str(week["id"]), str(player["id"]))
-    picks = store.get_lineup_picks(str(lineup["id"])) if lineup else []
+LINEUP_SNAPSHOT_TTL_SECONDS = 12.0
+
+
+def _lineup_snapshot_key(week: dict, player: dict) -> str:
+    return f"lineup_snapshot::{week['id']}::{player['id']}"
+
+
+def _stash_lineup_snapshot(week: dict, player: dict, lineup: dict | None, picks: list[dict]) -> None:
+    st.session_state[_lineup_snapshot_key(week, player)] = {
+        "at": time.monotonic(),
+        "lineup": dict(lineup) if lineup else None,
+        "picks": [dict(p) for p in picks],
+    }
+
+
+def _merge_saved_pick(picks: list[dict], saved_pick: dict) -> list[dict]:
+    position = str(saved_pick.get("position") or "")
+    merged = [dict(p) for p in picks if str(p.get("position") or "") != position]
+    merged.append(dict(saved_pick))
+    return merged
+
+
+def _load_lineup(store, week: dict, player: dict, pool: list[dict]) -> tuple[dict | None, list[dict], list[dict], dict[str, dict]]:
+    key = _lineup_snapshot_key(week, player)
+    snapshot = st.session_state.get(key) or {}
+    age = time.monotonic() - float(snapshot.get("at") or 0.0)
+    if snapshot and age <= LINEUP_SNAPSHOT_TTL_SECONDS:
+        lineup = snapshot.get("lineup")
+        picks = list(snapshot.get("picks") or [])
+        return lineup, picks, pool, _player_lookup(pool)
+
+    lineup, picks = store.get_lineup_state(str(week["id"]), str(player["id"]))
+    _stash_lineup_snapshot(week, player, lineup, picks)
     return lineup, picks, pool, _player_lookup(pool)
 
 
@@ -239,14 +269,34 @@ def _complete_builder_step(position: str) -> None:
     _advance_builder(position)
 
 
-def _select_starter(store, week: dict, player: dict, position: str, row: dict) -> None:
-    store.save_pick(
+def _select_starter(
+    store,
+    week: dict,
+    player: dict,
+    position: str,
+    row: dict,
+    *,
+    lineup: dict | None,
+    picks: list[dict],
+    pool: list[dict],
+) -> None:
+    saved = store.save_pick(
         week_id=str(week["id"]),
         player_id=str(player["id"]),
         position=position,
         pool_player_id=str(row["id"]),
         emergency_pool_player_id=None,
+        lineup_id=str(lineup["id"]) if lineup else None,
+        known_week=week,
+        known_pool=pool,
     )
+    resolved_lineup = lineup or {
+        "id": str(saved["lineup_id"]),
+        "week_id": str(week["id"]),
+        "player_id": str(player["id"]),
+        "confirmed_at": None,
+    }
+    _stash_lineup_snapshot(week, player, resolved_lineup, _merge_saved_pick(picks, saved))
     if safe_status(row.get("availability_status")) == "QUESTIONABLE":
         st.session_state.builder_position = position
         st.session_state.builder_mode = "backup"
@@ -254,30 +304,51 @@ def _select_starter(store, week: dict, player: dict, position: str, row: dict) -
         _complete_builder_step(position)
 
 
-def _select_backup(store, week: dict, player: dict, position: str, row: dict) -> None:
-    store.set_emergency_backup(
+def _select_backup(
+    store,
+    week: dict,
+    player: dict,
+    position: str,
+    row: dict,
+    *,
+    lineup: dict,
+    picks: list[dict],
+    current: dict,
+    pool: list[dict],
+) -> None:
+    saved = store.set_emergency_backup(
         week_id=str(week["id"]),
         player_id=str(player["id"]),
         position=position,
         emergency_pool_player_id=str(row["id"]),
+        starter_pool_player_id=str(current["pool_player_id"]),
+        lineup_id=str(lineup["id"]),
+        known_week=week,
+        known_pool=pool,
     )
+    _stash_lineup_snapshot(week, player, lineup, _merge_saved_pick(picks, saved))
     _complete_builder_step(position)
 
 
 def _render_player_card_button(row: dict, *, key: str, selected: bool = False, disabled: bool = False) -> bool:
     status = safe_status(row.get("availability_status"))
-    # The status badge and the selectable player button must live inside the same
-    # visual card. A keyed container gives us a stable CSS hook without changing
-    # the one-tap Streamlit button behavior.
     safe_key = "".join(ch if ch.isalnum() or ch in "_-" else "_" for ch in key)
-    with st.container(border=True, key=f"pickcard_{safe_key}"):
-        if status == "QUESTIONABLE":
-            st.markdown('<div class="pick-status-row"><span class="badge-q">⚠ QUESTIONABLE</span></div>', unsafe_allow_html=True)
-        elif status == "OUT":
-            st.markdown('<div class="pick-status-row"><span class="badge-out">OUT</span></div>', unsafe_allow_html=True)
-        prefix = "✓ " if selected else ""
+    selected_key = "selected_" if selected else ""
+    name = html.escape(str(row.get("player_name") or "—"))
+    meta = html.escape(_player_meta(row))
+    badge = _status_badge(row)
+    check = '<span class="pick-check">✓</span>' if selected else ""
+
+    # The actual Streamlit button is an invisible full-card tap target. The
+    # visible markup gives us proper inline status-badge styling without
+    # sacrificing the one-tap card behavior.
+    with st.container(border=True, key=f"pickcard_{selected_key}{safe_key}"):
+        st.markdown(
+            f'<div class="pick-card-content"><div class="pick-card-name-row">{check}<span class="pick-card-name">{name}</span>{badge}</div><div class="pick-card-meta">{meta}</div></div>',
+            unsafe_allow_html=True,
+        )
         return st.button(
-            f"{prefix}{row['player_name']}\n\n{_player_meta(row)}",
+            f"Select {row.get('player_name') or 'player'}",
             key=key,
             disabled=disabled or status == "OUT",
             type="tertiary",
@@ -285,8 +356,8 @@ def _render_player_card_button(row: dict, *, key: str, selected: bool = False, d
         )
 
 
-def _builder(store, week: dict, player: dict, position: str) -> None:
-    lineup, picks, pool, pool_by_id = _load_lineup(store, week, player)
+def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -> None:
+    lineup, picks, pool, pool_by_id = _load_lineup(store, week, player, pool)
     by_pos = picks_by_position(picks)
     chosen, total = lineup_progress(picks)
     current = by_pos.get(position)
@@ -314,7 +385,11 @@ def _builder(store, week: dict, player: dict, position: str) -> None:
                 if str(row["id"]) == current_id:
                     continue
                 if _render_player_card_button(row, key=f"backup::{position}::{row['id']}", selected=str(row["id"]) == backup_id):
-                    _select_backup(store, week, player, position, row)
+                    if lineup:
+                        _select_backup(
+                            store, week, player, position, row,
+                            lineup=lineup, picks=picks, current=current, pool=pool,
+                        )
                     st.toast("Emergency backup saved.")
                     st.rerun()
             if st.button("Change starter", use_container_width=True):
@@ -325,7 +400,10 @@ def _builder(store, week: dict, player: dict, position: str) -> None:
     for row in rows:
         if _render_player_card_button(row, key=f"starter::{position}::{row['id']}", selected=str(row["id"]) == current_id):
             try:
-                _select_starter(store, week, player, position, row)
+                _select_starter(
+                    store, week, player, position, row,
+                    lineup=lineup, picks=picks, pool=pool,
+                )
                 st.toast(f"{position} saved.")
                 st.rerun()
             except Exception as exc:
@@ -353,8 +431,8 @@ def _builder(store, week: dict, player: dict, position: str) -> None:
             st.rerun()
 
 
-def _review(store, week: dict, player: dict) -> None:
-    lineup, picks, pool, pool_by_id = _load_lineup(store, week, player)
+def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
+    lineup, picks, pool, pool_by_id = _load_lineup(store, week, player, pool)
     chosen, total = lineup_progress(picks)
     needs = required_backup_positions(picks, pool_by_id)
 
@@ -390,7 +468,13 @@ def _review(store, week: dict, player: dict) -> None:
 
     if st.button("SAVE MY LINEUP", type="primary", use_container_width=True):
         try:
-            store.confirm_lineup(str(week["id"]), str(player["id"]))
+            updated_lineup = store.confirm_lineup(
+                str(week["id"]),
+                str(player["id"]),
+                lineup_id=str(lineup["id"]) if lineup else None,
+                known_week=week,
+            )
+            _stash_lineup_snapshot(week, player, updated_lineup, picks)
             st.session_state.builder_position = None
             st.session_state.builder_mode = "home"
             st.session_state.lineup_saved_flash = True
@@ -399,8 +483,8 @@ def _review(store, week: dict, player: dict) -> None:
             st.error(str(exc))
 
 
-def _open_home(store, week: dict, player: dict) -> None:
-    lineup, picks, pool, pool_by_id = _load_lineup(store, week, player)
+def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
+    lineup, picks, pool, pool_by_id = _load_lineup(store, week, player, pool)
     chosen, total = lineup_progress(picks)
     needs = required_backup_positions(picks, pool_by_id)
 
@@ -445,8 +529,8 @@ def _open_home(store, week: dict, player: dict) -> None:
             st.rerun()
 
 
-def _locked_home(store, week: dict, player: dict) -> None:
-    lineup, picks, pool, pool_by_id = _load_lineup(store, week, player)
+def _locked_home(store, week: dict, player: dict, pool: list[dict]) -> None:
+    lineup, picks, pool, pool_by_id = _load_lineup(store, week, player, pool)
     chosen, total = lineup_progress(picks)
     st.markdown("### 🔒 Picks are locked")
     st.markdown(f'<div class="card">{_summary_rows(picks, pool_by_id)}</div>', unsafe_allow_html=True)
@@ -478,7 +562,6 @@ def render_player_game(store, player: dict) -> None:
 
     _week_header(week)
     phase = week_phase(week)
-    pool = store.get_week_pool(str(week["id"]))
 
     if bool(week.get("is_demo")):
         st.markdown('<div class="status-test"><strong>Gate 2 test week.</strong> Picks here are isolated and never count toward Week 1.</div>', unsafe_allow_html=True)
@@ -500,19 +583,25 @@ def render_player_game(store, player: dict) -> None:
             st.rerun()
         return
 
+    # Week/pool rows are shared by every player. SupabaseStore caches these
+    # briefly across app sessions, so navigation and lineup edits do not keep
+    # downloading the same static weekly data. Player UI only needs the five
+    # visible choices at each position; hidden ranks 6-10 stay backend-only.
+    pool = store.get_week_pool(str(week["id"]), visible_only=True)
+
     if phase == "open" and not pool_is_ready(pool):
         st.info("This week's player pool is being prepared. Picks will appear as soon as all five positions are ready.")
         return
 
     if phase == "locked":
-        _locked_home(store, week, player)
+        _locked_home(store, week, player, pool)
         return
 
     mode = str(st.session_state.get("builder_mode") or "home")
     position = st.session_state.get("builder_position")
     if mode in {"pick", "backup"} and position in POSITIONS:
-        _builder(store, week, player, str(position))
+        _builder(store, week, player, str(position), pool)
     elif mode == "review":
-        _review(store, week, player)
+        _review(store, week, player, pool)
     else:
-        _open_home(store, week, player)
+        _open_home(store, week, player, pool)
