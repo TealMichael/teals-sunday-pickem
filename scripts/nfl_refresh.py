@@ -21,6 +21,7 @@ from nfl_sync import (
     sync_schedule,
 )
 from store import SupabaseStore
+from preseason_replay import run_preseason_replay
 
 
 def _store() -> SupabaseStore:
@@ -40,7 +41,7 @@ def _week(store: SupabaseStore, season: int, week_number: int):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Teal's Sunday Pick'em Gate 3 NFL refresh")
-    parser.add_argument("--mode", choices=["auto", "diagnostic", "schedule", "injury", "publish", "live", "final"], default="auto")
+    parser.add_argument("--mode", choices=["auto", "diagnostic", "preseason_replay", "schedule", "injury", "publish", "live", "final"], default="auto")
     parser.add_argument("--season", type=int, default=NFL_SEASON)
     parser.add_argument("--week", type=int, default=0, help="0 = current real week")
     parser.add_argument("--force", action="store_true", help="Allow manual early publish in an explicit admin/test run.")
@@ -49,6 +50,9 @@ def main() -> int:
     store = _store()
     if args.mode == "auto":
         print(run_auto(store))
+        return 0
+    if args.mode == "preseason_replay":
+        print(run_preseason_replay(store))
         return 0
 
     if args.week:

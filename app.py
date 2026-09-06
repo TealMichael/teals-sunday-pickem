@@ -446,16 +446,35 @@ if st.session_state.commish:
             st.session_state.gate3_scoring_diag = None
             st.error(f"Gate 3 scoring test failed: {exc}")
 
-    if st.button("Run Gate 3.5 Preseason Replay", use_container_width=True):
-        try:
-            from preseason_replay import run_preseason_replay
-            with st.spinner("Reading a real 2026 preseason box score and replaying it through Pick'em…"):
-                replay_diag = run_preseason_replay(store)
-            st.session_state.gate35_replay_diag = replay_diag
-            st.toast("Preseason box-score replay passed.")
-        except Exception as exc:
-            st.session_state.gate35_replay_diag = None
-            st.error(f"Preseason replay failed: {exc}")
+    st.caption("Gate 3.5 provider replay runs in GitHub Actions — the same environment that will perform Sunday scoring.")
+    replay_col1, replay_col2 = st.columns(2)
+    with replay_col1:
+        st.link_button(
+            "Open Gate 3.5 Replay Runner",
+            "https://github.com/TealMichael/teals-sunday-pickem/actions/workflows/nfl-refresh.yml",
+            use_container_width=True,
+        )
+    with replay_col2:
+        if st.button("Refresh Gate 3.5 Result", use_container_width=True):
+            replay_run = store.last_successful_run("preseason_replay")
+            if replay_run:
+                metadata = replay_run.get("metadata") or {}
+                st.session_state.gate35_replay_diag = {
+                    "success": True,
+                    "matchup": metadata.get("matchup"),
+                    "provider_event_id": metadata.get("provider_event_id"),
+                    "boxscore_pass": bool(metadata.get("anchor_pass")),
+                    "anchor_pass": bool(metadata.get("anchor_pass")),
+                    "database_pass": bool(metadata.get("database_pass")),
+                    "week1_isolation_pass": bool(metadata.get("week1_isolation_pass")),
+                    "cleanup_pass": bool(metadata.get("cleanup_pass")),
+                    "rows": metadata.get("rows") or [],
+                    "anchors": metadata.get("anchors") or [],
+                }
+                st.toast("Latest Gate 3.5 replay result loaded.")
+            else:
+                st.session_state.gate35_replay_diag = None
+                st.info("No successful Gate 3.5 replay has been recorded yet. Run mode preseason_replay in GitHub Actions first.")
 
     diag = st.session_state.get("gate3_diag")
     if diag:
@@ -496,7 +515,7 @@ if st.session_state.commish:
     replay_diag = st.session_state.get("gate35_replay_diag")
     if replay_diag:
         st.markdown("#### Real preseason box-score replay")
-        st.success("A completed 2026 preseason box score was read from ESPN, parsed, scored, persisted through Supabase, and fully cleaned up.")
+        st.success("A completed 2026 preseason box score was read by the production GitHub worker, parsed, scored, persisted through Supabase, and fully cleaned up.")
         st.caption(str(replay_diag.get("matchup") or "2026 preseason replay"))
         r1, r2, r3, r4, r5 = st.columns(5)
         with r1:
