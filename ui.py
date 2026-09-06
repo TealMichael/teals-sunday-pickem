@@ -40,6 +40,12 @@ h1,h2,h3 { letter-spacing:-.025em; color:var(--ink); }
 .badge-out { display:inline-block; padding:.12rem .42rem; border-radius:999px; background:#FDE8E7; color:#A22B24; font-size:.72rem; font-weight:850; margin-left:.35rem; }
 .pick-status-row { display:flex; justify-content:center; align-items:center; margin:.2rem 0 .28rem; }
 .pick-status-row .badge-q, .pick-status-row .badge-out { margin-left:0; font-size:.76rem; padding:.18rem .5rem; }
+/* Player-selection cards: status badge + tap target are one visual card. */
+div[class*="st-key-pickcard_"] { background:#FFFFFF !important; border-radius:16px !important; border-color:#D6DEE3 !important; padding:.2rem .45rem .42rem !important; margin:.48rem 0 !important; }
+div[class*="st-key-pickcard_"] .pick-status-row { margin:.25rem 0 -.12rem; }
+div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"] { width:100% !important; min-height:64px !important; padding:.5rem .6rem !important; border-radius:12px !important; color:var(--ink) !important; -webkit-text-fill-color:var(--ink) !important; }
+div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"] * { color:var(--ink) !important; -webkit-text-fill-color:var(--ink) !important; }
+div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"]:hover { background:#F3F5F7 !important; }
 .lineup-row { display:flex; align-items:center; gap:.65rem; padding:.58rem 0; border-bottom:1px solid #EEF1F3; }
 .lineup-row:last-child { border-bottom:0; }
 .onboard-grid { display:grid; grid-template-columns:1fr; gap:.6rem; margin:.7rem 0 1rem; }

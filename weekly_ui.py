@@ -266,18 +266,23 @@ def _select_backup(store, week: dict, player: dict, position: str, row: dict) ->
 
 def _render_player_card_button(row: dict, *, key: str, selected: bool = False, disabled: bool = False) -> bool:
     status = safe_status(row.get("availability_status"))
-    if status == "QUESTIONABLE":
-        st.markdown('<div class="pick-status-row"><span class="badge-q">⚠ QUESTIONABLE</span></div>', unsafe_allow_html=True)
-    elif status == "OUT":
-        st.markdown('<div class="pick-status-row"><span class="badge-out">OUT</span></div>', unsafe_allow_html=True)
-    prefix = "✓ " if selected else ""
-    return st.button(
-        f"{prefix}{row['player_name']}\n\n{_player_meta(row)}",
-        key=key,
-        disabled=disabled or status == "OUT",
-        type="secondary",
-        use_container_width=True,
-    )
+    # The status badge and the selectable player button must live inside the same
+    # visual card. A keyed container gives us a stable CSS hook without changing
+    # the one-tap Streamlit button behavior.
+    safe_key = "".join(ch if ch.isalnum() or ch in "_-" else "_" for ch in key)
+    with st.container(border=True, key=f"pickcard_{safe_key}"):
+        if status == "QUESTIONABLE":
+            st.markdown('<div class="pick-status-row"><span class="badge-q">⚠ QUESTIONABLE</span></div>', unsafe_allow_html=True)
+        elif status == "OUT":
+            st.markdown('<div class="pick-status-row"><span class="badge-out">OUT</span></div>', unsafe_allow_html=True)
+        prefix = "✓ " if selected else ""
+        return st.button(
+            f"{prefix}{row['player_name']}\n\n{_player_meta(row)}",
+            key=key,
+            disabled=disabled or status == "OUT",
+            type="tertiary",
+            use_container_width=True,
+        )
 
 
 def _builder(store, week: dict, player: dict, position: str) -> None:
