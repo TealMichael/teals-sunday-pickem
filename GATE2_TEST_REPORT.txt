@@ -1,0 +1,28 @@
+TEAL'S SUNDAY PICK'EM — v0.2.0 GATE 2 TEST REPORT
+
+Automated test suite: 28/28 PASSED
+Release guard: PASSED
+Python compile check: PASSED
+Credential literal scan: PASSED
+
+Protected Gate 1 foundation retained:
+- secure 4-digit player PIN hashing
+- remembered-device localStorage + first-party cookie flow
+- second-device sessions
+- separate Commissioner authentication
+- explicit pickem Supabase schema routing
+- light-theme hardening
+
+Gate 2 behavioral checks covered:
+- Tuesday noon ET opening boundary
+- exact Sunday 1:00 PM ET lock boundary
+- five visible choices per QB/RB/WR/TE/K
+- hidden ranking capacity through rank 10
+- no ranking/projection display in player UI
+- per-player/session stable shuffle
+- autosave data model
+- Questionable starter emergency-backup requirement
+- DB-level pick lock trigger
+- isolated Test Week vs real Week 1
+
+Real deployment acceptance is still required before Gate 2 is called green.

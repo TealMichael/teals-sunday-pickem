@@ -13,7 +13,8 @@ from config import (
 )
 from security import safe_secret_match
 from store import SupabaseStore
-from ui import foundation_home, hero, inject_css, page_config
+from ui import hero, inject_css, page_config
+from weekly_ui import render_player_game
 
 page_config()
 inject_css()
@@ -399,8 +400,8 @@ if not st.session_state.player and not st.session_state.remember_restore_checked
 
 
 if st.session_state.commish:
-    st.markdown("### Commissioner • Gate 1")
-    st.success("Admin authentication is working. Commissioner tools are intentionally added in Gate 5.")
+    st.markdown("### Commissioner • Gate 2")
+    st.success("Admin authentication is working. Weekly-game tables are installed; full Commissioner tools remain Gate 5.")
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Check database", use_container_width=True):
@@ -412,7 +413,7 @@ if st.session_state.commish:
     st.stop()
 
 if st.session_state.player:
-    foundation_home(st.session_state.player)
+    render_player_game(store, st.session_state.player)
     st.button(
         "Sign Out",
         type="secondary",

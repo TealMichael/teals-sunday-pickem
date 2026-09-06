@@ -1,10 +1,12 @@
-Version: v0.1.7 — Gate 1 Auth Transition Polish
+v0.2.0 — Gate 2 Weekly Game
+
+Builds the full weekly lineup experience: Tuesday opening, Sunday 1 PM ET lock, five-position step-by-step picks, autosave, stable shuffle, review/save flow, Questionable-player emergency backups, and a database-enforced lock boundary. Includes an isolated Gate 2 Test Week for acceptance testing before real Week 1 data is connected in Gate 3.
 
 Commit message:
-v0.1.7 — Gate 1 Auth Transition Polish
+v0.2.0 — Gate 2 Weekly Game
 
-Commit description:
-Removes the brief duplicated sign-in form during successful authentication while preserving one-click auth, season-long remembered login, and light-theme behavior.
+Commit changes:
+Adds the complete weekly lineup loop with Tuesday opening, five-position autosave builder, emergency backups, review/save flow, countdowns, and database-enforced Sunday lock.
 
 Tag:
-v0.1.7
+v0.2.0
