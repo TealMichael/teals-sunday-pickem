@@ -38,40 +38,55 @@ h1,h2,h3 { letter-spacing:-.025em; color:var(--ink); }
 .meta { color:var(--muted); font-size:.84rem; margin-top:.12rem; }
 .badge-q { display:inline-block; padding:.12rem .42rem; border-radius:999px; background:#FFF2D8; color:#8A5100; font-size:.72rem; font-weight:850; margin-left:.35rem; }
 .badge-out { display:inline-block; padding:.12rem .42rem; border-radius:999px; background:#FDE8E7; color:#A22B24; font-size:.72rem; font-weight:850; margin-left:.35rem; }
-/* Player-selection cards: custom visible content + one invisible full-card tap target. */
-.pick-card-content { position:relative; z-index:1; text-align:center; padding:.62rem .7rem .66rem; pointer-events:none; }
-.pick-card-name-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:.34rem; line-height:1.25; }
-.pick-card-name { font-size:1rem; font-weight:820; color:var(--ink); }
-.pick-card-meta { margin-top:.28rem; color:var(--ink); font-size:.92rem; }
-.pick-check { font-weight:900; color:#155E56; font-size:1.05rem; }
-div[class*="st-key-pickcard_"] { position:relative !important; background:#FFFFFF !important; border-radius:16px !important; border-color:#D6DEE3 !important; padding:0 !important; margin:.48rem 0 !important; overflow:hidden !important; }
-div[class*="st-key-pickcard_selected_"] { border-color:#8FD3CA !important; background:#F7FCFB !important; }
-/* Keep Streamlit's button wrappers out of the positioning chain so the
-   actual invisible button can use the entire keyed card as its containing box. */
-div[class*="st-key-pickcard_"] [data-testid="stButton"],
-div[class*="st-key-pickcard_"] [data-testid="stButton"] > div {
-  position:static !important;
-  width:auto !important;
-  height:0 !important;
-  min-height:0 !important;
-  margin:0 !important;
-  padding:0 !important;
-}
-div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"] {
-  position:absolute !important;
-  inset:0 !important;
-  z-index:20 !important;
+/* Player-selection cards: the visible card is the native Streamlit button.
+   This avoids fragile invisible overlays and makes the entire rectangle tappable. */
+div[class*="st-key-pickbtn_"] [data-testid="stButton"] {
   width:100% !important;
-  height:100% !important;
-  min-height:100% !important;
-  margin:0 !important;
-  padding:0 !important;
-  border:0 !important;
-  opacity:0 !important;
+  margin:.48rem 0 !important;
+}
+div[class*="st-key-pickbtn_"] [data-testid="stButton"] button,
+div[class*="st-key-pickbtn_"] [data-testid^="stBaseButton"] {
+  width:100% !important;
+  min-height:88px !important;
+  height:auto !important;
+  padding:.8rem 1rem !important;
+  border-radius:16px !important;
+  border:1px solid #D6DEE3 !important;
+  background:#FFFFFF !important;
+  color:var(--ink) !important;
+  box-shadow:none !important;
   cursor:pointer !important;
 }
-div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"]:disabled { cursor:not-allowed !important; }
-div[class*="st-key-pickcard_"]:has([data-testid="stBaseButton-tertiary"]:hover) { background:#F3F7F7 !important; border-color:#BFC9CF !important; }
+div[class*="st-key-pickbtn_"] [data-testid="stButton"] button:hover,
+div[class*="st-key-pickbtn_"] [data-testid^="stBaseButton"]:hover {
+  background:#F3F7F7 !important;
+  border-color:#BFC9CF !important;
+}
+div[class*="st-key-pickbtn_selected_"] [data-testid="stButton"] button,
+div[class*="st-key-pickbtn_selected_"] [data-testid^="stBaseButton"] {
+  background:#F7FCFB !important;
+  border-color:#8FD3CA !important;
+}
+div[class*="st-key-pickbtn_"] [data-testid="stButton"] button p,
+div[class*="st-key-pickbtn_"] [data-testid^="stBaseButton"] p {
+  width:100% !important;
+  margin:0 !important;
+  white-space:pre-line !important;
+  text-align:center !important;
+  line-height:1.55 !important;
+  font-size:.95rem !important;
+  color:var(--ink) !important;
+}
+div[class*="st-key-pickbtn_"] [data-testid="stButton"] button p strong,
+div[class*="st-key-pickbtn_"] [data-testid^="stBaseButton"] p strong {
+  font-size:1rem !important;
+  font-weight:820 !important;
+}
+div[class*="st-key-pickbtn_"] [data-testid="stButton"] button:disabled,
+div[class*="st-key-pickbtn_"] [data-testid^="stBaseButton"]:disabled {
+  opacity:.62 !important;
+  cursor:not-allowed !important;
+}
 .lineup-row { display:flex; align-items:center; gap:.65rem; padding:.58rem 0; border-bottom:1px solid #EEF1F3; }
 .lineup-row:last-child { border-bottom:0; }
 .onboard-grid { display:grid; grid-template-columns:1fr; gap:.6rem; margin:.7rem 0 1rem; }

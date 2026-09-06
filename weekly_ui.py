@@ -330,30 +330,41 @@ def _select_backup(
     _complete_builder_step(position)
 
 
+def _markdown_escape(value: str) -> str:
+    """Escape user/provider text that is inserted into a Streamlit button label."""
+    text = str(value or "")
+    for ch in ("\\", "`", "*", "_", "[", "]"):
+        text = text.replace(ch, "\\" + ch)
+    return text
+
+
 def _render_player_card_button(row: dict, *, key: str, selected: bool = False, disabled: bool = False) -> bool:
+    """Render one real full-size button as the player card.
+
+    Do not layer an invisible button over separate HTML. The visible card IS the
+    Streamlit button, so every pixel of the card is a native tap target on
+    desktop and mobile.
+    """
     status = safe_status(row.get("availability_status"))
     safe_key = "".join(ch if ch.isalnum() or ch in "_-" else "_" for ch in key)
-    selected_key = "selected_" if selected else ""
-    name = html.escape(str(row.get("player_name") or "—"))
-    meta = html.escape(_player_meta(row))
-    badge = _status_badge(row)
-    check = '<span class="pick-check">✓</span>' if selected else ""
+    state_key = "selected_" if selected else ""
+    status_key = "q_" if status == "QUESTIONABLE" else ("out_" if status == "OUT" else "")
+    widget_key = f"pickbtn_{state_key}{status_key}{safe_key}"
 
-    # The actual Streamlit button is an invisible full-card tap target. The
-    # visible markup gives us proper inline status-badge styling without
-    # sacrificing the one-tap card behavior.
-    with st.container(border=True, key=f"pickcard_{selected_key}{safe_key}"):
-        st.markdown(
-            f'<div class="pick-card-content"><div class="pick-card-name-row">{check}<span class="pick-card-name">{name}</span>{badge}</div><div class="pick-card-meta">{meta}</div></div>',
-            unsafe_allow_html=True,
-        )
-        return st.button(
-            f"Select {row.get('player_name') or 'player'}",
-            key=key,
-            disabled=disabled or status == "OUT",
-            type="tertiary",
-            use_container_width=True,
-        )
+    name = _markdown_escape(str(row.get("player_name") or "—"))
+    meta = _markdown_escape(_player_meta(row))
+    check = "✓ " if selected else ""
+    badge = " :yellow-badge[⚠ QUESTIONABLE]" if status == "QUESTIONABLE" else (" :red-badge[OUT]" if status == "OUT" else "")
+    label = f"{check}**{name}**{badge}\n{meta}"
+
+    return st.button(
+        label,
+        key=widget_key,
+        disabled=disabled or status == "OUT",
+        type="secondary",
+        width="stretch",
+        wrap=True,
+    )
 
 
 def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -> None:

@@ -1,12 +1,3 @@
-v0.2.6 — Gate 2 Performance Pass + Player Card Polish
+v0.2.8 — Gate 2 Native Player Card Tap Fix
 
-Audits and reduces redundant Supabase traffic before Gate 3. Public weekly data is briefly cached, lineup+picks load together, existing on-screen week/pool/lineup data is reused during autosave, and short session-local snapshots eliminate immediate re-reads after a successful pick. Also places Questionable/OUT badges inline beside player names while keeping the entire card one-tap selectable.
-
-Commit message:
-v0.2.6 — Gate 2 Performance Pass
-
-Commit changes:
-Cuts redundant Supabase reads from lineup building/editing, preserves one-write autosave behavior, and puts injury-status badges inline beside player names.
-
-Tag:
-v0.2.6
+Replaces the fragile player-card click overlay with a native full-card Streamlit button so the entire visible card is clickable on desktop and mobile, while preserving Gate 2 performance improvements and inline injury status.
