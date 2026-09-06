@@ -5,7 +5,7 @@ from typing import Any
 
 from config import NFL_SEASON
 from nfl_scoring import score_stat_line
-from nfl_sources import ESPNProvider, normalize_name, normalize_team
+from nfl_sources import ESPNProvider, NFLverseProvider, normalize_name, normalize_team
 
 
 class PreseasonReplayError(RuntimeError):
@@ -110,9 +110,8 @@ def _select_real_samples(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]
     return selected
 
 
-def _find_target_game(provider: ESPNProvider) -> tuple[dict[str, Any], dict[str, Any]]:
-    payload = provider.scoreboard(NFL_SEASON, PRESEASON_WEEK, season_type=1)
-    games = provider.normalize_games(payload)
+def _find_target_game(schedule_provider: NFLverseProvider) -> dict[str, Any]:
+    games = schedule_provider.schedule_games(NFL_SEASON, PRESEASON_WEEK, game_type="PRE")
     target = next(
         (
             game for game in games
@@ -122,11 +121,10 @@ def _find_target_game(provider: ESPNProvider) -> tuple[dict[str, Any], dict[str,
         None,
     )
     if not target:
-        raise PreseasonReplayError("The completed Bears–Titans preseason replay game was not found in ESPN.")
+        raise PreseasonReplayError("The completed Bears–Titans preseason replay game was not found in nflverse schedule data.")
     if not str(target.get("provider_event_id") or ""):
-        raise PreseasonReplayError("The preseason game was found but ESPN did not provide an event id.")
+        raise PreseasonReplayError("The preseason game was found but no ESPN event id was available for the box-score feed.")
 
-    # Independent final-score anchor: Chicago 24, Tennessee 15.
     scores = {
         normalize_team(target.get("home_team")): target.get("home_score"),
         normalize_team(target.get("away_team")): target.get("away_score"),
@@ -135,7 +133,7 @@ def _find_target_game(provider: ESPNProvider) -> tuple[dict[str, Any], dict[str,
         raise PreseasonReplayError(
             f"The target preseason game was found, but its final score was unexpected: CHI {scores.get('CHI')} – TEN {scores.get('TEN')}."
         )
-    return target, payload
+    return target
 
 
 def _anchor_checks(parsed_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -173,7 +171,7 @@ def _summary_text(stats: dict[str, Any], position: str) -> str:
     return "Real preseason stat line"
 
 
-def run_preseason_replay(store, *, provider: ESPNProvider | None = None) -> dict[str, Any]:
+def run_preseason_replay(store, *, provider: ESPNProvider | None = None, schedule_provider: NFLverseProvider | None = None) -> dict[str, Any]:
     """Replay one real 2026 preseason box score through the production parser.
 
     This is an isolated Gate 3.5 acceptance test. It reads a completed real ESPN
@@ -184,6 +182,7 @@ def run_preseason_replay(store, *, provider: ESPNProvider | None = None) -> dict
     and restores the test week to its exact prior score/stat state.
     """
     provider = provider or ESPNProvider()
+    schedule_provider = schedule_provider or NFLverseProvider()
     demo_week = store.get_week_by_season_week(NFL_SEASON, 0, is_demo=True)
     if not demo_week:
         raise PreseasonReplayError("Gate 2 Test Week was not found.")
@@ -191,7 +190,7 @@ def run_preseason_replay(store, *, provider: ESPNProvider | None = None) -> dict
     if not real_week:
         raise PreseasonReplayError("Real Week 1 shell was not found; isolation cannot be verified.")
 
-    target_game, _ = _find_target_game(provider)
+    target_game = _find_target_game(schedule_provider)
     summary = provider.summary(str(target_game["provider_event_id"]))
     parsed_rows = provider.player_stats(summary)
     if not parsed_rows:
@@ -241,7 +240,7 @@ def run_preseason_replay(store, *, provider: ESPNProvider | None = None) -> dict
     run_id = store.start_data_run(
         "preseason_replay",
         week_id=str(demo_week["id"]),
-        provider="ESPN-real-boxscore",
+        provider="ESPN-CDN-real-boxscore",
         metadata={
             "provider_event_id": target_game.get("provider_event_id"),
             "matchup": TARGET_LABEL,

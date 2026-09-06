@@ -84,6 +84,8 @@ class SourceError(RuntimeError):
 class ESPNProvider:
     SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
     SUMMARY_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary"
+    CDN_BOXSCORE_URL = "https://cdn.espn.com/core/nfl/boxscore"
+    CDN_GAME_URL = "https://cdn.espn.com/core/nfl/game"
 
     def __init__(self, session: requests.Session | None = None):
         self.session = session or _session()
@@ -119,17 +121,41 @@ class ESPNProvider:
         detail = ", ".join(errors[:2]) or "unknown error"
         raise SourceError(f"ESPN live scoreboard is temporarily unavailable ({detail}).")
 
+    @staticmethod
+    def _unwrap_cdn(payload: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            return {}
+        package = payload.get("gamepackageJSON")
+        if isinstance(package, dict):
+            return package
+        return payload
+
     def summary(self, event_id: str) -> dict[str, Any]:
-        try:
-            response = self.session.get(
-                self.SUMMARY_URL,
-                params={"event": event_id},
-                timeout=GATE3_HTTP_TIMEOUT_SECONDS,
-            )
-            response.raise_for_status()
-            return response.json()
-        except Exception as exc:
-            raise SourceError(f"ESPN game {event_id} is temporarily unavailable.") from exc
+        """Fetch one game's player box score with a CDN-first strategy.
+
+        The legacy site.api.espn.com host is blocked from some cloud runners.
+        ESPN's CDN game feeds are a separate public surface and are optimized
+        for live data, so production scoring uses them first. The older site
+        summary remains only as a final fallback.
+        """
+        attempts = (
+            (self.CDN_BOXSCORE_URL, {"xhr": 1, "gameId": event_id}),
+            (self.CDN_GAME_URL, {"xhr": 1, "gameId": event_id}),
+            (self.SUMMARY_URL, {"event": event_id}),
+        )
+        errors: list[str] = []
+        for url, params in attempts:
+            try:
+                response = self.session.get(url, params=params, timeout=GATE3_HTTP_TIMEOUT_SECONDS)
+                response.raise_for_status()
+                payload = self._unwrap_cdn(response.json())
+                if isinstance(payload, dict) and (payload.get("boxscore") or payload.get("header")):
+                    return payload
+                errors.append("unexpected payload")
+            except Exception as exc:
+                errors.append(type(exc).__name__)
+        detail = ", ".join(errors[:3]) or "unknown error"
+        raise SourceError(f"ESPN live box score {event_id} is temporarily unavailable ({detail}).")
 
     @staticmethod
     def normalize_games(payload: dict[str, Any], week_id: str | None = None) -> list[dict[str, Any]]:
@@ -276,27 +302,30 @@ class NFLverseProvider:
 
     def __init__(self, session: requests.Session | None = None):
         self.session = session or _session()
+        self._schedule_rows_cache: list[dict[str, str]] | None = None
 
-    def schedule_games(self, season: int, week: int, week_id: str | None = None) -> list[dict[str, Any]]:
+    def schedule_games(self, season: int, week: int, week_id: str | None = None, *, game_type: str = "REG") -> list[dict[str, Any]]:
         """Load official-ish nflverse schedule rows for one regular-season week.
 
         nflverse schedule data updates frequently during the season and exposes
         ESPN event ids, so it is a much better schedule source than making the
         undocumented ESPN site API a hard dependency.
         """
-        try:
-            response = self.session.get(self.SCHEDULE_URL, timeout=max(GATE3_HTTP_TIMEOUT_SECONDS, 20))
-            response.raise_for_status()
-        except Exception as exc:
-            raise SourceError("nflverse schedule data is temporarily unavailable.") from exc
+        if self._schedule_rows_cache is None:
+            try:
+                response = self.session.get(self.SCHEDULE_URL, timeout=max(GATE3_HTTP_TIMEOUT_SECONDS, 20))
+                response.raise_for_status()
+            except Exception as exc:
+                raise SourceError("nflverse schedule data is temporarily unavailable.") from exc
+            self._schedule_rows_cache = list(csv.DictReader(StringIO(response.text)))
 
-        rows = csv.DictReader(StringIO(response.text))
+        rows = self._schedule_rows_cache
         games: list[dict[str, Any]] = []
         now = datetime.now(UTC)
         for row in rows:
             if _safe_int(row.get("season")) != int(season):
                 continue
-            if str(row.get("game_type") or "").upper() != "REG":
+            if str(row.get("game_type") or "").upper() != str(game_type or "REG").upper():
                 continue
             if _safe_int(row.get("week")) != int(week):
                 continue
@@ -312,10 +341,13 @@ class NFLverseProvider:
             home_score = _safe_int(row.get("home_score"))
             away_score = _safe_int(row.get("away_score"))
             has_score = home_score is not None and away_score is not None
-            completed = bool(has_score and now >= kickoff + timedelta(hours=6))
+            # nflverse schedule rows update frequently during the season.
+            # Treat a kicked-off game as LIVE even before the first score lands
+            # so the box-score worker does not wait for a scoring play.
+            completed = bool(has_score and now >= kickoff + timedelta(hours=5, minutes=30))
             if completed:
                 game_status = "FINAL"
-            elif has_score and now >= kickoff:
+            elif now >= kickoff:
                 game_status = "LIVE"
             else:
                 game_status = "SCHEDULED"

@@ -31,12 +31,7 @@ def sync_schedule(
     *,
     prefer_live: bool = False,
 ) -> list[dict[str, Any]]:
-    """Sync one NFL week without making ESPN a hard schedule dependency.
-
-    nflverse is the primary schedule source. During live windows we prefer an
-    ESPN scoreboard snapshot for quarter/clock status, but automatically fall
-    back to nflverse if ESPN is unavailable.
-    """
+    """Sync one NFL week with nflverse as the schedule/status source."""
     espn = espn or ESPNProvider()
     nflverse = nflverse or NFLverseProvider()
     season = int(week["season"])
@@ -45,20 +40,14 @@ def sync_schedule(
     games: list[dict[str, Any]] = []
     errors: list[str] = []
 
-    if prefer_live:
-        try:
-            payload = espn.scoreboard(season, nfl_week)
-            games = espn.normalize_games(payload, week_id)
-        except Exception as exc:
-            errors.append(str(exc))
+    try:
+        games = nflverse.schedule_games(season, nfl_week, week_id)
+    except Exception as exc:
+        errors.append(str(exc))
 
+    # Legacy scoreboard is only an emergency schedule fallback. It is not used
+    # for normal live scoring because some cloud providers block site.api.
     if not games:
-        try:
-            games = nflverse.schedule_games(season, nfl_week, week_id)
-        except Exception as exc:
-            errors.append(str(exc))
-
-    if not games and not prefer_live:
         try:
             payload = espn.scoreboard(season, nfl_week)
             games = espn.normalize_games(payload, week_id)
@@ -92,12 +81,11 @@ def _all_positions_exact(ranked: dict[str, list[dict[str, Any]]], count: int = 1
     return all(len(ranked.get(position) or []) == count for position in POSITIONS)
 
 
-def _team_scoring_order(espn: ESPNProvider, season: int, current_week: int, eligible_teams: set[str]) -> list[str]:
+def _team_scoring_order(nflverse: NFLverseProvider, season: int, current_week: int, eligible_teams: set[str]) -> list[str]:
     totals: dict[str, float] = defaultdict(float)
     games_played: dict[str, int] = defaultdict(int)
     for prior_week in range(1, current_week):
-        payload = espn.scoreboard(season, prior_week)
-        for game in espn.normalize_games(payload):
+        for game in nflverse.schedule_games(season, prior_week):
             if not game.get("completed"):
                 continue
             home = normalize_team(game.get("home_team"))
@@ -140,7 +128,7 @@ def build_pool_preview(
     else:
         stats = nflverse.weekly_player_stats(int(week["season"]))
         eligible_teams = {normalize_team(g["home_team"]) for g in eligible} | {normalize_team(g["away_team"]) for g in eligible}
-        kicker_order = _team_scoring_order(espn, int(week["season"]), nfl_week, eligible_teams)
+        kicker_order = _team_scoring_order(nflverse, int(week["season"]), nfl_week, eligible_teams)
         ranked = nflverse_rankings(
             current_week=nfl_week,
             players_by_position=players,
@@ -181,7 +169,7 @@ def _replacement_cutoff(week: dict[str, Any]) -> datetime:
 
 
 def refresh_injuries(store, week: dict[str, Any]) -> dict[str, Any]:
-    run_id = store.start_data_run("injury_refresh", week_id=str(week["id"]), provider="Sleeper+ESPN")
+    run_id = store.start_data_run("injury_refresh", week_id=str(week["id"]), provider="Sleeper+nflverse")
     try:
         # Schedule is refreshed alongside injuries so a late flex/postponement
         # cannot leave an ineligible Monday/early-Sunday player selectable.
@@ -218,9 +206,9 @@ def _game_by_team(games: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None = None) -> dict[str, Any]:
     espn = espn or ESPNProvider()
-    run_id = store.start_data_run("live_scores", week_id=str(week["id"]), provider="ESPN")
+    run_id = store.start_data_run("live_scores", week_id=str(week["id"]), provider="ESPN-CDN+nflverse")
     try:
-        games = sync_schedule(store, week, espn, prefer_live=True)
+        games = sync_schedule(store, week, espn)
         # Before lock, schedule changes can still remove a now-ineligible game.
         if datetime.now(UTC) < (parse_timestamp(week.get("locks_at")) or datetime.max.replace(tzinfo=UTC)):
             store.reconcile_pool_schedule(week, games)
@@ -387,7 +375,7 @@ def gate3_diagnostic(store, *, season: int = NFL_SEASON, nfl_week: int = 1) -> d
     week = store.get_week_by_season_week(season, nfl_week)
     if not week:
         week = ensure_week_shell_from_scoreboard(store, season=season, nfl_week=nfl_week)
-    run_id = store.start_data_run("diagnostic", week_id=str(week["id"]), provider="ESPN+Sleeper+nflverse")
+    run_id = store.start_data_run("diagnostic", week_id=str(week["id"]), provider="ESPN-CDN+Sleeper+nflverse")
     try:
         ranked, games, players = build_pool_preview(store, week)
         result = {
