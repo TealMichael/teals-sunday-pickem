@@ -46,9 +46,30 @@ h1,h2,h3 { letter-spacing:-.025em; color:var(--ink); }
 .pick-check { font-weight:900; color:#155E56; font-size:1.05rem; }
 div[class*="st-key-pickcard_"] { position:relative !important; background:#FFFFFF !important; border-radius:16px !important; border-color:#D6DEE3 !important; padding:0 !important; margin:.48rem 0 !important; overflow:hidden !important; }
 div[class*="st-key-pickcard_selected_"] { border-color:#8FD3CA !important; background:#F7FCFB !important; }
-div[class*="st-key-pickcard_"] [data-testid="stButton"] { position:absolute !important; inset:0 !important; z-index:3 !important; margin:0 !important; width:100% !important; height:100% !important; }
-div[class*="st-key-pickcard_"] [data-testid="stButton"] > div { width:100% !important; height:100% !important; }
-div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"] { position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; min-height:100% !important; padding:0 !important; opacity:0 !important; cursor:pointer !important; }
+/* Keep Streamlit's button wrappers out of the positioning chain so the
+   actual invisible button can use the entire keyed card as its containing box. */
+div[class*="st-key-pickcard_"] [data-testid="stButton"],
+div[class*="st-key-pickcard_"] [data-testid="stButton"] > div {
+  position:static !important;
+  width:auto !important;
+  height:0 !important;
+  min-height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+}
+div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"] {
+  position:absolute !important;
+  inset:0 !important;
+  z-index:20 !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:100% !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  opacity:0 !important;
+  cursor:pointer !important;
+}
 div[class*="st-key-pickcard_"] [data-testid="stBaseButton-tertiary"]:disabled { cursor:not-allowed !important; }
 div[class*="st-key-pickcard_"]:has([data-testid="stBaseButton-tertiary"]:hover) { background:#F3F7F7 !important; border-color:#BFC9CF !important; }
 .lineup-row { display:flex; align-items:center; gap:.65rem; padding:.58rem 0; border-bottom:1px solid #EEF1F3; }
