@@ -7,6 +7,7 @@ import streamlit as st
 from auth import login_player, register_player, restore_from_cookie, revoke_cookie_session
 from config import (
     APP_NAME,
+    APP_VERSION,
     COOKIE_NAME,
     REMEMBER_COOKIE_MAX_AGE,
     REMEMBER_STORAGE_KEY,
@@ -70,7 +71,10 @@ def secret(name: str) -> str:
 
 
 @st.cache_resource(show_spinner=False)
-def get_store(url: str, service_key: str) -> SupabaseStore:
+def get_store(url: str, service_key: str, build_version: str) -> SupabaseStore:
+    # Include the build version in the cache key so a deploy can never reuse
+    # a SupabaseStore instance created from an older class definition.
+    _ = build_version
     return SupabaseStore(url, service_key)
 
 
@@ -91,7 +95,7 @@ if missing:
         st.write("Use `.streamlit/secrets.toml.example` as the template. Never commit the real secrets file.")
     st.stop()
 
-store = get_store(secret("SUPABASE_URL"), supabase_server_key())
+store = get_store(secret("SUPABASE_URL"), supabase_server_key(), APP_VERSION)
 
 
 # -----------------------------

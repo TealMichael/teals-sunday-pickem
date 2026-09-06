@@ -100,16 +100,15 @@ def _onboarding(store, player: dict) -> bool:
     if player.get("onboarding_completed_at"):
         return False
     st.markdown("### How to play")
-    st.markdown(
-        """
-<div class="onboard-grid">
-  <div class="onboard-card"><span class="onboard-num">1</span><strong>Pick one at each position.</strong><div class="small">QB · RB · WR · TE · K</div></div>
-  <div class="onboard-card"><span class="onboard-num">2</span><strong>Change your five until Sunday at 1.</strong><div class="small">Every choice autosaves as you go.</div></div>
-  <div class="onboard-card"><span class="onboard-num">3</span><strong>Beat your friends.</strong><div class="small">Weekly finishes will feed the season standings.</div></div>
-</div>
-        """,
-        unsafe_allow_html=True,
-    )
+    with st.container(border=True):
+        st.markdown("**1 · Pick one at each position.**")
+        st.caption("QB · RB · WR · TE · K")
+    with st.container(border=True):
+        st.markdown("**2 · Change your five until Sunday at 1.**")
+        st.caption("Every choice autosaves as you go.")
+    with st.container(border=True):
+        st.markdown("**3 · Beat your friends.**")
+        st.caption("Weekly finishes will feed the season standings.")
     if st.button("Let's Play", type="primary", use_container_width=True):
         updated = store.complete_onboarding(str(player["id"]))
         st.session_state.player = updated or {**player, "onboarding_completed_at": datetime.now(UTC).isoformat()}
