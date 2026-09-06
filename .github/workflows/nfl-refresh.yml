@@ -1,0 +1,62 @@
+name: Pickem NFL Refresh
+
+on:
+  schedule:
+    - cron: "*/30 0,7-23 * * *"
+      timezone: "America/New_York"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Refresh mode"
+        required: true
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - diagnostic
+          - schedule
+          - injury
+          - live
+          - final
+          - publish
+      week:
+        description: "NFL week (0 = current)"
+        required: false
+        default: "0"
+      force:
+        description: "Force an early publish (manual test/admin only)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install backend dependencies
+        run: pip install -r requirements-backend.txt
+
+      - name: Refresh NFL data
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          MODE="${{ github.event.inputs.mode || 'auto' }}"
+          WEEK="${{ github.event.inputs.week || '0' }}"
+          FORCE="${{ github.event.inputs.force || 'false' }}"
+          EXTRA=""
+          if [ "$FORCE" = "true" ]; then EXTRA="--force"; fi
+          python scripts/nfl_refresh.py --mode "$MODE" --week "$WEEK" $EXTRA
