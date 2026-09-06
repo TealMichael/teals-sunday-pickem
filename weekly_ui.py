@@ -8,6 +8,15 @@ from datetime import datetime, timezone
 import streamlit as st
 
 from config import APP_VERSION
+from gate4_ui import (
+    maybe_render_final_celebration,
+    render_gate4_demo,
+    render_history,
+    render_leaderboards,
+    render_live_sunday,
+    render_nav,
+    render_profile,
+)
 from weekly import (
     POSITIONS,
     et_label,
@@ -564,7 +573,11 @@ def _locked_home(store, week: dict, player: dict, pool: list[dict]) -> None:
         st.caption("Your five are set for Sunday. Live scoring arrives in the next build gate.")
 
 
-def render_player_game(store, player: dict) -> None:
+def render_player_game(store, player: dict, on_sign_out=None) -> None:
+    if st.session_state.get("gate4_demo"):
+        render_gate4_demo(player)
+        return
+
     if _onboarding(store, player):
         return
 
@@ -584,8 +597,23 @@ def render_player_game(store, player: dict) -> None:
         st.caption(f"Build {APP_VERSION}")
         return
 
-    _week_header(week)
     phase = week_phase(week)
+
+    # Gate 2's isolated test week remains a focused lineup-builder test. The
+    # normal app gets the four-tab Gate 4 navigation.
+    if not bool(week.get("is_demo")):
+        tab = render_nav()
+        if tab == "🏆 Leaderboard":
+            render_leaderboards(store, week, player, phase)
+            return
+        if tab == "🕘 History":
+            render_history(store, int(week.get("season") or 2026))
+            return
+        if tab == "👤 Profile":
+            render_profile(store, player, int(week.get("season") or 2026), on_sign_out)
+            return
+
+    _week_header(week)
 
     if bool(week.get("is_demo")):
         st.markdown('<div class="status-test"><strong>Gate 2 test week.</strong> Picks here are isolated and never count toward Week 1.</div>', unsafe_allow_html=True)
@@ -607,10 +635,11 @@ def render_player_game(store, player: dict) -> None:
             st.rerun()
         return
 
-    # Week/pool rows are shared by every player. SupabaseStore caches these
-    # briefly across app sessions, so navigation and lineup edits do not keep
-    # downloading the same static weekly data. Player UI only needs the five
-    # visible choices at each position; hidden ranks 6-10 stay backend-only.
+    if phase == "locked" and not bool(week.get("is_demo")):
+        maybe_render_final_celebration(store, week, player)
+        render_live_sunday(store, week, player, show_storylines=True)
+        return
+
     pool = store.get_week_pool(str(week["id"]), visible_only=True)
 
     if phase == "open" and not pool_is_ready(pool):
@@ -629,3 +658,4 @@ def render_player_game(store, player: dict) -> None:
         _review(store, week, player, pool)
     else:
         _open_home(store, week, player, pool)
+

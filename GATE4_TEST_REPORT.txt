@@ -1,0 +1,15 @@
+Teal's Sunday Pick'em v0.4.0 — Gate 4 Test Report
+
+Automated test suite: 90 passed
+Compile check: PASS
+Release guard: PASS
+
+Key logic covered:
+- Traditional competition ranking and tie points
+- Display-precision weekly ties
+- Emergency-backup activation
+- Most Popular / Went Alone / Same Brain storylines
+- Season standings and fantasy-point tiebreak
+- Zero-point midseason/registered players
+- Gate 4 schema/contract presence
+- Finalization archive + Tuesday roster-purge integration

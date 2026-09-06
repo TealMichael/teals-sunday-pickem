@@ -103,6 +103,64 @@ button[kind="primary"], [data-testid="stBaseButton-primary"], [data-testid="stBa
 [data-testid="stCheckbox"] label, [data-testid="stWidgetLabel"] { color:var(--ink) !important; }
 [data-testid="stExpander"] { background:var(--surface) !important; }
 hr { border-color:var(--line); }
+
+/* Gate 4 live Sunday / social UI */
+.story-card { background:#FFFFFF; border:1px solid var(--line); border-radius:16px; padding:.85rem; min-height:128px; box-shadow:0 3px 14px rgba(23,32,39,.035); }
+.story-icon { font-size:1.35rem; }
+.story-title { color:var(--teal); text-transform:uppercase; letter-spacing:.06em; font-size:.7rem; font-weight:850; margin:.2rem 0; }
+.story-main { font-size:1rem; font-weight:820; color:var(--ink); }
+.you-strip { display:flex; justify-content:space-between; align-items:center; background:#ECF8F6; border:1px solid #B9E3DD; color:#155E56; padding:.7rem .8rem; border-radius:14px; margin:.55rem 0; }
+.score-row { display:flex; align-items:center; gap:.65rem; background:#FFFFFF; border-bottom:1px solid #EEF1F3; padding:.7rem .2rem; }
+.score-row:last-child { border-bottom:0; }
+.score-body { flex:1; min-width:0; }
+.score-points { font-weight:850; font-size:1.05rem; min-width:3.3rem; text-align:right; }
+.season-row { display:flex; justify-content:space-between; align-items:center; gap:.8rem; background:#FFFFFF; border:1px solid var(--line); border-radius:14px; padding:.72rem .8rem; margin:.42rem 0; }
+.season-points { font-size:1.05rem; font-weight:850; white-space:nowrap; }
+.history-row { display:flex; justify-content:space-between; align-items:center; gap:.7rem; padding:.5rem 0; border-bottom:1px solid #EEF1F3; }
+.history-row:last-child { border-bottom:0; }
+/* Full-row leaderboard buttons. */
+div[class*="st-key-leaderbtn_"] [data-testid="stButton"] button,
+div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"] { width:100% !important; min-height:52px !important; justify-content:flex-start !important; text-align:left !important; background:#FFFFFF !important; color:var(--ink) !important; border:1px solid var(--line) !important; border-radius:14px !important; padding:.65rem .8rem !important; }
+div[class*="st-key-leaderbtn_"] [data-testid="stButton"] button:hover,
+div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"]:hover { background:#F3F7F7 !important; border-color:#BFC9CF !important; }
+/* Sticky mobile-first navigation. Streamlit adds st-key-* classes from widget keys. */
+div[class*="st-key-gate4_nav"] { position:fixed !important; left:50% !important; transform:translateX(-50%) !important; bottom:.5rem !important; z-index:999 !important; width:min(648px, calc(100vw - 1.2rem)) !important; background:rgba(255,255,255,.96) !important; backdrop-filter:blur(10px); border:1px solid var(--line); border-radius:16px; padding:.32rem !important; box-shadow:0 8px 24px rgba(23,32,39,.12); }
+div[class*="st-key-gate4_nav"] [role="radiogroup"] { width:100% !important; }
+/* Champion moment: short football flood, non-blocking and reduced-motion safe. */
+.champion-overlay { position:fixed; inset:0; z-index:2000; overflow:hidden; background:rgba(247,249,250,.96); pointer-events:none; animation:champion-hide 3.1s ease forwards; display:flex; align-items:center; justify-content:center; }
+.champion-card { position:relative; z-index:3; text-align:center; padding:1.35rem 1.1rem; background:#FFFFFF; border:1px solid #B9E3DD; border-radius:22px; box-shadow:0 12px 40px rgba(23,32,39,.16); width:min(440px,calc(100vw - 2rem)); }
+.champion-name { font-size:1.55rem; font-weight:900; letter-spacing:-.035em; margin:.3rem 0; }
+.champion-score { font-size:1.15rem; font-weight:800; color:#155E56; margin-bottom:.25rem; }
+.football { position:absolute; top:-2rem; z-index:2; font-size:1.25rem; animation:football-fall 2.6s ease-in forwards; }
+.football.f0 { left:0%; animation-delay:0.00s; animation-duration:2.00s; }
+.football.f1 { left:37%; animation-delay:0.08s; animation-duration:2.16s; }
+.football.f2 { left:74%; animation-delay:0.16s; animation-duration:2.32s; }
+.football.f3 { left:15%; animation-delay:0.24s; animation-duration:2.48s; }
+.football.f4 { left:52%; animation-delay:0.32s; animation-duration:2.64s; }
+.football.f5 { left:89%; animation-delay:0.40s; animation-duration:2.00s; }
+.football.f6 { left:30%; animation-delay:0.48s; animation-duration:2.16s; }
+.football.f7 { left:67%; animation-delay:0.56s; animation-duration:2.32s; }
+.football.f8 { left:8%; animation-delay:0.00s; animation-duration:2.48s; }
+.football.f9 { left:45%; animation-delay:0.08s; animation-duration:2.64s; }
+.football.f10 { left:82%; animation-delay:0.16s; animation-duration:2.00s; }
+.football.f11 { left:23%; animation-delay:0.24s; animation-duration:2.16s; }
+.football.f12 { left:60%; animation-delay:0.32s; animation-duration:2.32s; }
+.football.f13 { left:1%; animation-delay:0.40s; animation-duration:2.48s; }
+.football.f14 { left:38%; animation-delay:0.48s; animation-duration:2.64s; }
+.football.f15 { left:75%; animation-delay:0.56s; animation-duration:2.00s; }
+.football.f16 { left:16%; animation-delay:0.00s; animation-duration:2.16s; }
+.football.f17 { left:53%; animation-delay:0.08s; animation-duration:2.32s; }
+.football.f18 { left:90%; animation-delay:0.16s; animation-duration:2.48s; }
+.football.f19 { left:31%; animation-delay:0.24s; animation-duration:2.64s; }
+.football.f20 { left:68%; animation-delay:0.32s; animation-duration:2.00s; }
+.football.f21 { left:9%; animation-delay:0.40s; animation-duration:2.16s; }
+.football.f22 { left:46%; animation-delay:0.48s; animation-duration:2.32s; }
+.football.f23 { left:83%; animation-delay:0.56s; animation-duration:2.48s; }
+
+@keyframes football-fall { 0% { transform:translateY(-10vh) rotate(0deg); opacity:0; } 12% { opacity:1; } 100% { transform:translateY(115vh) rotate(620deg); opacity:.18; } }
+@keyframes champion-hide { 0%,82% { opacity:1; visibility:visible; } 100% { opacity:0; visibility:hidden; } }
+@media (prefers-reduced-motion: reduce) { .football { animation:none !important; opacity:.12; top:1rem; } }
+
 @media (max-width: 480px) {
   .block-container { padding-top:2.6rem; padding-left:1rem; padding-right:1rem; }
   .hero { padding-top:.65rem; }

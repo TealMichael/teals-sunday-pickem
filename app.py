@@ -404,8 +404,8 @@ if not st.session_state.player and not st.session_state.remember_restore_checked
 
 
 if st.session_state.commish:
-    st.markdown("### Commissioner • Gate 3")
-    st.success("Admin authentication is working. NFL data diagnostics are now connected; full Commissioner controls remain Gate 5.")
+    st.markdown("### Commissioner • Gate 4")
+    st.success("Admin authentication is working. Gate 3 diagnostics remain available, and the Gate 4 live-Sunday demo is connected. Full Commissioner controls remain Gate 5.")
 
     current_week = store.get_real_week()
     if current_week:
@@ -447,6 +447,12 @@ if st.session_state.commish:
             st.error(f"Gate 3 scoring test failed: {exc}")
 
     st.caption("Gate 3.5 provider replay runs in GitHub Actions — the same environment that will perform Sunday scoring.")
+    if st.button("Preview Gate 4 Live Sunday Demo", type="secondary", use_container_width=True):
+        st.session_state.gate4_demo = True
+        st.session_state.gate4_tab = "🏈 Sunday"
+        st.session_state.commish = False
+        st.rerun()
+
     replay_col1, replay_col2 = st.columns(2)
     with replay_col1:
         st.link_button(
@@ -544,14 +550,17 @@ if st.session_state.commish:
     st.stop()
 
 if st.session_state.player:
-    render_player_game(store, st.session_state.player)
-    st.button(
-        "Sign Out",
-        type="secondary",
-        use_container_width=True,
-        disabled=bool(_storage_sync_pending and _storage_sync_action == "set"),
-        on_click=_sign_out_submit,
-    )
+    render_player_game(store, st.session_state.player, on_sign_out=_sign_out_submit)
+    # The normal Gate 4 app keeps Sign Out in Profile. Gate 2's isolated test
+    # week has no Gate 4 navigation, so retain a local escape there.
+    if st.session_state.get("use_demo_week"):
+        st.button(
+            "Sign Out",
+            type="secondary",
+            use_container_width=True,
+            disabled=bool(_storage_sync_pending and _storage_sync_action == "set"),
+            on_click=_sign_out_submit,
+        )
     st.stop()
 
 player_login_ui()

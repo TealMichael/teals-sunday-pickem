@@ -114,6 +114,7 @@ class SupabaseStore:
                 "pin_salt": pin_salt,
                 "pin_hash": pin_hash,
             }).execute()
+            self._public_cache.pop(("registered_players",), None)
             return res.data[0]
         except Exception as exc:
             if "duplicate" in str(exc).lower() or "unique" in str(exc).lower():
@@ -154,6 +155,7 @@ class SupabaseStore:
 
     def update_player_emoji(self, player_id: str, emoji: str) -> dict[str, Any] | None:
         self._table("players").update({"emoji": emoji}).eq("id", player_id).execute()
+        self._public_cache.pop(("registered_players",), None)
         return self.get_player_by_id(player_id)
 
     def failed_attempts_in_window(self, nickname_key: str) -> int:
@@ -217,7 +219,7 @@ class SupabaseStore:
             return cached
         res = (
             self._table("weeks")
-            .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo")
+            .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo,data_status,last_data_refresh_at,finalized_at,data_message,results_archived_at,rosters_purged_at")
             .eq("is_demo", False)
             .order("season", desc=True)
             .order("nfl_week", desc=False)
@@ -227,8 +229,15 @@ class SupabaseStore:
         if not rows:
             return self._cache_set(cache_key, None, 15)
         now = datetime.now(UTC)
-        current_or_future = [r for r in rows if (parse_timestamp(r.get("locks_at")) or now) >= now]
-        return self._cache_set(cache_key, (current_or_future or rows[-1:])[0], 30)
+        # Keep the just-finished Sunday as the current app week through Monday.
+        # The next shell may already exist, but it should not take over until
+        # its Tuesday-noon open time actually arrives.
+        opened = [r for r in rows if (parse_timestamp(r.get("opens_at")) or now) <= now]
+        if opened:
+            value = sorted(opened, key=lambda r: (int(r.get("season") or 0), int(r.get("nfl_week") or 0)))[-1]
+        else:
+            value = sorted(rows, key=lambda r: (parse_timestamp(r.get("opens_at")) or now))[0]
+        return self._cache_set(cache_key, value, 30)
 
     def get_demo_week(self) -> dict[str, Any] | None:
         cache_key = ("demo_week",)
@@ -237,7 +246,7 @@ class SupabaseStore:
             return cached
         res = (
             self._table("weeks")
-            .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo")
+            .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo,data_status,last_data_refresh_at,finalized_at,data_message,results_archived_at,rosters_purged_at")
             .eq("is_demo", True)
             .order("created_at", desc=True)
             .limit(1)
@@ -253,7 +262,7 @@ class SupabaseStore:
             return cached
         res = (
             self._table("weeks")
-            .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo")
+            .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo,data_status,last_data_refresh_at,finalized_at,data_message,results_archived_at,rosters_purged_at")
             .eq("id", week_id)
             .limit(1)
             .execute()
@@ -398,6 +407,7 @@ class SupabaseStore:
             "updated_at": _iso(datetime.now(UTC)),
         }
         res = self._table("lineup_picks").upsert(payload, on_conflict="lineup_id,position").execute()
+        self.clear_week_cache(str(week_id))
         return res.data[0]
 
     def set_emergency_backup(
@@ -467,6 +477,7 @@ class SupabaseStore:
             .eq("id", resolved_lineup_id)
             .execute()
         )
+        self.clear_week_cache(str(week_id))
         return res.data[0]
 
 
@@ -476,7 +487,7 @@ class SupabaseStore:
     def get_week_by_season_week(self, season: int, nfl_week: int, *, is_demo: bool = False) -> dict[str, Any] | None:
         res = (
             self._table("weeks")
-            .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo,data_status,last_data_refresh_at,finalized_at,data_message")
+            .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo,data_status,last_data_refresh_at,finalized_at,data_message,results_archived_at,rosters_purged_at")
             .eq("season", int(season))
             .eq("nfl_week", int(nfl_week))
             .eq("is_demo", bool(is_demo))
@@ -486,7 +497,7 @@ class SupabaseStore:
         return res.data[0] if res.data else None
 
     def update_week_data_state(self, week_id: str, **fields: Any) -> dict[str, Any] | None:
-        allowed = {"published_at", "data_status", "last_data_refresh_at", "finalized_at", "data_message"}
+        allowed = {"published_at", "data_status", "last_data_refresh_at", "finalized_at", "data_message", "results_archived_at", "rosters_purged_at"}
         payload = {key: value for key, value in fields.items() if key in allowed}
         if not payload:
             return self.get_week(str(week_id))
@@ -905,3 +916,127 @@ class SupabaseStore:
                 changes.append({"position": position, "removed": invalid.get("player_name"), "replacement": replacement.get("player_name"), "reason": "schedule"})
         self.clear_week_cache(str(week["id"]))
         return changes
+
+    # -------------------------
+    # Gate 4 live Sunday / season data
+    # -------------------------
+    def get_registered_players(self) -> list[dict[str, Any]]:
+        cache_key = ("registered_players",)
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return list(cached)
+        rows = list(
+            self._table("players")
+            .select("id,nickname,emoji,created_at,last_seen_at")
+            .order("nickname")
+            .execute()
+            .data
+            or []
+        )
+        return list(self._cache_set(cache_key, rows, 20))
+
+    def get_week_public_bundle(self, week_id: str, *, ttl_seconds: float = 8.0) -> dict[str, Any]:
+        cache_key = ("gate4_bundle", str(week_id))
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return dict(cached)
+        lineups = list(
+            self._table("lineups")
+            .select("id,week_id,player_id,confirmed_at,created_at,updated_at")
+            .eq("week_id", str(week_id))
+            .execute()
+            .data
+            or []
+        )
+        lineup_ids = [str(row["id"]) for row in lineups]
+        picks: list[dict[str, Any]] = []
+        if lineup_ids:
+            picks = list(
+                self._table("lineup_picks")
+                .select("id,lineup_id,position,pool_player_id,emergency_pool_player_id,updated_at")
+                .in_("lineup_id", lineup_ids)
+                .execute()
+                .data
+                or []
+            )
+        player_ids = [str(row["player_id"]) for row in lineups]
+        players: list[dict[str, Any]] = []
+        if player_ids:
+            players = list(
+                self._table("players")
+                .select("id,nickname,emoji")
+                .in_("id", player_ids)
+                .execute()
+                .data
+                or []
+            )
+        value = {
+            "lineups": lineups,
+            "picks": picks,
+            "players": players,
+            "pool": self.get_full_week_pool(str(week_id)),
+            "games": self.get_nfl_games(str(week_id), eligible_only=False),
+        }
+        return dict(self._cache_set(cache_key, value, ttl_seconds))
+
+    def get_weekly_results(
+        self,
+        *,
+        season: int | None = None,
+        week_id: str | None = None,
+        player_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        query = self._table("weekly_results").select(
+            "id,week_id,season,nfl_week,player_id,nickname_snapshot,emoji_snapshot,weekly_score,finish_rank,season_points,is_champion,finalized_at"
+        )
+        if season is not None:
+            query = query.eq("season", int(season))
+        if week_id is not None:
+            query = query.eq("week_id", str(week_id))
+        if player_id is not None:
+            query = query.eq("player_id", str(player_id))
+        return list(query.order("nfl_week", desc=True).order("finish_rank").execute().data or [])
+
+    def upsert_weekly_results(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not rows:
+            return []
+        res = self._table("weekly_results").upsert(rows, on_conflict="week_id,player_id").execute()
+        self._public_cache.pop(("weekly_results",), None)
+        return list(res.data or [])
+
+    def get_season_champions(self, season: int | None = None) -> list[dict[str, Any]]:
+        query = self._table("season_champions").select(
+            "id,season,player_id,nickname_snapshot,emoji_snapshot,season_points,total_fantasy_points,awarded_at"
+        )
+        if season is not None:
+            query = query.eq("season", int(season))
+        return list(query.order("season", desc=True).order("nickname_snapshot").execute().data or [])
+
+    def upsert_season_champions(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not rows:
+            return []
+        return list(self._table("season_champions").upsert(rows, on_conflict="season,player_id").execute().data or [])
+
+    def purge_prior_week_rosters(self, *, season: int, before_nfl_week: int) -> list[int]:
+        candidates = list(
+            self._table("weeks")
+            .select("id,nfl_week,finalized_at,rosters_purged_at")
+            .eq("season", int(season))
+            .eq("is_demo", False)
+            .lt("nfl_week", int(before_nfl_week))
+            .order("nfl_week")
+            .execute()
+            .data
+            or []
+        )
+        weeks = [row for row in candidates if row.get("finalized_at") and not row.get("rosters_purged_at")]
+        purged: list[int] = []
+        stamp = _iso(datetime.now(UTC))
+        for week in weeks:
+            # lineup_picks cascade from lineups; weekly_results preserve history.
+            self._table("lineups").delete().eq("week_id", str(week["id"])).execute()
+            self._table("weeks").update({"rosters_purged_at": stamp}).eq("id", str(week["id"])).execute()
+            purged.append(int(week["nfl_week"]))
+            self.clear_week_cache(str(week["id"]))
+        return purged
+

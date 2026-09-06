@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from config import NFL_SEASON, TIMEZONE_NAME
 from nfl_rankings import WEEK1_KICKER_TEAM_ORDER, nflverse_rankings, week1_rankings
 from nfl_scoring import score_stat_line
+from gate4_results import archive_week_results
 from nfl_sources import ESPNProvider, NFLverseProvider, SleeperProvider, normalize_name, normalize_team, parse_iso
 from weekly import POSITIONS, parse_timestamp
 
@@ -150,7 +151,8 @@ def publish_week_pool(store, week: dict[str, Any], *, force: bool = False) -> di
     try:
         ranked, games, _ = build_pool_preview(store, week)
         store.publish_ranked_pool(week, ranked)
-        store.finish_data_run(run_id, success=True, message="Published 10 ranked players per position.", metadata={"eligible_games": len(_eligible_games(games))})
+        purged_weeks = store.purge_prior_week_rosters(season=int(week["season"]), before_nfl_week=int(week["nfl_week"]))
+        store.finish_data_run(run_id, success=True, message="Published 10 ranked players per position.", metadata={"eligible_games": len(_eligible_games(games)), "purged_roster_weeks": purged_weeks})
         return {"published": True, "message": "Player pool published.", "ranked": ranked}
     except Exception as exc:
         store.update_week_data_state(str(week["id"]), data_status="ERROR", data_message=str(exc))
@@ -314,15 +316,16 @@ def reconcile_final(store, week: dict[str, Any], *, nflverse: NFLverseProvider |
         store.upsert_player_week_stats(str(week["id"]), score_rows)
         store.apply_pool_scores(week, score_rows, score_status="FINAL")
         stamp = _iso(datetime.now(UTC))
-        store.update_week_data_state(
+        finalized_week = store.update_week_data_state(
             str(week["id"]),
             data_status="FINAL",
             finalized_at=stamp,
             last_data_refresh_at=stamp,
             data_message="Monday nflverse reconciliation complete.",
-        )
-        store.finish_data_run(run_id, success=True, message=f"Finalized {len(score_rows)} pool players.")
-        return {"finalized": True, "players": len(score_rows)}
+        ) or dict(week, data_status="FINAL", finalized_at=stamp)
+        archive = archive_week_results(store, finalized_week)
+        store.finish_data_run(run_id, success=True, message=f"Finalized {len(score_rows)} pool players and archived {len(archive.get('rows') or [])} weekly results.")
+        return {"finalized": True, "players": len(score_rows), "results": len(archive.get("rows") or [])}
     except Exception as exc:
         store.finish_data_run(run_id, success=False, message=str(exc))
         raise
