@@ -259,7 +259,7 @@ def _render_player_card_button(row: dict, *, key: str, selected: bool = False, d
     status = safe_status(row.get("availability_status"))
     badge = ""
     if status == "QUESTIONABLE":
-        badge = "  ⚠️ Q"
+        badge = "  ⚠ QUESTIONABLE"
     elif status == "OUT":
         badge = "  OUT"
     prefix = "✓ " if selected else ""
@@ -275,6 +275,7 @@ def _render_player_card_button(row: dict, *, key: str, selected: bool = False, d
 def _builder(store, week: dict, player: dict, position: str) -> None:
     lineup, picks, pool, pool_by_id = _load_lineup(store, week, player)
     by_pos = picks_by_position(picks)
+    chosen, total = lineup_progress(picks)
     current = by_pos.get(position)
     current_id = str(current.get("pool_player_id")) if current else ""
     rows = _stable_order(str(player["id"]), str(week["id"]), position, position_pool(pool, position))
@@ -289,6 +290,11 @@ def _builder(store, week: dict, player: dict, position: str) -> None:
             st.markdown(
                 f'<div class="status-warn"><strong>⚠️ {_display_name(starter)} is Questionable.</strong><br>Choose one of the other {position}s as your emergency backup.</div>',
                 unsafe_allow_html=True,
+            )
+            st.info(
+                "How the emergency backup works: If your starter is ruled OUT/inactive after the 1:00 PM ET lock "
+                "and does not play, your emergency backup replaces them. If your starter plays at all, your starter counts. "
+                "Your backup stays private unless it activates."
             )
             backup_id = str(current.get("emergency_pool_player_id") or "")
             for row in rows:
@@ -320,7 +326,7 @@ def _builder(store, week: dict, player: dict, position: str) -> None:
             st.session_state.builder_mode = "pick"
             st.rerun()
     with right:
-        if st.button("Review My Five", use_container_width=True):
+        if st.button("Review My Five", use_container_width=True, disabled=chosen < total):
             st.session_state.builder_position = None
             st.session_state.builder_mode = "review"
             st.rerun()
@@ -375,7 +381,10 @@ def _open_home(store, week: dict, player: dict) -> None:
     needs = required_backup_positions(picks, pool_by_id)
 
     if st.session_state.pop("lineup_saved_flash", False):
-        st.success("Lineup saved. You can make changes until Sunday at 1:00 PM ET.")
+        if bool(week.get("is_demo")):
+            st.success("Test lineup saved. You can keep editing while the Gate 2 test week is open.")
+        else:
+            st.success("Lineup saved. You can make changes until Sunday at 1:00 PM ET.")
 
     if needs:
         st.markdown(f'<div class="status-warn"><strong>⚠️ {len(needs)} player needs attention.</strong><br>Add an emergency backup before Sunday.</div>', unsafe_allow_html=True)
@@ -383,17 +392,23 @@ def _open_home(store, week: dict, player: dict) -> None:
     if chosen == total and not needs:
         st.markdown("### ✅ YOUR FIVE ARE READY")
         st.markdown(f'<div class="card">{_summary_rows(picks, pool_by_id)}</div>', unsafe_allow_html=True)
-        _countdown(str(week["locks_at"]), "Picks lock in")
+        if bool(week.get("is_demo")):
+            st.markdown('<div class="status-test"><strong>TEST WEEK • LOCK OPEN</strong><br>Build and edit freely while testing.</div>', unsafe_allow_html=True)
+        else:
+            _countdown(str(week["locks_at"]), "Picks lock in")
         if st.button("EDIT LINEUP", type="primary", use_container_width=True):
-            st.session_state.builder_position = POSITIONS[0]
-            st.session_state.builder_mode = "pick"
+            st.session_state.builder_position = None
+            st.session_state.builder_mode = "review"
             st.rerun()
     else:
         st.markdown(
             f'<div class="card"><div class="eyebrow">Your lineup</div><div class="big-number">{chosen} of {total}</div><div class="small">picks complete</div></div>',
             unsafe_allow_html=True,
         )
-        _countdown(str(week["locks_at"]), "Picks lock in")
+        if bool(week.get("is_demo")):
+            st.markdown('<div class="status-test"><strong>TEST WEEK • LOCK OPEN</strong><br>Build and edit freely while testing.</div>', unsafe_allow_html=True)
+        else:
+            _countdown(str(week["locks_at"]), "Picks lock in")
         label = "Fix Injury Backup" if needs else ("Continue Building" if chosen else "Build My Five")
         if st.button(label, type="primary", use_container_width=True):
             st.session_state.builder_position = (needs[0] if needs else first_incomplete_position(picks, pool_by_id)) or POSITIONS[0]
