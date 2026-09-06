@@ -104,8 +104,6 @@ if "active_device_token" not in st.session_state:
     st.session_state.active_device_token = None
 if "remember_restore_checked" not in st.session_state:
     st.session_state.remember_restore_checked = False
-if "remember_cookie_command" not in st.session_state:
-    st.session_state.remember_cookie_command = None
 if "remember_storage_command" not in st.session_state:
     st.session_state.remember_storage_command = None
 if "remember_storage_nonce" not in st.session_state:
@@ -142,12 +140,13 @@ def _queue_remember_storage_delete() -> None:
 
 
 def _queue_remember_cookie_set(token: str) -> None:
-    st.session_state.remember_cookie_command = {"action": "set", "token": str(token)}
+    # The first-party Components-v2 bridge writes BOTH localStorage and the
+    # first-party cookie. Keep one browser command path so auth actions never
+    # compete with a second hidden widget/script rerun.
     _queue_remember_storage_set(token)
 
 
 def _queue_remember_cookie_delete() -> None:
-    st.session_state.remember_cookie_command = {"action": "delete", "token": ""}
     _queue_remember_storage_delete()
 
 
@@ -186,34 +185,20 @@ def render_remember_storage_bridge() -> dict:
         return {"token": "", "ready": True}
 
 
-def render_pending_remember_cookie_command() -> None:
-    """Write/delete the first-party remembered-device cookie in the browser."""
-    command = st.session_state.get("remember_cookie_command")
-    if not command:
-        return
-    name_js = json.dumps(COOKIE_NAME)
-    if command.get("action") == "set":
-        token_js = json.dumps(str(command.get("token") or ""))
-        script = f"""
-        <script>
-        (function() {{
-          const name = {name_js};
-          const token = {token_js};
-          document.cookie = `${{name}}=${{token}}; Path=/; Max-Age={REMEMBER_COOKIE_MAX_AGE}; SameSite=Lax; Secure`;
-        }})();
-        </script>
-        """
-    else:
-        script = f"""
-        <script>
-        (function() {{
-          const name = {name_js};
-          document.cookie = `${{name}}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure`;
-        }})();
-        </script>
-        """
-    st.html(script, unsafe_allow_javascript=True)
-    st.session_state.remember_cookie_command = None
+def _process_pending_storage_command() -> bool:
+    """Finish a queued browser write/delete before exposing clickable UI.
+
+    Components-v2 reports its acknowledgement on a rerun. While that command
+    is still pending, stop the page so the hidden component cannot steal the
+    user's first click on Sign In / Sign Out / Commissioner actions.
+    """
+    if not st.session_state.get("remember_storage_command"):
+        return True
+    render_remember_storage_bridge()
+    if st.session_state.get("remember_storage_command"):
+        st.caption("Finishing secure sign-in…")
+        st.stop()
+    return True
 
 
 def _apply_restore_result(result, token: str) -> bool:
@@ -351,26 +336,27 @@ def commish_login_ui() -> None:
 # -----------------------------
 # Remembered-login restore
 # -----------------------------
-_cookie_token = _browser_remember_cookie()
-_cookie_restored = _restore_remembered_cookie_fast_path(_cookie_token)
-if _cookie_restored:
-    # Skip the Components-v2 bridge on the fast path to avoid an unnecessary
-    # browser -> Python state update and extra rerun.
-    _storage_state = {"token": "", "ready": True}
-else:
-    _storage_state = render_remember_storage_bridge()
-    # Cookie was already tried. Let localStorage choose the fallback so a stale
-    # cookie cannot hide a newer valid browser token.
-    _restore_remembered_player(_storage_state, cookie_token="")
+# A queued set/delete comes from a deliberate user action on the previous run.
+# Finish it FIRST and do not render other clickable UI until the browser has
+# acknowledged it. This removes the double-click behavior seen in Gate 1.
+_process_pending_storage_command()
 
-render_pending_remember_cookie_command()
+_storage_state = {"token": "", "ready": True}
+if not st.session_state.player and not st.session_state.remember_restore_checked:
+    _cookie_token = _browser_remember_cookie()
+    _cookie_restored = _restore_remembered_cookie_fast_path(_cookie_token)
+    if not _cookie_restored:
+        _storage_state = render_remember_storage_bridge()
+        # Cookie was already tried. Let localStorage choose the fallback so a
+        # stale cookie cannot hide a newer valid browser token.
+        _restore_remembered_player(_storage_state, cookie_token="")
 
-
-# If a browser has a localStorage token but the component has not returned it
-# yet, avoid flashing the sign-in form for a fraction of a second.
-if not st.session_state.player and not st.session_state.remember_restore_checked and not _storage_state.get("ready"):
-    st.caption("Checking remembered sign-in…")
-    st.stop()
+        # If localStorage has not answered yet, avoid flashing a sign-in form
+        # and—more importantly—avoid mounting clickable widgets that could
+        # compete with the component's automatic rerun.
+        if not st.session_state.player and not st.session_state.remember_restore_checked and not _storage_state.get("ready"):
+            st.caption("Checking remembered sign-in…")
+            st.stop()
 
 
 if st.session_state.commish:

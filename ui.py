@@ -18,23 +18,27 @@ def inject_css() -> None:
     st.markdown(
         """
 <style>
-:root { --teal:#0F766E; --ink:#172027; --muted:#64727D; --line:#E5EAED; }
+:root { color-scheme: light; --teal:#0F766E; --ink:#172027; --muted:#64727D; --line:#E5EAED; --page:#F7F9FA; --surface:#FFFFFF; }
+html, body, [data-testid="stAppViewContainer"], .stApp { background:var(--page) !important; color:var(--ink) !important; }
 .block-container { max-width: 680px; padding-top: 1.2rem; padding-bottom: 4rem; }
-[data-testid="stHeader"] { background: rgba(247,249,250,.88); }
+[data-testid="stHeader"] { background: rgba(247,249,250,.94) !important; }
 h1,h2,h3 { letter-spacing:-.025em; color:var(--ink); }
 .hero { padding: 1.1rem 0 .65rem 0; }
 .hero-kicker { font-size:.78rem; font-weight:800; letter-spacing:.12em; color:var(--teal); text-transform:uppercase; }
 .hero-title { font-size:2rem; line-height:1.05; font-weight:850; letter-spacing:-.045em; color:var(--ink); margin:.25rem 0; }
 .hero-sub { color:var(--muted); font-size:1rem; }
-.card { background:#fff; border:1px solid var(--line); border-radius:18px; padding:1rem 1rem; box-shadow:0 3px 16px rgba(23,32,39,.04); margin:.65rem 0; }
+.card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:1rem 1rem; box-shadow:0 3px 16px rgba(23,32,39,.04); margin:.65rem 0; }
 .identity { display:flex; align-items:center; gap:.7rem; }
 .avatar { width:46px; height:46px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:#ECF8F6; font-size:1.55rem; }
 .small { color:var(--muted); font-size:.9rem; }
 .status-ok { background:#ECF8F6; border:1px solid #B9E3DD; border-radius:14px; padding:.8rem .9rem; color:#155E56; }
-[data-testid="stForm"] { border:1px solid var(--line); border-radius:18px; padding:1rem; background:#fff; }
+[data-testid="stForm"] { border:1px solid var(--line); border-radius:18px; padding:1rem; background:var(--surface) !important; }
 .stButton button, [data-testid="stFormSubmitButton"] button { min-height:46px; border-radius:12px; font-weight:750; }
 button[kind="primary"] { background:var(--teal); }
-[data-testid="stTextInput"] input { min-height:44px; border-radius:12px; }
+[data-testid="stTextInput"] input { min-height:44px; border-radius:12px; background:#F3F5F7 !important; color:var(--ink) !important; -webkit-text-fill-color:var(--ink) !important; }
+[data-testid="stTextInput"] input::placeholder { color:#8A969F !important; }
+[data-testid="stCheckbox"] label, [data-testid="stWidgetLabel"] { color:var(--ink) !important; }
+[data-testid="stExpander"] { background:var(--surface) !important; }
 hr { border-color:var(--line); }
 </style>
         """,
