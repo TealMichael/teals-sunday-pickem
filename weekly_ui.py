@@ -230,6 +230,15 @@ def _advance_builder(position: str) -> None:
         st.session_state.builder_mode = "review"
 
 
+def _complete_builder_step(position: str) -> None:
+    return_mode = st.session_state.pop("builder_return_mode", None)
+    if return_mode in {"review", "home"}:
+        st.session_state.builder_position = None
+        st.session_state.builder_mode = return_mode
+        return
+    _advance_builder(position)
+
+
 def _select_starter(store, week: dict, player: dict, position: str, row: dict) -> None:
     store.save_pick(
         week_id=str(week["id"]),
@@ -242,7 +251,7 @@ def _select_starter(store, week: dict, player: dict, position: str, row: dict) -
         st.session_state.builder_position = position
         st.session_state.builder_mode = "backup"
     else:
-        _advance_builder(position)
+        _complete_builder_step(position)
 
 
 def _select_backup(store, week: dict, player: dict, position: str, row: dict) -> None:
@@ -252,19 +261,18 @@ def _select_backup(store, week: dict, player: dict, position: str, row: dict) ->
         position=position,
         emergency_pool_player_id=str(row["id"]),
     )
-    _advance_builder(position)
+    _complete_builder_step(position)
 
 
 def _render_player_card_button(row: dict, *, key: str, selected: bool = False, disabled: bool = False) -> bool:
     status = safe_status(row.get("availability_status"))
-    badge = ""
     if status == "QUESTIONABLE":
-        badge = "  ⚠ QUESTIONABLE"
+        st.markdown('<div class="pick-status-row"><span class="badge-q">⚠ QUESTIONABLE</span></div>', unsafe_allow_html=True)
     elif status == "OUT":
-        badge = "  OUT"
+        st.markdown('<div class="pick-status-row"><span class="badge-out">OUT</span></div>', unsafe_allow_html=True)
     prefix = "✓ " if selected else ""
     return st.button(
-        f"{prefix}{row['player_name']}{badge}\n\n{_player_meta(row)}",
+        f"{prefix}{row['player_name']}\n\n{_player_meta(row)}",
         key=key,
         disabled=disabled or status == "OUT",
         type="secondary",
@@ -320,10 +328,18 @@ def _builder(store, week: dict, player: dict, position: str) -> None:
 
     left, right = st.columns(2)
     with left:
+        return_mode = st.session_state.get("builder_return_mode")
         prev = previous_position(position)
-        if st.button("← Back", use_container_width=True, disabled=prev is None):
-            st.session_state.builder_position = prev
-            st.session_state.builder_mode = "pick"
+        back_disabled = prev is None and return_mode not in {"review", "home"}
+        back_label = "← Review" if return_mode == "review" else ("← Lineup" if return_mode == "home" else "← Back")
+        if st.button(back_label, use_container_width=True, disabled=back_disabled):
+            if return_mode in {"review", "home"}:
+                st.session_state.pop("builder_return_mode", None)
+                st.session_state.builder_position = None
+                st.session_state.builder_mode = return_mode
+            else:
+                st.session_state.builder_position = prev
+                st.session_state.builder_mode = "pick"
             st.rerun()
     with right:
         if st.button("Review My Five", use_container_width=True, disabled=chosen < total):
@@ -345,6 +361,7 @@ def _review(store, week: dict, player: dict) -> None:
     for idx, pos in enumerate(POSITIONS):
         with cols[idx]:
             if st.button(f"Change\n{pos}", key=f"change::{pos}", use_container_width=True):
+                st.session_state.builder_return_mode = "review"
                 st.session_state.builder_position = pos
                 st.session_state.builder_mode = "pick"
                 st.rerun()
@@ -352,6 +369,7 @@ def _review(store, week: dict, player: dict) -> None:
     if chosen < total:
         st.warning(f"Finish all five positions first. You have {chosen} of {total}.")
         if st.button("Continue Building", type="primary", use_container_width=True):
+            st.session_state.pop("builder_return_mode", None)
             st.session_state.builder_position = first_incomplete_position(picks, pool_by_id) or POSITIONS[0]
             st.session_state.builder_mode = "pick"
             st.rerun()
@@ -359,6 +377,7 @@ def _review(store, week: dict, player: dict) -> None:
     if needs:
         st.warning("Choose an emergency backup for: " + ", ".join(needs))
         if st.button("Fix injury backup", type="primary", use_container_width=True):
+            st.session_state.builder_return_mode = "review"
             st.session_state.builder_position = needs[0]
             st.session_state.builder_mode = "backup"
             st.rerun()
@@ -397,6 +416,7 @@ def _open_home(store, week: dict, player: dict) -> None:
         else:
             _countdown(str(week["locks_at"]), "Picks lock in")
         if st.button("EDIT LINEUP", type="primary", use_container_width=True):
+            st.session_state.pop("builder_return_mode", None)
             st.session_state.builder_position = None
             st.session_state.builder_mode = "review"
             st.rerun()
@@ -411,6 +431,10 @@ def _open_home(store, week: dict, player: dict) -> None:
             _countdown(str(week["locks_at"]), "Picks lock in")
         label = "Fix Injury Backup" if needs else ("Continue Building" if chosen else "Build My Five")
         if st.button(label, type="primary", use_container_width=True):
+            if needs:
+                st.session_state.builder_return_mode = "home"
+            else:
+                st.session_state.pop("builder_return_mode", None)
             st.session_state.builder_position = (needs[0] if needs else first_incomplete_position(picks, pool_by_id)) or POSITIONS[0]
             st.session_state.builder_mode = "backup" if needs else "pick"
             st.rerun()
@@ -457,6 +481,7 @@ def render_player_game(store, player: dict) -> None:
             st.session_state.use_demo_week = False
             st.session_state.builder_mode = "home"
             st.session_state.builder_position = None
+            st.session_state.pop("builder_return_mode", None)
             st.rerun()
     elif phase == "upcoming":
         st.markdown("### Week 1 opens Tuesday")
@@ -466,6 +491,7 @@ def render_player_game(store, player: dict) -> None:
             st.session_state.use_demo_week = True
             st.session_state.builder_mode = "home"
             st.session_state.builder_position = None
+            st.session_state.pop("builder_return_mode", None)
             st.rerun()
         return
 

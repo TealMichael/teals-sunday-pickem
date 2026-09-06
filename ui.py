@@ -38,6 +38,8 @@ h1,h2,h3 { letter-spacing:-.025em; color:var(--ink); }
 .meta { color:var(--muted); font-size:.84rem; margin-top:.12rem; }
 .badge-q { display:inline-block; padding:.12rem .42rem; border-radius:999px; background:#FFF2D8; color:#8A5100; font-size:.72rem; font-weight:850; margin-left:.35rem; }
 .badge-out { display:inline-block; padding:.12rem .42rem; border-radius:999px; background:#FDE8E7; color:#A22B24; font-size:.72rem; font-weight:850; margin-left:.35rem; }
+.pick-status-row { display:flex; justify-content:center; align-items:center; margin:.2rem 0 .28rem; }
+.pick-status-row .badge-q, .pick-status-row .badge-out { margin-left:0; font-size:.76rem; padding:.18rem .5rem; }
 .lineup-row { display:flex; align-items:center; gap:.65rem; padding:.58rem 0; border-bottom:1px solid #EEF1F3; }
 .lineup-row:last-child { border-bottom:0; }
 .onboard-grid { display:grid; grid-template-columns:1fr; gap:.6rem; margin:.7rem 0 1rem; }
