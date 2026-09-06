@@ -29,7 +29,17 @@ def _medal(rank: int) -> str:
 
 
 def render_nav() -> str:
+    # Four stable top-level destinations. Keep the stored values unchanged for
+    # backward compatibility, but render consistent Material icons instead of
+    # platform-dependent emoji. This mirrors native mobile tab-bar guidance:
+    # familiar icon + single-word label + persistent selected state.
     options = ["🏈 Sunday", "🏆 Leaderboard", "🕘 History", "👤 Profile"]
+    nav_labels = {
+        "🏈 Sunday": ":material/sports_football: Sunday",
+        "🏆 Leaderboard": ":material/leaderboard: Leaderboard",
+        "🕘 History": ":material/history: History",
+        "👤 Profile": ":material/person: Profile",
+    }
     default = st.session_state.get("gate4_tab") or options[0]
     if default not in options:
         default = options[0]
@@ -48,8 +58,12 @@ def render_nav() -> str:
             "Navigation",
             options,
             default=None if existing in options else default,
+            format_func=lambda option: nav_labels[option],
             key="gate4_nav",
             label_visibility="collapsed",
+            required=True,
+            width="stretch",
+            wrap=False,
         )
     else:
         fallback = st.session_state.get("gate4_nav_fallback")
@@ -59,6 +73,7 @@ def render_nav() -> str:
             "Navigation",
             options,
             index=options.index(default),
+            format_func=lambda option: nav_labels[option],
             horizontal=True,
             key="gate4_nav_fallback",
             label_visibility="collapsed",

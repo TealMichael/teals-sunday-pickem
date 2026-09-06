@@ -15,13 +15,16 @@ def inject_css() -> None:
 <style>
 :root { color-scheme: light; --teal:#0F766E; --ink:#172027; --muted:#64727D; --line:#E5EAED; --page:#F7F9FA; --surface:#FFFFFF; --warn:#A05A00; --danger:#B42318; }
 html, body, [data-testid="stAppViewContainer"], .stApp { background:var(--page) !important; color:var(--ink) !important; }
-.block-container { max-width: 680px; padding-top: 2.25rem; padding-bottom: 5rem; }
+.block-container { max-width: 640px; padding-top: 2.25rem; padding-bottom: 7.2rem; }
 [data-testid="stHeader"] { background: rgba(247,249,250,.94) !important; }
 h1,h2,h3 { letter-spacing:-.025em; color:var(--ink); }
-.hero { padding: .8rem 0 .65rem 0; overflow: visible; }
+h3 { font-size:1.42rem !important; line-height:1.15 !important; margin-top:1.2rem !important; margin-bottom:.55rem !important; }
+h4 { font-size:1.05rem !important; line-height:1.2 !important; margin-top:.9rem !important; margin-bottom:.45rem !important; }
+[data-testid="stCaptionContainer"] { margin-top:-.08rem; }
+.hero { padding:.55rem 0 .45rem; overflow:visible; }
 .hero-kicker { font-size:.78rem; line-height:1.35; padding-top:.12rem; font-weight:800; letter-spacing:.12em; color:var(--teal); text-transform:uppercase; overflow:visible; }
-.hero-title { font-size:2rem; line-height:1.05; font-weight:850; letter-spacing:-.045em; color:var(--ink); margin:.25rem 0; }
-.hero-sub { color:var(--muted); font-size:1rem; }
+.hero-title { font-size:1.86rem; line-height:1.04; font-weight:850; letter-spacing:-.045em; color:var(--ink); margin:.2rem 0; }
+.hero-sub { color:var(--muted); font-size:.94rem; }
 .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:1rem; box-shadow:0 3px 16px rgba(23,32,39,.04); margin:.65rem 0; }
 .card-tight { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:.8rem .9rem; margin:.48rem 0; }
 .identity { display:flex; align-items:center; gap:.7rem; }
@@ -105,24 +108,25 @@ button[kind="primary"], [data-testid="stBaseButton-primary"], [data-testid="stBa
 hr { border-color:var(--line); }
 
 /* Gate 4 live Sunday / social UI */
-.story-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.7rem; margin:.35rem 0 .9rem; }
-.story-card { background:#FFFFFF; border:1px solid var(--line); border-radius:16px; padding:.9rem; min-height:132px; box-shadow:0 3px 14px rgba(23,32,39,.035); }
-.story-icon { font-size:1.35rem; }
+.story-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.55rem; margin:.25rem 0 .75rem; }
+.story-card { background:#FFFFFF; border:1px solid var(--line); border-radius:15px; padding:.76rem; min-height:112px; box-shadow:0 2px 10px rgba(23,32,39,.03); }
+.story-icon { font-size:1.18rem; }
 .story-title { color:var(--teal); text-transform:uppercase; letter-spacing:.06em; font-size:.7rem; font-weight:850; margin:.2rem 0; }
 .story-main { font-size:1rem; font-weight:820; color:var(--ink); }
 .story-more { color:var(--teal); font-size:.78rem; font-weight:760; margin-top:.32rem; }
-.you-strip { display:flex; justify-content:space-between; align-items:center; background:#ECF8F6; border:1px solid #B9E3DD; color:#155E56; padding:.7rem .8rem; border-radius:14px; margin:.55rem 0; }
-.score-row { display:flex; align-items:center; gap:.65rem; background:#FFFFFF; border-bottom:1px solid #EEF1F3; padding:.7rem .2rem; }
+.you-strip { display:flex; justify-content:space-between; align-items:center; background:#ECF8F6; border:1px solid #B9E3DD; color:#155E56; padding:.58rem .72rem; border-radius:13px; margin:.4rem 0 .5rem; }
+.score-row { display:flex; align-items:center; gap:.6rem; background:#FFFFFF; border-bottom:1px solid #EEF1F3; padding:.58rem .12rem; }
 .score-row:last-child { border-bottom:0; }
 .score-body { flex:1; min-width:0; }
 .score-points { font-weight:850; font-size:1.05rem; min-width:3.3rem; text-align:right; }
-.season-row { display:flex; justify-content:space-between; align-items:center; gap:.8rem; background:#FFFFFF; border:1px solid var(--line); border-radius:14px; padding:.72rem .8rem; margin:.42rem 0; }
+.season-row { display:flex; justify-content:space-between; align-items:center; gap:.7rem; background:#FFFFFF; border:1px solid var(--line); border-radius:13px; padding:.62rem .72rem; margin:.32rem 0; }
 .season-points { font-size:1.05rem; font-weight:850; white-space:nowrap; }
 .history-row { display:flex; justify-content:space-between; align-items:center; gap:.7rem; padding:.5rem 0; border-bottom:1px solid #EEF1F3; }
 .history-row:last-child { border-bottom:0; }
 /* Full-row leaderboard buttons. */
+div[class*="st-key-leaderbtn_"] { margin:.28rem 0 !important; }
 div[class*="st-key-leaderbtn_"] [data-testid="stButton"] button,
-div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"] { width:100% !important; min-height:58px !important; justify-content:flex-start !important; text-align:left !important; background:#FFFFFF !important; color:var(--ink) !important; border:1px solid var(--line) !important; border-radius:15px !important; padding:.72rem .85rem !important; box-shadow:0 2px 10px rgba(23,32,39,.025) !important; }
+div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"] { width:100% !important; min-height:52px !important; justify-content:flex-start !important; text-align:left !important; background:#FFFFFF !important; color:var(--ink) !important; border:1px solid var(--line) !important; border-radius:14px !important; padding:.6rem .76rem !important; box-shadow:0 1px 8px rgba(23,32,39,.025) !important; }
 div[class*="st-key-leaderbtn_"] [data-testid="stButton"] button p,
 div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"] p { width:100% !important; text-align:left !important; margin:0 !important; font-weight:760 !important; color:var(--ink) !important; }
 div[class*="st-key-leaderbtn_"] [data-testid="stButton"] button:hover,
@@ -137,22 +141,89 @@ div[class*="st-key-gate4_leaderboard_view"] button[aria-pressed="true"] { backgr
 .season-left { min-width:0; }
 .season-name { font-weight:820; color:var(--ink); }
 .you-badge { display:inline-block; margin-left:.3rem; padding:.08rem .35rem; border-radius:999px; background:#ECF8F6; color:#155E56; font-size:.66rem; letter-spacing:.04em; font-weight:900; vertical-align:.08rem; }
-.history-card { background:#FFFFFF; border:1px solid var(--line); border-radius:17px; padding:.9rem 1rem; box-shadow:0 3px 14px rgba(23,32,39,.035); margin:.4rem 0 .8rem; }
+.history-card { background:#FFFFFF; border:1px solid var(--line); border-radius:15px; padding:.78rem .86rem; box-shadow:0 2px 10px rgba(23,32,39,.03); margin:.3rem 0 .65rem; }
 .history-head { display:flex; justify-content:space-between; align-items:center; gap:.8rem; padding-bottom:.45rem; border-bottom:1px solid #EEF1F3; margin-bottom:.15rem; }
-.profile-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.65rem; margin:.45rem 0 1rem; }
-.profile-stat { background:#FFFFFF; border:1px solid var(--line); border-radius:16px; padding:.82rem .75rem; min-height:104px; box-shadow:0 3px 14px rgba(23,32,39,.03); }
+.profile-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem; margin:.35rem 0 .8rem; }
+.profile-stat { background:#FFFFFF; border:1px solid var(--line); border-radius:14px; padding:.68rem .66rem; min-height:92px; box-shadow:0 2px 10px rgba(23,32,39,.025); }
 .profile-stat-icon { font-size:1.15rem; }
 .profile-stat-value { font-size:1.45rem; line-height:1.1; font-weight:900; letter-spacing:-.04em; color:var(--ink); margin:.22rem 0 .15rem; }
 .profile-stat-label { color:var(--muted); font-size:.76rem; font-weight:720; }
 
-/* Sticky mobile-first navigation. Streamlit adds st-key-* classes from widget keys. */
-div[class*="st-key-gate4_nav"] { position:fixed !important; left:50% !important; transform:translateX(-50%) !important; bottom:.5rem !important; z-index:999 !important; width:min(648px, calc(100vw - 1.2rem)) !important; background:rgba(255,255,255,.97) !important; backdrop-filter:blur(12px); border:1px solid var(--line); border-radius:18px; padding:.3rem !important; box-shadow:0 10px 28px rgba(23,32,39,.14); }
+/* Gate 4 app navigation: mobile tab-bar pattern.
+   Four persistent top-level destinations, consistent Material icons, labels below
+   icons, generous touch targets, and a compact floating surface above safe area. */
+div[class*="st-key-gate4_nav"] {
+  position:fixed !important;
+  left:50% !important;
+  transform:translateX(-50%) !important;
+  bottom:calc(.55rem + env(safe-area-inset-bottom, 0px)) !important;
+  z-index:999 !important;
+  width:min(520px, calc(100vw - 1rem)) !important;
+  background:rgba(255,255,255,.90) !important;
+  -webkit-backdrop-filter:blur(18px) saturate(1.15);
+  backdrop-filter:blur(18px) saturate(1.15);
+  border:1px solid rgba(214,222,227,.92);
+  border-radius:23px;
+  padding:.3rem .4rem !important;
+  box-shadow:0 12px 34px rgba(23,32,39,.13);
+}
 div[class*="st-key-gate4_nav"] [role="radiogroup"],
-div[class*="st-key-gate4_nav"] [data-testid="stSegmentedControl"] { width:100% !important; background:transparent !important; gap:.12rem !important; }
-div[class*="st-key-gate4_nav"] button { flex:1 1 0 !important; min-height:48px !important; padding:.38rem .28rem !important; border:0 !important; border-radius:13px !important; background:transparent !important; color:#73808A !important; font-size:.76rem !important; font-weight:760 !important; }
-div[class*="st-key-gate4_nav"] button[aria-pressed="true"] { background:#ECF8F6 !important; color:#155E56 !important; box-shadow:none !important; }
-div[class*="st-key-gate4_nav"] button:hover { background:#F3F7F7 !important; color:#155E56 !important; }
-div[class*="st-key-gate4_nav"] button p { white-space:nowrap !important; margin:0 !important; font-size:.76rem !important; }
+div[class*="st-key-gate4_nav"] [data-testid="stSegmentedControl"] {
+  width:100% !important;
+  background:transparent !important;
+  gap:.08rem !important;
+  overflow:visible !important;
+}
+div[class*="st-key-gate4_nav"] button {
+  flex:1 1 0 !important;
+  min-width:0 !important;
+  min-height:58px !important;
+  padding:.28rem .12rem .34rem !important;
+  border:0 !important;
+  border-radius:17px !important;
+  background:transparent !important;
+  color:#78848D !important;
+  box-shadow:none !important;
+}
+div[class*="st-key-gate4_nav"] button p {
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:.12rem !important;
+  width:100% !important;
+  margin:0 !important;
+  overflow:visible !important;
+  text-overflow:clip !important;
+  white-space:nowrap !important;
+  line-height:1.02 !important;
+  font-size:.66rem !important;
+  font-weight:720 !important;
+  letter-spacing:.005em !important;
+}
+div[class*="st-key-gate4_nav"] button p span {
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  min-width:42px !important;
+  height:25px !important;
+  padding:0 .62rem !important;
+  border-radius:999px !important;
+  font-size:1.22rem !important;
+  line-height:1 !important;
+  transition:background .14s ease,color .14s ease,transform .14s ease;
+}
+div[class*="st-key-gate4_nav"] button[aria-pressed="true"] {
+  background:transparent !important;
+  color:#155E56 !important;
+}
+div[class*="st-key-gate4_nav"] button[aria-pressed="true"] p { font-weight:850 !important; }
+div[class*="st-key-gate4_nav"] button[aria-pressed="true"] p span {
+  background:#DDF3EF !important;
+  color:#0F766E !important;
+}
+div[class*="st-key-gate4_nav"] button:hover { background:#F5F8F8 !important; color:#155E56 !important; }
+div[class*="st-key-gate4_nav"] button:focus-visible { outline:2px solid #58AAA0 !important; outline-offset:1px !important; }
 /* Champion moment: short football flood, non-blocking and reduced-motion safe. */
 .champion-overlay { position:fixed; inset:0; z-index:2000; overflow:hidden; background:rgba(247,249,250,.96); pointer-events:none; animation:champion-hide 3.1s ease forwards; display:flex; align-items:center; justify-content:center; }
 .champion-card { position:relative; z-index:3; text-align:center; padding:1.35rem 1.1rem; background:#FFFFFF; border:1px solid #B9E3DD; border-radius:22px; box-shadow:0 12px 40px rgba(23,32,39,.16); width:min(440px,calc(100vw - 2rem)); }
@@ -193,12 +264,14 @@ div[class*="st-key-gate4_nav"] button p { white-space:nowrap !important; margin:
   .profile-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 480px) {
-  .block-container { padding-top:2.6rem; padding-left:1rem; padding-right:1rem; }
+  .block-container { padding-top:2.15rem; padding-left:.9rem; padding-right:.9rem; padding-bottom:7rem; }
   .hero { padding-top:.65rem; }
   .hero-kicker { line-height:1.5; padding-top:.18rem; }
-  .hero-title { font-size:1.78rem; }
-  div[class*="st-key-gate4_nav"] button { min-height:46px !important; padding:.32rem .18rem !important; }
-  div[class*="st-key-gate4_nav"] button p { font-size:.69rem !important; }
+  .hero-title { font-size:1.64rem; }
+  div[class*="st-key-gate4_nav"] { width:calc(100vw - .7rem) !important; bottom:calc(.35rem + env(safe-area-inset-bottom, 0px)) !important; border-radius:21px; }
+  div[class*="st-key-gate4_nav"] button { min-height:56px !important; }
+  div[class*="st-key-gate4_nav"] button p { font-size:.63rem !important; }
+  div[class*="st-key-gate4_nav"] button p span { min-width:38px !important; height:24px !important; font-size:1.16rem !important; }
 }
 </style>
         """,
