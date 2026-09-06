@@ -30,13 +30,79 @@ def _countdown(target_iso: str, label: str) -> None:
     safe_label = html.escape(label)
     st.components.v1.html(
         f"""
-<div style="font-family:system-ui,-apple-system,sans-serif;background:#fff;border:1px solid #E5EAED;border-radius:16px;padding:12px 14px;color:#172027">
-  <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#0F766E">{safe_label}</div>
-  <div id="tsp-countdown" style="font-size:28px;font-weight:850;letter-spacing:-.03em;margin-top:2px">--:--:--</div>
+<div class="tsp-countdown-card">
+  <div class="tsp-countdown-label">{safe_label}</div>
+  <div class="tsp-countdown-grid" aria-label="Countdown">
+    <div class="tsp-countdown-unit"><div id="tsp-days" class="tsp-countdown-value">--</div><div class="tsp-countdown-unit-label">DAYS</div></div>
+    <div class="tsp-countdown-unit"><div id="tsp-hours" class="tsp-countdown-value">--</div><div class="tsp-countdown-unit-label">HRS</div></div>
+    <div class="tsp-countdown-unit"><div id="tsp-minutes" class="tsp-countdown-value">--</div><div class="tsp-countdown-unit-label">MIN</div></div>
+    <div class="tsp-countdown-unit"><div id="tsp-seconds" class="tsp-countdown-value">--</div><div class="tsp-countdown-unit-label">SEC</div></div>
+  </div>
 </div>
+<style>
+  :root {{ color-scheme: light; }}
+  html, body {{ margin:0; padding:0; background:transparent; }}
+  .tsp-countdown-card {{
+    box-sizing:border-box;
+    width:100%;
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:#fff;
+    border:1px solid #E5EAED;
+    border-radius:18px;
+    padding:13px 14px 14px;
+    color:#172027;
+  }}
+  .tsp-countdown-label {{
+    font-size:12px;
+    line-height:1.25;
+    font-weight:850;
+    text-transform:uppercase;
+    letter-spacing:.09em;
+    color:#0F766E;
+    margin-bottom:9px;
+  }}
+  .tsp-countdown-grid {{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:8px;
+  }}
+  .tsp-countdown-unit {{
+    min-width:0;
+    text-align:center;
+    background:#F7F9FA;
+    border:1px solid #EDF1F3;
+    border-radius:12px;
+    padding:8px 3px 7px;
+  }}
+  .tsp-countdown-value {{
+    font-size:26px;
+    line-height:1;
+    font-weight:900;
+    letter-spacing:-.04em;
+    font-variant-numeric:tabular-nums;
+  }}
+  .tsp-countdown-unit-label {{
+    margin-top:5px;
+    font-size:9px;
+    line-height:1;
+    font-weight:850;
+    letter-spacing:.09em;
+    color:#677680;
+  }}
+  @media (max-width:420px) {{
+    .tsp-countdown-card {{ padding:12px 10px 13px; }}
+    .tsp-countdown-grid {{ gap:6px; }}
+    .tsp-countdown-value {{ font-size:23px; }}
+    .tsp-countdown-unit-label {{ font-size:8px; }}
+  }}
+</style>
 <script>
 const target = new Date("{safe_target}").getTime();
-const el = document.getElementById("tsp-countdown");
+const dayEl = document.getElementById("tsp-days");
+const hourEl = document.getElementById("tsp-hours");
+const minuteEl = document.getElementById("tsp-minutes");
+const secondEl = document.getElementById("tsp-seconds");
+function pad(value) {{ return String(value).padStart(2, "0"); }}
 function tick() {{
   const diff = Math.max(0, target - Date.now());
   const total = Math.floor(diff / 1000);
@@ -44,12 +110,15 @@ function tick() {{
   const h = Math.floor((total % 86400) / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  el.textContent = (d ? d + "d " : "") + String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
+  dayEl.textContent = pad(d);
+  hourEl.textContent = pad(h);
+  minuteEl.textContent = pad(m);
+  secondEl.textContent = pad(s);
 }}
 tick(); setInterval(tick, 1000);
 </script>
         """,
-        height=78,
+        height=116,
     )
 
 
