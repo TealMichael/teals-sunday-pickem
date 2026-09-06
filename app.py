@@ -185,20 +185,21 @@ def render_remember_storage_bridge() -> dict:
         return {"token": "", "ready": True}
 
 
-def _process_pending_storage_command() -> bool:
-    """Finish a queued browser write/delete before exposing clickable UI.
+def _sync_pending_storage_command() -> tuple[bool, str]:
+    """Run a queued browser storage command and report whether it is pending.
 
-    Components-v2 reports its acknowledgement on a rerun. While that command
-    is still pending, stop the page so the hidden component cannot steal the
-    user's first click on Sign In / Sign Out / Commissioner actions.
+    A login ``set`` is allowed to finish in the background while the signed-in
+    home screen renders. This avoids the duplicate/ghost login form caused by
+    stopping between authentication and the storage acknowledgement. A logout
+    ``delete`` is still completed before the login form is shown, so a stale
+    browser token cannot immediately restore the signed-out player.
     """
-    if not st.session_state.get("remember_storage_command"):
-        return True
+    command = st.session_state.get("remember_storage_command") or {}
+    if not command:
+        return False, ""
+    action = str(command.get("action") or "")
     render_remember_storage_bridge()
-    if st.session_state.get("remember_storage_command"):
-        st.caption("Finishing secure sign-in…")
-        st.stop()
-    return True
+    return bool(st.session_state.get("remember_storage_command")), action
 
 
 def _apply_restore_result(result, token: str) -> bool:
@@ -260,15 +261,13 @@ def _restore_remembered_player(storage_state: dict | None = None, *, cookie_toke
     _queue_remember_cookie_delete()
 
 
-def finish_player_auth(result, *, auth_slot=None) -> None:
-    # Clear the submitted auth UI before the browser-storage acknowledgement
-    # rerun. Streamlit otherwise keeps stale form elements visible as ghosts,
-    # which can briefly look like a duplicated sign-in panel.
-    if auth_slot is not None:
-        try:
-            auth_slot.empty()
-        except Exception:
-            pass
+def _apply_player_auth_result(result, *, error_key: str) -> None:
+    """Apply an auth result inside a widget callback before the page reruns."""
+    if not result.ok:
+        st.session_state[error_key] = result.message
+        return
+
+    st.session_state[error_key] = ""
     st.session_state.player = result.player
     st.session_state.remember_restore_checked = True
     if result.cookie_value:
@@ -276,53 +275,82 @@ def finish_player_auth(result, *, auth_slot=None) -> None:
         _queue_remember_cookie_set(result.cookie_value)
     else:
         st.session_state.active_device_token = None
-    st.rerun()
 
 
-def player_login_ui(*, auth_slot=None) -> None:
+def _signin_submit() -> None:
+    result = login_player(
+        store,
+        nickname=str(st.session_state.get("signin_nickname") or ""),
+        pin=str(st.session_state.get("signin_pin") or ""),
+        pin_pepper=secret("PIN_PEPPER"),
+        session_pepper=secret("SESSION_PEPPER"),
+        remember=bool(st.session_state.get("signin_remember", True)),
+    )
+    _apply_player_auth_result(result, error_key="signin_error")
+
+
+def _signup_submit() -> None:
+    result = register_player(
+        store,
+        nickname=str(st.session_state.get("signup_nickname") or ""),
+        emoji=str(st.session_state.get("signup_emoji") or ""),
+        pin=str(st.session_state.get("signup_pin") or ""),
+        pin_confirm=str(st.session_state.get("signup_pin_confirm") or ""),
+        pin_pepper=secret("PIN_PEPPER"),
+        session_pepper=secret("SESSION_PEPPER"),
+        remember=bool(st.session_state.get("signup_remember", True)),
+    )
+    _apply_player_auth_result(result, error_key="signup_error")
+
+
+def _sign_out_submit() -> None:
+    token = st.session_state.get("active_device_token") or _browser_remember_cookie()
+    revoke_cookie_session(store, token)
+    _queue_remember_cookie_delete()
+    # Prevent the initial cookie snapshot from restoring on the sign-out rerun.
+    st.session_state.remember_restore_checked = True
+    st.session_state.player = None
+    st.session_state.active_device_token = None
+
+
+def player_login_ui() -> None:
     tab_signin, tab_new = st.tabs(["Sign In", "New Player"])
     with tab_signin:
         with st.form("signin_form"):
-            nickname = st.text_input("Nickname", max_chars=15, autocomplete="username")
-            pin = st.text_input("4-digit PIN", type="password", max_chars=4, autocomplete="current-password")
-            remember = st.checkbox("Keep me signed in this season", value=True)
-            submitted = st.form_submit_button("Sign In", type="primary", use_container_width=True)
-        if submitted:
-            result = login_player(
-                store,
-                nickname=nickname,
-                pin=pin,
-                pin_pepper=secret("PIN_PEPPER"),
-                session_pepper=secret("SESSION_PEPPER"),
-                remember=remember,
+            st.text_input("Nickname", max_chars=15, autocomplete="username", key="signin_nickname")
+            st.text_input(
+                "4-digit PIN",
+                type="password",
+                max_chars=4,
+                autocomplete="current-password",
+                key="signin_pin",
             )
-            if result.ok:
-                finish_player_auth(result, auth_slot=auth_slot)
-            st.error(result.message)
+            st.checkbox("Keep me signed in this season", value=True, key="signin_remember")
+            st.form_submit_button(
+                "Sign In",
+                type="primary",
+                use_container_width=True,
+                on_click=_signin_submit,
+            )
+        if st.session_state.get("signin_error"):
+            st.error(st.session_state.signin_error)
 
     with tab_new:
         st.caption("One nickname. One emoji. One PIN. That's it.")
         with st.form("signup_form"):
-            nickname = st.text_input("Choose a nickname", max_chars=15)
-            avatar = st.text_input("Choose one emoji", max_chars=8, placeholder="🏈")
-            pin = st.text_input("Create a 4-digit PIN", type="password", max_chars=4)
-            pin2 = st.text_input("Confirm PIN", type="password", max_chars=4)
-            remember = st.checkbox("Keep me signed in this season", value=True, key="signup_remember")
-            submitted = st.form_submit_button("Create Player", type="primary", use_container_width=True)
-        if submitted:
-            result = register_player(
-                store,
-                nickname=nickname,
-                emoji=avatar,
-                pin=pin,
-                pin_confirm=pin2,
-                pin_pepper=secret("PIN_PEPPER"),
-                session_pepper=secret("SESSION_PEPPER"),
-                remember=remember,
+            st.text_input("Choose a nickname", max_chars=15, key="signup_nickname")
+            st.text_input("Choose one emoji", max_chars=8, placeholder="🏈", key="signup_emoji")
+            st.text_input("Create a 4-digit PIN", type="password", max_chars=4, key="signup_pin")
+            st.text_input("Confirm PIN", type="password", max_chars=4, key="signup_pin_confirm")
+            st.checkbox("Keep me signed in this season", value=True, key="signup_remember")
+            st.form_submit_button(
+                "Create Player",
+                type="primary",
+                use_container_width=True,
+                on_click=_signup_submit,
             )
-            if result.ok:
-                finish_player_auth(result, auth_slot=auth_slot)
-            st.error(result.message)
+        if st.session_state.get("signup_error"):
+            st.error(st.session_state.signup_error)
 
 
 def commish_login_ui() -> None:
@@ -344,10 +372,13 @@ def commish_login_ui() -> None:
 # -----------------------------
 # Remembered-login restore
 # -----------------------------
-# A queued set/delete comes from a deliberate user action on the previous run.
-# Finish it FIRST and do not render other clickable UI until the browser has
-# acknowledged it. This removes the double-click behavior seen in Gate 1.
-_process_pending_storage_command()
+# A queued browser command comes from a deliberate auth action. Login writes
+# may finish while the signed-in page renders; logout deletion completes before
+# the login form returns. This keeps one-click behavior without ghosting forms.
+_storage_sync_pending, _storage_sync_action = _sync_pending_storage_command()
+if _storage_sync_pending and _storage_sync_action == "delete":
+    st.caption("Signing out…")
+    st.stop()
 
 _storage_state = {"token": "", "ready": True}
 if not st.session_state.player and not st.session_state.remember_restore_checked:
@@ -382,21 +413,16 @@ if st.session_state.commish:
 
 if st.session_state.player:
     foundation_home(st.session_state.player)
-    if st.button("Sign Out", use_container_width=True):
-        token = st.session_state.get("active_device_token") or _browser_remember_cookie()
-        revoke_cookie_session(store, token)
-        _queue_remember_cookie_delete()
-        # Prevent the still-visible initial cookie snapshot from restoring on
-        # the immediate sign-out rerun.
-        st.session_state.remember_restore_checked = True
-        st.session_state.player = None
-        st.session_state.active_device_token = None
-        st.rerun()
+    st.button(
+        "Sign Out",
+        type="secondary",
+        use_container_width=True,
+        disabled=bool(_storage_sync_pending and _storage_sync_action == "set"),
+        on_click=_sign_out_submit,
+    )
     st.stop()
 
-_auth_slot = st.empty()
-with _auth_slot.container():
-    player_login_ui(auth_slot=_auth_slot)
+player_login_ui()
 st.markdown("---")
 with st.expander("Commissioner"):
     commish_login_ui()
