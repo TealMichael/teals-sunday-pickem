@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta
 
 import extra_streamlit_components as stx
@@ -28,9 +29,22 @@ def get_store(url: str, service_key: str) -> SupabaseStore:
     return SupabaseStore(url, service_key)
 
 
-def get_cookie_manager():
-    # CookieManager is a Streamlit component/widget. Do not cache it.
-    return stx.CookieManager(key="tsp_cookie_manager")
+def get_cookie_writer():
+    # The third-party component is used only for browser writes/deletes.
+    # Fresh-request reads use Streamlit's native st.context.cookies below.
+    return stx.CookieManager(key="tsp_cookie_writer")
+
+
+def request_cookie_value() -> str | None:
+    """Read the remembered token from the browser's initial HTTP request."""
+    try:
+        value = st.context.cookies[COOKIE_NAME]
+        return str(value) if value else None
+    except (KeyError, TypeError, AttributeError):
+        return None
+    except Exception:
+        # A context-read failure is transient and must never crash sign-in.
+        return None
 
 
 def supabase_server_key() -> str:
@@ -51,7 +65,7 @@ if missing:
     st.stop()
 
 store = get_store(secret("SUPABASE_URL"), supabase_server_key())
-cookies = get_cookie_manager()
+cookie_writer = get_cookie_writer()
 
 # Rendered shell already exists above. Remembered-login work happens only afterward.
 if "player" not in st.session_state:
@@ -60,29 +74,32 @@ if "commish" not in st.session_state:
     st.session_state.commish = False
 if "remember_restore_attempted" not in st.session_state:
     st.session_state.remember_restore_attempted = False
+if "active_cookie_value" not in st.session_state:
+    st.session_state.active_cookie_value = None
 
-cookie_value = None
-try:
-    cookie_value = cookies.get(COOKIE_NAME)
-except Exception:
-    cookie_value = None
+# On a brand-new browser visit, st.context.cookies is available from the initial
+# request and avoids the asynchronous first-render race in CookieManager.get().
+request_cookie = request_cookie_value()
+cookie_value = st.session_state.active_cookie_value or request_cookie
 
 if not st.session_state.player and cookie_value and not st.session_state.remember_restore_attempted:
     st.session_state.remember_restore_attempted = True
     result = restore_from_cookie(store, cookie_value, session_pepper=secret("SESSION_PEPPER"))
     if result.ok:
         st.session_state.player = result.player
+        st.session_state.active_cookie_value = cookie_value
         st.rerun()
     elif result.message != "TEMPORARY_SESSION_CHECK_FAILURE":
+        st.session_state.active_cookie_value = None
         try:
-            cookies.delete(COOKIE_NAME, key="delete_tsp_cookie")
+            cookie_writer.delete(COOKIE_NAME, key="delete_tsp_cookie")
         except Exception:
             pass
 
 
 def set_remember_cookie(value: str) -> None:
     expires = datetime.now() + timedelta(days=REMEMBER_DAYS)
-    cookies.set(
+    cookie_writer.set(
         COOKIE_NAME,
         value,
         expires_at=expires,
@@ -90,6 +107,20 @@ def set_remember_cookie(value: str) -> None:
         same_site="lax",
         key="set_tsp_cookie",
     )
+    # Keep the exact opaque token server-side for this Streamlit session too.
+    st.session_state.active_cookie_value = value
+
+
+def finish_player_auth(result) -> None:
+    """Commit login state and give a remembered-cookie write time to reach the browser."""
+    st.session_state.player = result.player
+    st.session_state.remember_restore_attempted = True
+    if result.cookie_value:
+        set_remember_cookie(result.cookie_value)
+        # CookieManager is an asynchronous custom component. A short one-time
+        # delay prevents an immediate rerun from racing/cancelling the browser write.
+        time.sleep(0.75)
+    st.rerun()
 
 
 def player_login_ui() -> None:
@@ -110,10 +141,7 @@ def player_login_ui() -> None:
                 remember=remember,
             )
             if result.ok:
-                st.session_state.player = result.player
-                if result.cookie_value:
-                    set_remember_cookie(result.cookie_value)
-                st.rerun()
+                finish_player_auth(result)
             st.error(result.message)
 
     with tab_new:
@@ -137,10 +165,7 @@ def player_login_ui() -> None:
                 remember=remember,
             )
             if result.ok:
-                st.session_state.player = result.player
-                if result.cookie_value:
-                    set_remember_cookie(result.cookie_value)
-                st.rerun()
+                finish_player_auth(result)
             st.error(result.message)
 
 
@@ -178,9 +203,11 @@ if st.session_state.player:
     if st.button("Sign Out", use_container_width=True):
         revoke_cookie_session(store, cookie_value)
         st.session_state.player = None
+        st.session_state.active_cookie_value = None
         st.session_state.remember_restore_attempted = True
         try:
-            cookies.delete(COOKIE_NAME, key="delete_tsp_cookie_signout")
+            cookie_writer.delete(COOKIE_NAME, key="delete_tsp_cookie_signout")
+            time.sleep(0.35)
         except Exception:
             pass
         st.rerun()
