@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import importlib
+import inspect
 
 import streamlit as st
 
@@ -15,7 +17,17 @@ from config import (
 from security import safe_secret_match
 from store import SupabaseStore
 from ui import hero, inject_css, page_config
-from weekly_ui import render_player_game
+import weekly_ui as _weekly_ui
+from gate4_ui import render_gate4_demo
+
+# Streamlit Cloud can rerun app.py while a previously imported helper module
+# is still resident in the Python process. If that older module predates Gate 4
+# and lacks the sign-out callback parameter, reload it from the just-deployed
+# file before binding the function. This is a deployment-safety guard, not a
+# normal per-rerun reload.
+if "on_sign_out" not in inspect.signature(_weekly_ui.render_player_game).parameters:
+    _weekly_ui = importlib.reload(_weekly_ui)
+render_player_game = _weekly_ui.render_player_game
 
 page_config()
 inject_css()
@@ -404,6 +416,13 @@ if not st.session_state.player and not st.session_state.remember_restore_checked
 
 
 if st.session_state.commish:
+    # Gate 4 demo is a Commissioner diagnostic. It should never require a
+    # separate player login or leave admin mode. Use a synthetic demo identity
+    # and keep every demo interaction isolated from the real player session.
+    if st.session_state.get("gate4_demo"):
+        render_gate4_demo()
+        st.stop()
+
     st.markdown("### Commissioner • Gate 4")
     st.success("Admin authentication is working. Gate 3 diagnostics remain available, and the Gate 4 live-Sunday demo is connected. Full Commissioner controls remain Gate 5.")
 
@@ -449,8 +468,13 @@ if st.session_state.commish:
     st.caption("Gate 3.5 provider replay runs in GitHub Actions — the same environment that will perform Sunday scoring.")
     if st.button("Preview Gate 4 Live Sunday Demo", type="secondary", use_container_width=True):
         st.session_state.gate4_demo = True
+        st.session_state.gate4_demo_phase = "live"
         st.session_state.gate4_tab = "🏈 Sunday"
-        st.session_state.commish = False
+        # Clear any old widget-backed navigation state before the demo mounts.
+        st.session_state.pop("gate4_nav", None)
+        st.session_state.pop("gate4_nav_fallback", None)
+        st.session_state.pop("gate4_detail_player_id", None)
+        # Stay in Commissioner mode; the demo is an admin-only diagnostic.
         st.rerun()
 
     replay_col1, replay_col2 = st.columns(2)

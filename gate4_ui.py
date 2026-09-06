@@ -33,16 +33,28 @@ def render_nav() -> str:
     default = st.session_state.get("gate4_tab") or options[0]
     if default not in options:
         default = options[0]
+
+    # A widget key can survive while the surrounding app mode changes. Normalize
+    # stale state before mounting the Gate 4 navigator so Streamlit never has to
+    # reconcile a value of the wrong shape/type.
+    existing = st.session_state.get("gate4_nav")
+    if existing is not None and existing not in options:
+        st.session_state.pop("gate4_nav", None)
+        existing = None
+
     segmented = getattr(st, "segmented_control", None)
     if segmented:
         selected = segmented(
             "Navigation",
             options,
-            default=default,
+            default=None if existing in options else default,
             key="gate4_nav",
             label_visibility="collapsed",
         )
     else:
+        fallback = st.session_state.get("gate4_nav_fallback")
+        if fallback is not None and fallback not in options:
+            st.session_state.pop("gate4_nav_fallback", None)
         selected = st.radio(
             "Navigation",
             options,
@@ -376,7 +388,7 @@ def _demo_bundle() -> dict[str, Any]:
     return {"players": players, "lineups": lineups, "picks": picks, "pool": pool, "games": []}
 
 
-def render_gate4_demo(current_player: dict[str, Any]) -> None:
+def render_gate4_demo(current_player: dict[str, Any] | None = None) -> None:
     st.markdown('<div class="status-test"><strong>Gate 4 Demo Mode</strong><br>Synthetic lineups and scores only. Nothing here touches Week 1.</div>', unsafe_allow_html=True)
     top1, top2, top3 = st.columns(3)
     with top1:
@@ -391,14 +403,24 @@ def render_gate4_demo(current_player: dict[str, Any]) -> None:
     with top3:
         if st.button("Exit Demo", use_container_width=True):
             st.session_state.gate4_demo = False
+            st.session_state.gate4_demo_phase = "live"
             st.session_state.gate4_tab = "🏈 Sunday"
+            st.session_state.pop("gate4_nav", None)
+            st.session_state.pop("gate4_nav_fallback", None)
+            st.session_state.pop("gate4_detail_player_id", None)
+            # Commissioner remains authenticated; exit returns to the admin hub.
             st.rerun()
 
     phase = st.session_state.get("gate4_demo_phase") or "live"
     bundle = _demo_bundle()
     leaderboard = build_weekly_leaderboard(bundle)
     demo_player_id = "demo-b"
-    demo_player = {"id": demo_player_id, "nickname": current_player.get("nickname","Mike T."), "emoji": current_player.get("emoji","🤘")}
+    current_player = current_player if isinstance(current_player, dict) else {}
+    demo_player = {
+        "id": demo_player_id,
+        "nickname": current_player.get("nickname") or "Mike T.",
+        "emoji": current_player.get("emoji") or "🤘",
+    }
 
     if phase == "final" and not st.session_state.get("gate4_demo_final_seen"):
         st.session_state.gate4_demo_final_seen = True
