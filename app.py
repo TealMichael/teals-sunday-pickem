@@ -28,13 +28,21 @@ def get_store(url: str, service_key: str) -> SupabaseStore:
     return SupabaseStore(url, service_key)
 
 
-@st.cache_resource
 def get_cookie_manager():
+    # CookieManager is a Streamlit component/widget. Do not cache it.
     return stx.CookieManager(key="tsp_cookie_manager")
 
 
-required = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "PIN_PEPPER", "SESSION_PEPPER", "COMMISH_USERNAME", "COMMISH_PIN"]
+def supabase_server_key() -> str:
+    # Match the current secret name used by the Yahtzee app while keeping
+    # backward compatibility with the original Gate 1 deployment name.
+    return secret("SUPABASE_SECRET_KEY") or secret("SUPABASE_SERVICE_ROLE_KEY")
+
+
+required = ["SUPABASE_URL", "PIN_PEPPER", "SESSION_PEPPER", "COMMISH_USERNAME", "COMMISH_PIN"]
 missing = [name for name in required if not secret(name)]
+if not supabase_server_key():
+    missing.append("SUPABASE_SECRET_KEY")
 if missing:
     st.error("App setup is incomplete. Add the required secrets before using Gate 1.")
     with st.expander("Setup details"):
@@ -42,7 +50,7 @@ if missing:
         st.write("Use `.streamlit/secrets.toml.example` as the template. Never commit the real secrets file.")
     st.stop()
 
-store = get_store(secret("SUPABASE_URL"), secret("SUPABASE_SERVICE_ROLE_KEY"))
+store = get_store(secret("SUPABASE_URL"), supabase_server_key())
 cookies = get_cookie_manager()
 
 # Rendered shell already exists above. Remembered-login work happens only afterward.
