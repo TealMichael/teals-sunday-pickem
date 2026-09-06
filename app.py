@@ -435,6 +435,17 @@ if st.session_state.commish:
             st.session_state.commish = False
             st.rerun()
 
+    if st.button("Run Gate 3 Scoring Test", type="primary", use_container_width=True):
+        try:
+            from scoring_diagnostic import run_scoring_diagnostic
+            with st.spinner("Testing scoring math, Supabase persistence, Week 1 isolation, and cleanup…"):
+                scoring_diag = run_scoring_diagnostic(store)
+            st.session_state.gate3_scoring_diag = scoring_diag
+            st.toast("Gate 3 scoring test passed.")
+        except Exception as exc:
+            st.session_state.gate3_scoring_diag = None
+            st.error(f"Gate 3 scoring test failed: {exc}")
+
     diag = st.session_state.get("gate3_diag")
     if diag:
         st.markdown("#### NFL data check")
@@ -444,6 +455,32 @@ if st.session_state.commish:
         for position in ("QB", "RB", "WR", "TE", "K"):
             names = preview.get(position) or []
             st.markdown(f"**{position}:** " + " • ".join(names))
+
+    scoring_diag = st.session_state.get("gate3_scoring_diag")
+    if scoring_diag:
+        st.markdown("#### Scoring pipeline check")
+        st.success("Gate 3 scoring passed end-to-end. Controlled demo scores were written, read back, and fully cleaned up.")
+        check1, check2, check3, check4 = st.columns(4)
+        with check1:
+            st.metric("Scoring math", "PASS")
+        with check2:
+            st.metric("Supabase round trip", "PASS")
+        with check3:
+            st.metric("Week 1 untouched", "PASS")
+        with check4:
+            st.metric("Test cleanup", "PASS")
+        st.caption("This test uses hidden players in the isolated Gate 2 Test Week. It restores their prior score/stat state before finishing.")
+        display_rows = []
+        for row in scoring_diag.get("rows") or []:
+            display_rows.append({
+                "Pos": row.get("position"),
+                "Controlled test": row.get("scenario"),
+                "Expected": f"{float(row.get('expected') or 0):.2f}",
+                "Calculated": f"{float(row.get('calculated') or 0):.2f}",
+                "Stored": f"{float(row.get('stored_pool') or 0):.2f}",
+                "Result": "PASS" if row.get("math_pass") and row.get("database_pass") else "FAIL",
+            })
+        st.dataframe(display_rows, use_container_width=True, hide_index=True)
     st.stop()
 
 if st.session_state.player:

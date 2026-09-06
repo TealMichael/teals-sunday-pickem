@@ -1,12 +1,12 @@
-v0.3.0 — Gate 3 NFL Data
+v0.3.3 — Gate 3 Scoring Diagnostic
 
-Adds the real NFL data pipeline: eligible Sunday schedule, Week 1 consensus pool generation, Week 2+ in-house rankings, injury/status refreshes, schedule-change handling, 30-minute live scoring snapshots, flat 3-point FG scoring, Monday nflverse reconciliation, and a $0 GitHub Actions scheduler.
+Adds the Commissioner-only end-to-end scoring acceptance test. The diagnostic uses hidden Gate 2 Test Week players, verifies all Pick'em scoring rules, round-trips controlled scores through Supabase, confirms Week 1 remains untouched, and restores the demo state after the test.
 
 Commit message:
-v0.3.0 — Gate 3 NFL Data
+v0.3.3 — Gate 3 Scoring Diagnostic
 
 Commit changes:
-Adds automated NFL schedule/player/injury/scoring data, Week 1 Top-10 pool generation, 30-minute Sunday refreshes, Monday reconciliation, and the free scheduled backend workflow.
+Adds the isolated Commissioner scoring test for scoring math, Supabase persistence, Week 1 isolation, and automatic cleanup.
 
 Tag:
-v0.3.0
+v0.3.3

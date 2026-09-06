@@ -711,6 +711,81 @@ class SupabaseStore:
         self.clear_week_cache(str(week["id"]))
         return list(res.data or [])
 
+    def get_player_week_stats(self, week_id: str, pool_player_ids: list[str] | None = None) -> list[dict[str, Any]]:
+        query = (
+            self._table("player_week_stats")
+            .select("id,week_id,pool_player_id,source,source_player_id,raw_stats,points,breakdown,game_status,updated_at")
+            .eq("week_id", str(week_id))
+        )
+        if pool_player_ids:
+            query = query.in_("pool_player_id", [str(value) for value in pool_player_ids])
+        return list(query.execute().data or [])
+
+    def get_pool_score_state(self, pool_player_ids: list[str]) -> list[dict[str, Any]]:
+        if not pool_player_ids:
+            return []
+        return list(
+            self._table("player_pool")
+            .select("id,score_total,score_status,score_breakdown,game_status,score_updated_at,espn_player_id,provider_updated_at")
+            .in_("id", [str(value) for value in pool_player_ids])
+            .execute()
+            .data
+            or []
+        )
+
+    def restore_pool_score_state(self, rows: list[dict[str, Any]]) -> None:
+        for row in rows:
+            pool_id = str(row.get("id") or "")
+            if not pool_id:
+                continue
+            payload = {
+                key: row.get(key)
+                for key in (
+                    "score_total",
+                    "score_status",
+                    "score_breakdown",
+                    "game_status",
+                    "score_updated_at",
+                    "espn_player_id",
+                    "provider_updated_at",
+                )
+            }
+            self._table("player_pool").update(payload).eq("id", pool_id).execute()
+        self.clear_week_cache()
+
+    def restore_player_week_stats(
+        self,
+        week_id: str,
+        tested_pool_player_ids: list[str],
+        original_rows: list[dict[str, Any]],
+    ) -> None:
+        ids = [str(value) for value in tested_pool_player_ids if value]
+        if ids:
+            self._table("player_week_stats").delete().eq("week_id", str(week_id)).in_("pool_player_id", ids).execute()
+        if original_rows:
+            self._table("player_week_stats").upsert(original_rows, on_conflict="week_id,pool_player_id").execute()
+
+    def scoring_fingerprint(self, week_id: str) -> dict[str, Any]:
+        pool = list(
+            self._table("player_pool")
+            .select("id,score_total,score_status,score_breakdown,game_status,score_updated_at,manual_score_override,manual_override_at")
+            .eq("week_id", str(week_id))
+            .order("id")
+            .execute()
+            .data
+            or []
+        )
+        stats = list(
+            self._table("player_week_stats")
+            .select("id,week_id,pool_player_id,source,source_player_id,raw_stats,points,breakdown,game_status,updated_at")
+            .eq("week_id", str(week_id))
+            .order("pool_player_id")
+            .execute()
+            .data
+            or []
+        )
+        return {"pool": pool, "stats": stats}
+
     def start_data_run(self, run_type: str, *, week_id: str | None = None, provider: str | None = None, metadata: dict | None = None) -> str:
         res = self._table("data_runs").insert({
             "week_id": str(week_id) if week_id else None,
