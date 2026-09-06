@@ -1,3 +1,12 @@
-v0.2.8 — Gate 2 Native Player Card Tap Fix
+v0.3.0 — Gate 3 NFL Data
 
-Replaces the fragile player-card click overlay with a native full-card Streamlit button so the entire visible card is clickable on desktop and mobile, while preserving Gate 2 performance improvements and inline injury status.
+Adds the real NFL data pipeline: eligible Sunday schedule, Week 1 consensus pool generation, Week 2+ in-house rankings, injury/status refreshes, schedule-change handling, 30-minute live scoring snapshots, flat 3-point FG scoring, Monday nflverse reconciliation, and a $0 GitHub Actions scheduler.
+
+Commit message:
+v0.3.0 — Gate 3 NFL Data
+
+Commit changes:
+Adds automated NFL schedule/player/injury/scoring data, Week 1 Top-10 pool generation, 30-minute Sunday refreshes, Monday reconciliation, and the free scheduled backend workflow.
+
+Tag:
+v0.3.0

@@ -1,27 +1,44 @@
-TEAL'S SUNDAY PICK'EM — v0.2.0 GATE 2 INSTALL
+TEAL'S SUNDAY PICK'EM — v0.3.0 GATE 3 INSTALL
 
-1. Keep the existing Supabase project and existing `pickem` exposed schema.
+A. SUPABASE MIGRATION
+1. Keep the existing Yahtzee Supabase project and existing `pickem` exposed schema.
 2. In Supabase SQL Editor, create a new query and run ALL of:
-   db/002_gate2_weekly_game.sql
-3. In Data API Settings > Exposed tables, make sure the new Pick'em tables are enabled:
-   pickem.weeks
-   pickem.player_pool
-   pickem.lineups
-   pickem.lineup_picks
-   (Keep the existing Gate 1 Pick'em tables enabled.)
-4. Upload/replace the v0.2.0 files in the existing GitHub repo.
-5. Streamlit should redeploy automatically. No new Secrets are required.
-6. Sign in as your normal player. Complete the one-time How to Play cards.
-7. Before Tuesday, use "Preview Gate 2 Test Week" to acceptance-test the full lineup builder. Test picks there never count toward Week 1.
+   db/003_gate3_nfl_data.sql
+3. Supabase may warn that the query changes database objects. This migration adds Gate 3 columns/tables and does not drop Yahtzee or Gate 1/2 data.
+4. Go to Integrations -> Data API -> Settings -> Exposed tables.
+5. Enable these NEW Pick'em tables only:
+   pickem.nfl_games
+   pickem.nfl_players
+   pickem.player_week_stats
+   pickem.data_runs
+   Keep the existing Pick'em tables enabled. Leave Yahtzee table settings unchanged.
 
-GATE 2 ACCEPTANCE TEST
-- Onboarding appears once, then stays complete.
-- Real Week 1 shows Tuesday-noon countdown before opening.
-- Test Week opens with five shuffled choices for each QB/RB/WR/TE/K.
-- Back does not reshuffle cards in the same session.
-- One tap autosaves and advances.
-- Selecting Demo RB Charlie or Demo TE Charlie triggers emergency-backup choice.
-- Review My Five shows all five and Change controls.
-- SAVE MY LINEUP confirms that edits remain allowed until Sunday at 1 PM ET.
-- Closing/reopening preserves saved picks from Supabase.
-- Gate 1 remembered login still works.
+B. GITHUB UPDATE
+6. Upload/replace the v0.3.0 GitHub Update files in the existing teals-sunday-pickem repo.
+7. requirements.txt changes, so allow Streamlit to do a full dependency rebuild.
+
+C. GITHUB ACTIONS SECRETS — NEW FOR GATE 3
+8. In GitHub repo -> Settings -> Secrets and variables -> Actions, create two Repository secrets:
+   SUPABASE_URL
+   SUPABASE_SECRET_KEY
+   Use the SAME values already used by this Pick'em Streamlit app / Yahtzee Supabase project.
+   Do NOT add PIN_PEPPER, SESSION_PEPPER, or Commissioner credentials to GitHub Actions; the NFL job does not need them.
+9. The new workflow should appear under Actions as: Pickem NFL Refresh.
+
+D. REAL PROVIDER ACCEPTANCE TEST
+10. Open the deployed Pick'em app and enter Commissioner mode.
+11. Click Run Gate 3 Data Check.
+12. Expected before Week 1:
+    - Eligible Sunday games: 13
+    - QB / RB / WR / TE / K ranking counts: 10 each
+    - Five player names shown as the preview at each position
+    - No Week 1 early publication
+13. In GitHub -> Actions -> Pickem NFL Refresh -> Run workflow, choose `diagnostic` once. This proves the scheduled runner can read the two GitHub secrets and reach the data providers/Supabase.
+14. Do NOT force-publish Week 1 before Tuesday noon. The normal `auto` workflow publishes automatically once Week 1 opens.
+
+E. TUESDAY ACCEPTANCE
+15. At/after Tuesday 12:00 PM ET, confirm the automatic workflow has published the pool.
+16. The normal player app should immediately show five real choices at each QB/RB/WR/TE/K instead of the prepared-pool message.
+17. Verify the same Gate 2 lineup/edit/Questionable backup flow with real players.
+
+No new Streamlit Secrets are required for Gate 3.

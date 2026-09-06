@@ -34,6 +34,14 @@ required = [
     ROOT / "weekly_ui.py",
     ROOT / "db/001_gate1_foundation.sql",
     ROOT / "db/002_gate2_weekly_game.sql",
+    ROOT / "db/003_gate3_nfl_data.sql",
+    ROOT / "nfl_scoring.py",
+    ROOT / "nfl_sources.py",
+    ROOT / "nfl_rankings.py",
+    ROOT / "nfl_sync.py",
+    ROOT / "scripts/nfl_refresh.py",
+    ROOT / ".github/workflows/nfl-refresh.yml",
+    ROOT / "requirements-backend.txt",
 ]
 missing = [str(p.relative_to(ROOT)) for p in required if not p.exists()]
 

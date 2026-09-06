@@ -43,3 +43,26 @@ def test_questionable_starter_requires_backup():
     assert required_backup_positions(picks, pool) == ["RB"]
     assert first_incomplete_position(picks, pool) == "RB"
     assert lineup_progress(picks) == (2, 5)
+
+
+def test_questionable_starter_with_out_backup_still_needs_attention():
+    pool = {
+        "q": {"id":"q","position":"TE","availability_status":"QUESTIONABLE"},
+        "b": {"id":"b","position":"TE","availability_status":"OUT"},
+    }
+    picks = [{"position":"TE","pool_player_id":"q","emergency_pool_player_id":"b"}]
+    assert required_backup_positions(picks, pool) == ["TE"]
+
+
+def test_out_starter_is_treated_as_incomplete_for_editing():
+    from weekly import unavailable_starter_positions
+    pool = {
+        "q": {"id":"q","position":"QB","availability_status":"HEALTHY"},
+        "x": {"id":"x","position":"RB","availability_status":"OUT"},
+    }
+    picks = [
+        {"position":"QB","pool_player_id":"q","emergency_pool_player_id":None},
+        {"position":"RB","pool_player_id":"x","emergency_pool_player_id":None},
+    ]
+    assert unavailable_starter_positions(picks, pool) == ["RB"]
+    assert first_incomplete_position(picks, pool) == "RB"

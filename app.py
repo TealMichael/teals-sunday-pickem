@@ -404,16 +404,46 @@ if not st.session_state.player and not st.session_state.remember_restore_checked
 
 
 if st.session_state.commish:
-    st.markdown("### Commissioner • Gate 2")
-    st.success("Admin authentication is working. Weekly-game tables are installed; full Commissioner tools remain Gate 5.")
-    col1, col2 = st.columns(2)
+    st.markdown("### Commissioner • Gate 3")
+    st.success("Admin authentication is working. NFL data diagnostics are now connected; full Commissioner controls remain Gate 5.")
+
+    current_week = store.get_real_week()
+    if current_week:
+        data_week = store.get_week_by_season_week(int(current_week["season"]), int(current_week["nfl_week"])) or current_week
+        st.caption(
+            f"{data_week.get('label', 'Current week')} • NFL data: {data_week.get('data_status', 'WAITING')}"
+            + (f" • {data_week.get('data_message')}" if data_week.get('data_message') else "")
+        )
+
+    col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("Check database", use_container_width=True):
             st.toast("Database connected." if store.healthcheck() else "Database check failed.")
     with col2:
+        if st.button("Run Gate 3 Data Check", use_container_width=True):
+            try:
+                from nfl_sync import gate3_diagnostic
+                with st.spinner("Checking schedule, players, injuries, and Week 1 ranking…"):
+                    diag = gate3_diagnostic(store)
+                st.session_state.gate3_diag = diag
+                st.toast("Gate 3 data check passed.")
+            except Exception as exc:
+                st.session_state.gate3_diag = None
+                st.error(f"Gate 3 data check failed: {exc}")
+    with col3:
         if st.button("Exit Commissioner", use_container_width=True):
             st.session_state.commish = False
             st.rerun()
+
+    diag = st.session_state.get("gate3_diag")
+    if diag:
+        st.markdown("#### NFL data check")
+        st.metric("Eligible Sunday games", int(diag.get("eligible_games") or 0))
+        st.caption("Ranking preview only — this button does not publish Week 1 early.")
+        preview = diag.get("visible_preview") or {}
+        for position in ("QB", "RB", "WR", "TE", "K"):
+            names = preview.get(position) or []
+            st.markdown(f"**{position}:** " + " • ".join(names))
     st.stop()
 
 if st.session_state.player:

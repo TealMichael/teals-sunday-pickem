@@ -19,6 +19,7 @@ from weekly import (
     position_pool,
     previous_position,
     required_backup_positions,
+    unavailable_starter_positions,
     safe_status,
     week_phase,
 )
@@ -446,6 +447,7 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
     lineup, picks, pool, pool_by_id = _load_lineup(store, week, player, pool)
     chosen, total = lineup_progress(picks)
     needs = required_backup_positions(picks, pool_by_id)
+    unavailable = unavailable_starter_positions(picks, pool_by_id)
 
     st.markdown("### Review My Five")
     st.markdown(f'<div class="card">{_summary_rows(picks, pool_by_id)}</div>', unsafe_allow_html=True)
@@ -468,8 +470,16 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
             st.session_state.builder_mode = "pick"
             st.rerun()
         return
+    if unavailable:
+        st.warning("Replace the OUT player at: " + ", ".join(unavailable))
+        if st.button("Replace OUT player", type="primary", use_container_width=True):
+            st.session_state.builder_return_mode = "review"
+            st.session_state.builder_position = unavailable[0]
+            st.session_state.builder_mode = "pick"
+            st.rerun()
+        return
     if needs:
-        st.warning("Choose an emergency backup for: " + ", ".join(needs))
+        st.warning("Choose a healthy emergency backup for: " + ", ".join(needs))
         if st.button("Fix injury backup", type="primary", use_container_width=True):
             st.session_state.builder_return_mode = "review"
             st.session_state.builder_position = needs[0]
@@ -498,6 +508,7 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
     lineup, picks, pool, pool_by_id = _load_lineup(store, week, player, pool)
     chosen, total = lineup_progress(picks)
     needs = required_backup_positions(picks, pool_by_id)
+    unavailable = unavailable_starter_positions(picks, pool_by_id)
 
     if st.session_state.pop("lineup_saved_flash", False):
         if bool(week.get("is_demo")):
@@ -505,10 +516,12 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
         else:
             st.success("Lineup saved. You can make changes until Sunday at 1:00 PM ET.")
 
-    if needs:
-        st.markdown(f'<div class="status-warn"><strong>⚠️ {len(needs)} player needs attention.</strong><br>Add an emergency backup before Sunday.</div>', unsafe_allow_html=True)
+    if unavailable:
+        st.markdown(f'<div class="status-warn"><strong>🚫 {len(unavailable)} starter is OUT.</strong><br>Choose a replacement before the 1:00 PM ET lock.</div>', unsafe_allow_html=True)
+    elif needs:
+        st.markdown(f'<div class="status-warn"><strong>⚠️ {len(needs)} player needs attention.</strong><br>Add a healthy emergency backup before Sunday.</div>', unsafe_allow_html=True)
 
-    if chosen == total and not needs:
+    if chosen == total and not needs and not unavailable:
         st.markdown("### ✅ YOUR FIVE ARE READY")
         st.markdown(f'<div class="card">{_summary_rows(picks, pool_by_id)}</div>', unsafe_allow_html=True)
         if bool(week.get("is_demo")):
@@ -529,14 +542,14 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
             st.markdown('<div class="status-test"><strong>TEST WEEK • LOCK OPEN</strong><br>Build and edit freely while testing.</div>', unsafe_allow_html=True)
         else:
             _countdown(str(week["locks_at"]), "Picks lock in")
-        label = "Fix Injury Backup" if needs else ("Continue Building" if chosen else "Build My Five")
+        label = "Replace OUT Player" if unavailable else ("Fix Injury Backup" if needs else ("Continue Building" if chosen else "Build My Five"))
         if st.button(label, type="primary", use_container_width=True):
-            if needs:
+            if needs or unavailable:
                 st.session_state.builder_return_mode = "home"
             else:
                 st.session_state.pop("builder_return_mode", None)
-            st.session_state.builder_position = (needs[0] if needs else first_incomplete_position(picks, pool_by_id)) or POSITIONS[0]
-            st.session_state.builder_mode = "backup" if needs else "pick"
+            st.session_state.builder_position = (unavailable[0] if unavailable else (needs[0] if needs else first_incomplete_position(picks, pool_by_id))) or POSITIONS[0]
+            st.session_state.builder_mode = "backup" if needs and not unavailable else "pick"
             st.rerun()
 
 

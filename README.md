@@ -1,12 +1,20 @@
 # Teal's Sunday Pick'em
 
-**Build:** v0.2.0 — Gate 2 Weekly Game
+**Build:** v0.3.0 — Gate 3 NFL Data
 
 A small friends-only Sunday fantasy football pick'em built with Streamlit + Supabase.
 
-## Gate 2 status
-Gate 1 authentication remains protected and Gate 2 adds the complete lineup-building loop: Tuesday open, QB/RB/WR/TE/K choices, autosave, stable shuffle, Questionable-player emergency backups, review/save, countdown, and the Sunday 1 PM ET lock.
+## Gate status
 
-The included Gate 2 Test Week is intentionally isolated from real Week 1 so the weekly flow can be tested before Gate 3 connects real NFL schedules/player data.
+- **Gate 1 — Foundation:** GREEN. Secure nickname/PIN accounts, season-long remembered login, second-device login, Commissioner auth.
+- **Gate 2 — Weekly Game:** GREEN. Tuesday open, QB/RB/WR/TE/K lineup builder, autosave, stable shuffle, Questionable emergency backups, review/edit/save, Sunday 1 PM ET lock, and performance pass.
+- **Gate 3 — NFL Data:** BUILT / awaiting deployed provider acceptance. Real NFL schedule, Week 1 pool generation, Week 2+ ranking algorithm, injuries, live scoring ingestion, Monday reconciliation, and scheduled backend refresh.
 
-See `DEPLOYMENT_STEPS.txt` and `GATE2_BUILD_NOTES.md`.
+## Gate 3 source strategy
+
+- Sleeper: free noncommercial player/injury metadata.
+- ESPN site data: replaceable convenience adapter for schedule/live game summaries.
+- nflverse: weekly/final player stats and Week 2+ historical inputs.
+- No paid fantasy API is required for production.
+
+See `DEPLOYMENT_STEPS.txt`, `GATE3_BUILD_NOTES.md`, and `GATE3_TEST_REPORT.txt`.

@@ -1,0 +1,29 @@
+TEAL'S SUNDAY PICK'EM — v0.3.0 GATE 3 TEST REPORT
+
+Automated suite: 67 / 67 PASS
+Release guard: PASS
+Python compilation: PASS
+
+Coverage includes:
+- Gate 1 auth/remembered-login regression tests
+- Gate 2 weekly-game/performance regression tests
+- Sunday 1:00 PM ET-or-later eligibility
+- Thursday/Monday/early-Sunday exclusion
+- ESPN schedule normalization
+- ESPN multi-category player stat parsing
+- Sleeper injury normalization
+- Week 1 10-deep ranking / 5-visible contract
+- Implied-offense kicker ordering
+- Exact half-PPR scoring
+- Flat 3-point field-goal scoring regardless of distance
+- Missed kick = 0
+- Non-standard/trick-play stats
+- nflverse split fumbles / special-teams TD handling
+- Injury refresh cadence
+- GitHub Actions 30-minute scheduler contract
+- Server-only Gate 3 tables / custom-schema isolation
+- Replaceable provider boundary / no paid API dependency
+- OUT-starter and OUT-emergency-backup attention logic
+
+Environment limitation:
+This build environment cannot make outbound API requests directly, so the real-provider acceptance check must be run after deployment using Commissioner -> Run Gate 3 Data Check. That diagnostic reads the current ESPN/Sleeper data, resolves the real Week 1 10-deep pool, and DOES NOT publish Week 1 early.

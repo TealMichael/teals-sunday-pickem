@@ -88,9 +88,22 @@ def required_backup_positions(picks: list[dict], pool_by_id: dict[str, dict]) ->
         starter = pool_by_id.get(str(pick.get("pool_player_id")))
         if not starter:
             continue
-        if str(starter.get("availability_status") or "HEALTHY").upper() == "QUESTIONABLE" and not pick.get("emergency_pool_player_id"):
+        if str(starter.get("availability_status") or "HEALTHY").upper() != "QUESTIONABLE":
+            continue
+        backup_id = pick.get("emergency_pool_player_id")
+        backup = pool_by_id.get(str(backup_id)) if backup_id else None
+        if not backup or str(backup.get("availability_status") or "HEALTHY").upper() == "OUT":
             needs.append(pos)
     return [pos for pos in POSITIONS if pos in needs]
+
+
+def unavailable_starter_positions(picks: list[dict], pool_by_id: dict[str, dict]) -> list[str]:
+    unavailable: list[str] = []
+    for pos, pick in picks_by_position(picks).items():
+        starter = pool_by_id.get(str(pick.get("pool_player_id")))
+        if starter and str(starter.get("availability_status") or "HEALTHY").upper() == "OUT":
+            unavailable.append(pos)
+    return [pos for pos in POSITIONS if pos in unavailable]
 
 
 def first_incomplete_position(picks: list[dict], pool_by_id: dict[str, dict]) -> str | None:
@@ -99,8 +112,12 @@ def first_incomplete_position(picks: list[dict], pool_by_id: dict[str, dict]) ->
         if pos not in by_pos:
             return pos
         starter = pool_by_id.get(str(by_pos[pos].get("pool_player_id")))
+        if starter and str(starter.get("availability_status") or "HEALTHY").upper() == "OUT":
+            return pos
         if starter and str(starter.get("availability_status") or "HEALTHY").upper() == "QUESTIONABLE":
-            if not by_pos[pos].get("emergency_pool_player_id"):
+            backup_id = by_pos[pos].get("emergency_pool_player_id")
+            backup = pool_by_id.get(str(backup_id)) if backup_id else None
+            if not backup or str(backup.get("availability_status") or "HEALTHY").upper() == "OUT":
                 return pos
     return None
 
