@@ -105,10 +105,12 @@ button[kind="primary"], [data-testid="stBaseButton-primary"], [data-testid="stBa
 hr { border-color:var(--line); }
 
 /* Gate 4 live Sunday / social UI */
-.story-card { background:#FFFFFF; border:1px solid var(--line); border-radius:16px; padding:.85rem; min-height:128px; box-shadow:0 3px 14px rgba(23,32,39,.035); }
+.story-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.7rem; margin:.35rem 0 .9rem; }
+.story-card { background:#FFFFFF; border:1px solid var(--line); border-radius:16px; padding:.9rem; min-height:132px; box-shadow:0 3px 14px rgba(23,32,39,.035); }
 .story-icon { font-size:1.35rem; }
 .story-title { color:var(--teal); text-transform:uppercase; letter-spacing:.06em; font-size:.7rem; font-weight:850; margin:.2rem 0; }
 .story-main { font-size:1rem; font-weight:820; color:var(--ink); }
+.story-more { color:var(--teal); font-size:.78rem; font-weight:760; margin-top:.32rem; }
 .you-strip { display:flex; justify-content:space-between; align-items:center; background:#ECF8F6; border:1px solid #B9E3DD; color:#155E56; padding:.7rem .8rem; border-radius:14px; margin:.55rem 0; }
 .score-row { display:flex; align-items:center; gap:.65rem; background:#FFFFFF; border-bottom:1px solid #EEF1F3; padding:.7rem .2rem; }
 .score-row:last-child { border-bottom:0; }
@@ -120,12 +122,37 @@ hr { border-color:var(--line); }
 .history-row:last-child { border-bottom:0; }
 /* Full-row leaderboard buttons. */
 div[class*="st-key-leaderbtn_"] [data-testid="stButton"] button,
-div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"] { width:100% !important; min-height:52px !important; justify-content:flex-start !important; text-align:left !important; background:#FFFFFF !important; color:var(--ink) !important; border:1px solid var(--line) !important; border-radius:14px !important; padding:.65rem .8rem !important; }
+div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"] { width:100% !important; min-height:58px !important; justify-content:flex-start !important; text-align:left !important; background:#FFFFFF !important; color:var(--ink) !important; border:1px solid var(--line) !important; border-radius:15px !important; padding:.72rem .85rem !important; box-shadow:0 2px 10px rgba(23,32,39,.025) !important; }
+div[class*="st-key-leaderbtn_"] [data-testid="stButton"] button p,
+div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"] p { width:100% !important; text-align:left !important; margin:0 !important; font-weight:760 !important; color:var(--ink) !important; }
 div[class*="st-key-leaderbtn_"] [data-testid="stButton"] button:hover,
-div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"]:hover { background:#F3F7F7 !important; border-color:#BFC9CF !important; }
+div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"]:hover { background:#F3F7F7 !important; border-color:#9CCFC8 !important; transform:translateY(-1px); }
+
+/* Gate 4 leaderboard switch: persistent across reruns, unlike st.tabs. */
+div[class*="st-key-gate4_leaderboard_view"] { margin:.15rem 0 .7rem !important; }
+div[class*="st-key-gate4_leaderboard_view"] [data-testid="stSegmentedControl"] { background:#EEF2F4 !important; border-radius:14px !important; padding:.22rem !important; }
+div[class*="st-key-gate4_leaderboard_view"] button { min-height:42px !important; border:0 !important; border-radius:11px !important; background:transparent !important; color:var(--muted) !important; font-weight:780 !important; }
+div[class*="st-key-gate4_leaderboard_view"] button[aria-pressed="true"] { background:#FFFFFF !important; color:#155E56 !important; box-shadow:0 2px 8px rgba(23,32,39,.08) !important; }
+
+.season-left { min-width:0; }
+.season-name { font-weight:820; color:var(--ink); }
+.you-badge { display:inline-block; margin-left:.3rem; padding:.08rem .35rem; border-radius:999px; background:#ECF8F6; color:#155E56; font-size:.66rem; letter-spacing:.04em; font-weight:900; vertical-align:.08rem; }
+.history-card { background:#FFFFFF; border:1px solid var(--line); border-radius:17px; padding:.9rem 1rem; box-shadow:0 3px 14px rgba(23,32,39,.035); margin:.4rem 0 .8rem; }
+.history-head { display:flex; justify-content:space-between; align-items:center; gap:.8rem; padding-bottom:.45rem; border-bottom:1px solid #EEF1F3; margin-bottom:.15rem; }
+.profile-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.65rem; margin:.45rem 0 1rem; }
+.profile-stat { background:#FFFFFF; border:1px solid var(--line); border-radius:16px; padding:.82rem .75rem; min-height:104px; box-shadow:0 3px 14px rgba(23,32,39,.03); }
+.profile-stat-icon { font-size:1.15rem; }
+.profile-stat-value { font-size:1.45rem; line-height:1.1; font-weight:900; letter-spacing:-.04em; color:var(--ink); margin:.22rem 0 .15rem; }
+.profile-stat-label { color:var(--muted); font-size:.76rem; font-weight:720; }
+
 /* Sticky mobile-first navigation. Streamlit adds st-key-* classes from widget keys. */
-div[class*="st-key-gate4_nav"] { position:fixed !important; left:50% !important; transform:translateX(-50%) !important; bottom:.5rem !important; z-index:999 !important; width:min(648px, calc(100vw - 1.2rem)) !important; background:rgba(255,255,255,.96) !important; backdrop-filter:blur(10px); border:1px solid var(--line); border-radius:16px; padding:.32rem !important; box-shadow:0 8px 24px rgba(23,32,39,.12); }
-div[class*="st-key-gate4_nav"] [role="radiogroup"] { width:100% !important; }
+div[class*="st-key-gate4_nav"] { position:fixed !important; left:50% !important; transform:translateX(-50%) !important; bottom:.5rem !important; z-index:999 !important; width:min(648px, calc(100vw - 1.2rem)) !important; background:rgba(255,255,255,.97) !important; backdrop-filter:blur(12px); border:1px solid var(--line); border-radius:18px; padding:.3rem !important; box-shadow:0 10px 28px rgba(23,32,39,.14); }
+div[class*="st-key-gate4_nav"] [role="radiogroup"],
+div[class*="st-key-gate4_nav"] [data-testid="stSegmentedControl"] { width:100% !important; background:transparent !important; gap:.12rem !important; }
+div[class*="st-key-gate4_nav"] button { flex:1 1 0 !important; min-height:48px !important; padding:.38rem .28rem !important; border:0 !important; border-radius:13px !important; background:transparent !important; color:#73808A !important; font-size:.76rem !important; font-weight:760 !important; }
+div[class*="st-key-gate4_nav"] button[aria-pressed="true"] { background:#ECF8F6 !important; color:#155E56 !important; box-shadow:none !important; }
+div[class*="st-key-gate4_nav"] button:hover { background:#F3F7F7 !important; color:#155E56 !important; }
+div[class*="st-key-gate4_nav"] button p { white-space:nowrap !important; margin:0 !important; font-size:.76rem !important; }
 /* Champion moment: short football flood, non-blocking and reduced-motion safe. */
 .champion-overlay { position:fixed; inset:0; z-index:2000; overflow:hidden; background:rgba(247,249,250,.96); pointer-events:none; animation:champion-hide 3.1s ease forwards; display:flex; align-items:center; justify-content:center; }
 .champion-card { position:relative; z-index:3; text-align:center; padding:1.35rem 1.1rem; background:#FFFFFF; border:1px solid #B9E3DD; border-radius:22px; box-shadow:0 12px 40px rgba(23,32,39,.16); width:min(440px,calc(100vw - 2rem)); }
@@ -161,11 +188,17 @@ div[class*="st-key-gate4_nav"] [role="radiogroup"] { width:100% !important; }
 @keyframes champion-hide { 0%,82% { opacity:1; visibility:visible; } 100% { opacity:0; visibility:hidden; } }
 @media (prefers-reduced-motion: reduce) { .football { animation:none !important; opacity:.12; top:1rem; } }
 
+@media (max-width: 560px) {
+  .story-grid { grid-template-columns:1fr; }
+  .profile-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
 @media (max-width: 480px) {
   .block-container { padding-top:2.6rem; padding-left:1rem; padding-right:1rem; }
   .hero { padding-top:.65rem; }
   .hero-kicker { line-height:1.5; padding-top:.18rem; }
   .hero-title { font-size:1.78rem; }
+  div[class*="st-key-gate4_nav"] button { min-height:46px !important; padding:.32rem .18rem !important; }
+  div[class*="st-key-gate4_nav"] button p { font-size:.69rem !important; }
 }
 </style>
         """,

@@ -81,70 +81,70 @@ def _storylines(bundle: dict[str, Any], leaderboard: list[dict[str, Any]]) -> No
     same = story.get("same_brain") or []
 
     st.markdown("### Sunday Storylines")
-    cols = st.columns(3)
-    with cols[0]:
-        if popular and popular.get("player_name"):
-            st.markdown(
-                f'<div class="story-card"><div class="story-icon">🔥</div><div class="story-title">Most Popular Pick</div><div class="story-main">{escape(str(popular["player_name"]))}</div><div class="small">{int(popular["count"])} of {int(popular["total"])} lineups</div></div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown('<div class="story-card"><div class="story-icon">🔥</div><div class="story-title">Most Popular Pick</div><div class="small">Waiting for locked lineups.</div></div>', unsafe_allow_html=True)
-    with cols[1]:
-        if alone:
-            item = alone[0]
-            more = len(alone) - 1
-            extra = f" + {more} more" if more > 0 else ""
-            st.markdown(
-                f'<div class="story-card"><div class="story-icon">🦄</div><div class="story-title">Went Alone</div><div class="story-main">{escape(str(item["nickname"]))}</div><div class="small">only one on {escape(str(item["player_name"]))}{extra}</div></div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown('<div class="story-card"><div class="story-icon">🦄</div><div class="story-title">Went Alone</div><div class="small">No solo picks this week.</div></div>', unsafe_allow_html=True)
-    with cols[2]:
-        if same:
-            names = same[0]
-            st.markdown(
-                f'<div class="story-card"><div class="story-icon">👯</div><div class="story-title">Same Brain</div><div class="story-main">{escape(" + ".join(names[:3]))}</div><div class="small">picked the exact same five</div></div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown('<div class="story-card"><div class="story-icon">👯</div><div class="story-title">Same Brain</div><div class="small">No identical lineups.</div></div>', unsafe_allow_html=True)
+    cards: list[str] = []
+    if popular and popular.get("player_name"):
+        cards.append(
+            f'<div class="story-card"><div class="story-icon">🔥</div><div class="story-title">Most Popular Pick</div><div class="story-main">{escape(str(popular["player_name"]))}</div><div class="small">{int(popular["count"])} of {int(popular["total"])} lineups</div></div>'
+        )
+    else:
+        cards.append('<div class="story-card"><div class="story-icon">🔥</div><div class="story-title">Most Popular Pick</div><div class="small">Waiting for locked lineups.</div></div>')
+
+    if alone:
+        item = alone[0]
+        more = len(alone) - 1
+        more_html = f'<div class="story-more">+ {more} other solo pick{"s" if more != 1 else ""}</div>' if more > 0 else ""
+        cards.append(
+            f'<div class="story-card"><div class="story-icon">🦄</div><div class="story-title">Went Alone</div><div class="story-main">{escape(str(item["nickname"]))}</div><div class="small">Only one on {escape(str(item["player_name"]))}</div>{more_html}</div>'
+        )
+    else:
+        cards.append('<div class="story-card"><div class="story-icon">🦄</div><div class="story-title">Went Alone</div><div class="small">No solo picks this week.</div></div>')
+
+    if same:
+        names = same[0]
+        cards.append(
+            f'<div class="story-card"><div class="story-icon">👯</div><div class="story-title">Same Brain</div><div class="story-main">{escape(" + ".join(names[:3]))}</div><div class="small">Picked the exact same five</div></div>'
+        )
+    else:
+        cards.append('<div class="story-card"><div class="story-icon">👯</div><div class="story-title">Same Brain</div><div class="small">No identical lineups.</div></div>')
+
+    st.markdown(f'<div class="story-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
 def _render_roster_detail(row: dict[str, Any], current_player_id: str) -> None:
     is_self = str(row.get("player_id")) == str(current_player_id)
-    st.markdown(f"#### {row.get('emoji','🏈')} {row.get('nickname','Player')} • {float(row.get('score') or 0):.1f}")
-    for roster in row.get("roster") or []:
-        pos = str(roster.get("position") or "")
-        if roster.get("missing"):
+    with st.container(border=True):
+        st.markdown(f"#### {row.get('emoji','🏈')} {row.get('nickname','Player')} • {float(row.get('score') or 0):.1f} pts")
+        st.caption("Tap the same leaderboard row again to close.")
+        for roster in row.get("roster") or []:
+            pos = str(roster.get("position") or "")
+            if roster.get("missing"):
+                st.markdown(
+                    f'<div class="score-row"><span class="position-pill">{escape(pos)}</span><div class="score-body"><strong>Missing position</strong><div class="small">Scores 0.0</div></div><div class="score-points">0.0</div></div>',
+                    unsafe_allow_html=True,
+                )
+                continue
+            player = roster.get("player") or {}
+            starter = roster.get("starter") or {}
+            backup = roster.get("backup") or {}
+            name = str(player.get("player_name") or "Player")
+            emergency = bool(roster.get("emergency_activated"))
+            status = str(roster.get("game_status_text") or "")
+            meta = f"{player.get('team_abbr','')} vs {player.get('opponent_abbr','')}"
+            if emergency:
+                meta = f"🚨 Emergency activated for {starter.get('player_name','starter')} • {meta}"
+            elif is_self and backup:
+                meta = f"{meta} • Emergency: {backup.get('player_name')} (private)"
             st.markdown(
-                f'<div class="score-row"><span class="position-pill">{escape(pos)}</span><div class="score-body"><strong>Missing position</strong><div class="small">Scores 0.0</div></div><div class="score-points">0.0</div></div>',
+                f'<div class="score-row"><span class="position-pill">{escape(pos)}</span><div class="score-body"><strong>{escape(name)}</strong><div class="small">{escape(meta)}</div><div class="small">{escape(status)}</div></div><div class="score-points">{float(roster.get("points") or 0):.1f}</div></div>',
                 unsafe_allow_html=True,
             )
-            continue
-        player = roster.get("player") or {}
-        starter = roster.get("starter") or {}
-        backup = roster.get("backup") or {}
-        name = str(player.get("player_name") or "Player")
-        emergency = bool(roster.get("emergency_activated"))
-        status = str(roster.get("game_status_text") or "")
-        meta = f"{player.get('team_abbr','')} vs {player.get('opponent_abbr','')}"
-        if emergency:
-            meta = f"🚨 Emergency activated for {starter.get('player_name','starter')} • {meta}"
-        elif is_self and backup:
-            meta = f"{meta} • Emergency: {backup.get('player_name')} (private)"
-        st.markdown(
-            f'<div class="score-row"><span class="position-pill">{escape(pos)}</span><div class="score-body"><strong>{escape(name)}</strong><div class="small">{escape(meta)}</div><div class="small">{escape(status)}</div></div><div class="score-points">{float(roster.get("points") or 0):.1f}</div></div>',
-            unsafe_allow_html=True,
-        )
-        breakdown = player.get("score_breakdown") or {}
-        if breakdown:
-            with st.expander(f"{pos} scoring details"):
-                for component in breakdown.values():
-                    text = component.get("text") if isinstance(component, dict) else None
-                    if text:
-                        st.write(str(text))
+            breakdown = player.get("score_breakdown") or {}
+            if breakdown:
+                with st.expander(f"{pos} scoring details"):
+                    for component in breakdown.values():
+                        detail_text = component.get("text") if isinstance(component, dict) else None
+                        if detail_text:
+                            st.write(str(detail_text))
 
 
 def _leaderboard_rows(leaderboard: list[dict[str, Any]], current_player_id: str, *, detail: bool = True) -> None:
@@ -157,21 +157,28 @@ def _leaderboard_rows(leaderboard: list[dict[str, Any]], current_player_id: str,
             f'<div class="you-strip"><strong>You: {_ordinal(int(own["rank"]))}</strong><span>{float(own["score"]):.1f} pts</span></div>',
             unsafe_allow_html=True,
         )
+    if detail:
+        st.caption("Tap any player to see their five and scoring details.")
 
+    selected_id = str(st.session_state.get("gate4_detail_player_id") or "")
     for row in leaderboard:
         rank = int(row.get("rank") or 0)
-        is_self = str(row.get("player_id")) == str(current_player_id)
-        label = f"{_medal(rank)} {rank}. {row.get('emoji','🏈')} {row.get('nickname','Player')}    {float(row.get('score') or 0):.1f}"
+        row_player_id = str(row.get("player_id") or "")
+        is_self = row_player_id == str(current_player_id)
+        medal = _medal(rank)
+        prefix = f"{medal} " if medal else ""
+        label = f"{prefix}{rank}. {row.get('emoji','🏈')} {row.get('nickname','Player')}  ·  {float(row.get('score') or 0):.1f} pts"
         if is_self:
-            label += "   ← YOU"
+            label += "  ← YOU"
         if st.button(label, key=f"leaderbtn_{row.get('lineup_id')}", use_container_width=True):
-            st.session_state.gate4_detail_player_id = str(row.get("player_id"))
-    if detail:
-        selected_id = st.session_state.get("gate4_detail_player_id")
-        selected = next((row for row in leaderboard if str(row.get("player_id")) == str(selected_id)), None)
-        if selected:
-            st.markdown("---")
-            _render_roster_detail(selected, current_player_id)
+            if detail:
+                if selected_id == row_player_id:
+                    st.session_state.pop("gate4_detail_player_id", None)
+                else:
+                    st.session_state.gate4_detail_player_id = row_player_id
+                st.rerun()
+        if detail and selected_id == row_player_id:
+            _render_roster_detail(row, current_player_id)
 
 
 def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, show_storylines: bool = True) -> None:
@@ -204,43 +211,98 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
     _last_updated(week)
 
 
+def _leaderboard_view_switcher() -> str:
+    options = ["This Week", "Season"]
+    default = st.session_state.get("gate4_leaderboard_tab") or options[0]
+    if default not in options:
+        default = options[0]
+    existing = st.session_state.get("gate4_leaderboard_view")
+    if existing is not None and existing not in options:
+        st.session_state.pop("gate4_leaderboard_view", None)
+        existing = None
+    segmented = getattr(st, "segmented_control", None)
+    if segmented:
+        selected = segmented(
+            "Leaderboard view",
+            options,
+            default=None if existing in options else default,
+            key="gate4_leaderboard_view",
+            label_visibility="collapsed",
+        )
+    else:
+        selected = st.radio(
+            "Leaderboard view",
+            options,
+            index=options.index(default),
+            horizontal=True,
+            key="gate4_leaderboard_view_fallback",
+            label_visibility="collapsed",
+        )
+    selected = selected or default
+    st.session_state.gate4_leaderboard_tab = selected
+    return selected
+
+
+def _render_season_rows(standings: list[dict[str, Any]], current_player_id: str | None = None) -> None:
+    if not standings:
+        st.info("Season standings will appear after the first finalized Sunday.")
+        return
+    for row in standings:
+        rank = int(row.get("rank") or 0)
+        is_self = current_player_id is not None and str(row.get("player_id")) == str(current_player_id)
+        you = '<span class="you-badge">YOU</span>' if is_self else ""
+        st.markdown(
+            f'<div class="season-row"><div class="season-left"><div class="season-name">{_medal(rank)} {rank}. {escape(str(row.get("emoji") or "🏈"))} {escape(str(row.get("nickname") or "Player"))} {you}</div><div class="small">{float(row.get("total_fantasy_points") or 0):.1f} total fantasy pts</div></div><div class="season-points">{int(row.get("season_points") or 0)} pts</div></div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _profile_stat_grid(stats: dict[str, Any]) -> None:
+    items = [
+        ("🏆", "Wins", str(int(stats.get("wins") or 0))),
+        ("🥈", "Seconds", str(int(stats.get("seconds") or 0))),
+        ("🥉", "Thirds", str(int(stats.get("thirds") or 0))),
+        ("⭐", "Season Points", str(int(stats.get("season_points") or 0))),
+        ("🏈", "Fantasy Points", f"{float(stats.get('total_fantasy_points') or 0):.1f}"),
+    ]
+    html = ''.join(
+        f'<div class="profile-stat"><div class="profile-stat-icon">{icon}</div><div class="profile-stat-value">{escape(value)}</div><div class="profile-stat-label">{escape(label)}</div></div>'
+        for icon, label, value in items
+    )
+    st.markdown(f'<div class="profile-grid">{html}</div>', unsafe_allow_html=True)
+
+
 def render_leaderboards(store, week: dict[str, Any], player: dict[str, Any], phase: str) -> None:
-    weekly_tab, season_tab = st.tabs(["This Week", "Season"])
-    with weekly_tab:
+    st.markdown("### Leaderboard")
+    view = _leaderboard_view_switcher()
+
+    if view == "This Week":
         if phase != "locked":
             registered = store.get_registered_players()
             bundle = store.get_week_public_bundle(str(week["id"])) if week.get("published_at") else {"lineups": []}
             ready = sum(1 for row in bundle.get("lineups") or [] if row.get("confirmed_at"))
-            st.markdown("### Weekly Leaderboard")
+            st.markdown('<div class="card-tight"><div class="eyebrow">This Week</div><div class="week-title">Lineups stay private until 1:00 PM ET</div></div>', unsafe_allow_html=True)
             st.metric("Lineups ready", f"{ready} / {len(registered)}")
-            st.caption("Lineups stay private until Sunday at 1:00 PM ET.")
         else:
             bundle = store.get_week_public_bundle(str(week["id"]))
             leaderboard = build_weekly_leaderboard(bundle)
-            st.markdown("### Weekly Leaderboard")
             _leaderboard_rows(leaderboard, str(player["id"]), detail=True)
             _last_updated(week)
+        return
 
-    with season_tab:
-        st.markdown("### Season Standings")
-        results = store.get_weekly_results(season=int(week.get("season") or NFL_SEASON))
-        standings = add_zero_point_players(build_season_standings(results), store.get_registered_players())
-        if not results:
-            st.caption("Season points begin after Week 1 becomes FINAL on Monday.")
-        for row in standings:
-            rank = int(row.get("rank") or 0)
-            suffix = " ← YOU" if str(row.get("player_id")) == str(player.get("id")) else ""
-            st.markdown(
-                f'<div class="season-row"><div><strong>{_medal(rank)} {rank}. {escape(str(row.get("emoji") or "🏈"))} {escape(str(row.get("nickname") or "Player"))}{suffix}</strong><div class="small">{float(row.get("total_fantasy_points") or 0):.1f} total fantasy pts</div></div><div class="season-points">{int(row.get("season_points") or 0)} pts</div></div>',
-                unsafe_allow_html=True,
-            )
-        popover = getattr(st, "popover", None)
-        if popover:
-            with popover("ⓘ Season points"):
-                st.write("1st 12 • 2nd 9 • 3rd 7 • 4th 6 • 5th 5 • 6th 4 • 7th 3 • 8th 2 • 9th 1 • 10th+ 0")
-                st.caption("Ties receive the full points for that rank; the next rank skips appropriately.")
-        else:
-            st.caption("ⓘ Season points: 12–9–7–6–5–4–3–2–1 for 1st through 9th. Ties receive the full points for that rank.")
+    st.markdown("#### Season Standings")
+    results = store.get_weekly_results(season=int(week.get("season") or NFL_SEASON))
+    standings = add_zero_point_players(build_season_standings(results), store.get_registered_players())
+    if not results:
+        st.caption("Season points begin after Week 1 becomes FINAL on Monday.")
+    _render_season_rows(standings, str(player.get("id")))
+    popover = getattr(st, "popover", None)
+    if popover:
+        with popover("ⓘ How season points work"):
+            st.write("1st 12 • 2nd 9 • 3rd 7 • 4th 6 • 5th 5 • 6th 4 • 7th 3 • 8th 2 • 9th 1 • 10th+ 0")
+            st.caption("Ties receive the full points for that rank; the next rank skips appropriately.")
+    else:
+        st.caption("ⓘ Season points: 12–9–7–6–5–4–3–2–1 for 1st through 9th. Ties receive the full points for that rank.")
 
 
 def render_history(store, season: int) -> None:
@@ -291,15 +353,7 @@ def render_profile(store, player: dict[str, Any], season: int, on_sign_out: Call
     st.markdown(f"### {player.get('emoji','🏈')} {player.get('nickname','Player')}")
     results = store.get_weekly_results(season=season, player_id=str(player["id"]))
     stats = profile_stats(str(player["id"]), results)
-    cols = st.columns(3)
-    with cols[0]:
-        st.metric("🏆 Wins", int(stats["wins"]))
-    with cols[1]:
-        st.metric("🥈 Seconds", int(stats["seconds"]))
-    with cols[2]:
-        st.metric("🥉 Thirds", int(stats["thirds"]))
-    st.metric("Season Points", int(stats["season_points"]))
-    st.metric("Total Fantasy Points", f"{float(stats['total_fantasy_points']):.1f}")
+    _profile_stat_grid(stats)
 
     with st.expander("Change emoji"):
         new_emoji = st.text_input("Choose one emoji", value=str(player.get("emoji") or "🏈"), max_chars=8, key="profile_emoji")
@@ -442,27 +496,34 @@ def render_gate4_demo(current_player: dict[str, Any] | None = None) -> None:
         if phase == "final":
             st.caption("Demo includes a first-place tie, traditional competition ranking, and full season points for tied champions.")
     elif tab == "🏆 Leaderboard":
-        st.markdown("### Weekly Leaderboard")
-        _leaderboard_rows(leaderboard, demo_player_id, detail=True)
-        st.markdown("### Season Preview")
-        demo_results = []
-        for row in leaderboard:
-            demo_results.append({
-                "player_id": row["player_id"], "nickname_snapshot": row["nickname"], "emoji_snapshot": row["emoji"],
-                "season_points": row["season_points_if_final"], "weekly_score": row["score"], "finish_rank": row["rank"],
-            })
-        for row in build_season_standings(demo_results):
-            st.markdown(f"{_medal(int(row['rank']))} **{row['rank']}. {row['emoji']} {row['nickname']}** — {row['season_points']} pts")
+        st.markdown("### Leaderboard")
+        view = _leaderboard_view_switcher()
+        if view == "This Week":
+            _leaderboard_rows(leaderboard, demo_player_id, detail=True)
+        else:
+            st.markdown("#### Season Standings")
+            demo_results = []
+            for row in leaderboard:
+                demo_results.append({
+                    "player_id": row["player_id"], "nickname_snapshot": row["nickname"], "emoji_snapshot": row["emoji"],
+                    "season_points": row["season_points_if_final"], "weekly_score": row["score"], "finish_rank": row["rank"],
+                })
+            _render_season_rows(build_season_standings(demo_results), demo_player_id)
+            st.caption("Demo season standings use the exact weekly placement points that will feed the real season leaderboard.")
     elif tab == "🕘 History":
-        st.markdown("### History Preview")
-        st.markdown("🥇 Jenny — 91.4  \n🥈 Mike T. — 87.2  \n🥉 Alan — 81.9")
+        st.markdown("### History")
+        st.markdown(
+            '<div class="history-card"><div class="history-head"><div><div class="eyebrow">Final</div><div class="week-title">Week 3</div></div><div class="small">View final standings</div></div>'
+            '<div class="history-row"><span>🥇 🦅 Jenny</span><strong>91.4</strong></div>'
+            '<div class="history-row"><span>🥈 🤘 Mike T.</span><strong>87.2</strong></div>'
+            '<div class="history-row"><span>🥉 🐺 Alan</span><strong>81.9</strong></div></div>',
+            unsafe_allow_html=True,
+        )
         st.caption("Production history keeps final standings but removes detailed rosters after the next Tuesday pool publishes.")
     else:
         st.markdown(f"### {demo_player.get('emoji')} {demo_player.get('nickname')}")
-        st.metric("🏆 Wins", 3)
-        st.metric("🥈 Seconds", 2)
-        st.metric("🥉 Thirds", 1)
-        st.metric("Season Points", 68)
-        st.metric("Total Fantasy Points", "842.7")
+        _profile_stat_grid({"wins": 3, "seconds": 2, "thirds": 1, "season_points": 68, "total_fantasy_points": 842.7})
         _how_to_play()
+        st.markdown("#### Trophy Case")
+        st.markdown('<div class="card-tight"><strong>🏆 2026 Champion</strong><div class="small">Awarded after the regular-season finale.</div></div>', unsafe_allow_html=True)
 
