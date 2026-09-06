@@ -260,7 +260,15 @@ def _restore_remembered_player(storage_state: dict | None = None, *, cookie_toke
     _queue_remember_cookie_delete()
 
 
-def finish_player_auth(result) -> None:
+def finish_player_auth(result, *, auth_slot=None) -> None:
+    # Clear the submitted auth UI before the browser-storage acknowledgement
+    # rerun. Streamlit otherwise keeps stale form elements visible as ghosts,
+    # which can briefly look like a duplicated sign-in panel.
+    if auth_slot is not None:
+        try:
+            auth_slot.empty()
+        except Exception:
+            pass
     st.session_state.player = result.player
     st.session_state.remember_restore_checked = True
     if result.cookie_value:
@@ -271,7 +279,7 @@ def finish_player_auth(result) -> None:
     st.rerun()
 
 
-def player_login_ui() -> None:
+def player_login_ui(*, auth_slot=None) -> None:
     tab_signin, tab_new = st.tabs(["Sign In", "New Player"])
     with tab_signin:
         with st.form("signin_form"):
@@ -289,7 +297,7 @@ def player_login_ui() -> None:
                 remember=remember,
             )
             if result.ok:
-                finish_player_auth(result)
+                finish_player_auth(result, auth_slot=auth_slot)
             st.error(result.message)
 
     with tab_new:
@@ -313,7 +321,7 @@ def player_login_ui() -> None:
                 remember=remember,
             )
             if result.ok:
-                finish_player_auth(result)
+                finish_player_auth(result, auth_slot=auth_slot)
             st.error(result.message)
 
 
@@ -386,7 +394,9 @@ if st.session_state.player:
         st.rerun()
     st.stop()
 
-player_login_ui()
+_auth_slot = st.empty()
+with _auth_slot.container():
+    player_login_ui(auth_slot=_auth_slot)
 st.markdown("---")
 with st.expander("Commissioner"):
     commish_login_ui()
