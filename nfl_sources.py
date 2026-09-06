@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import csv
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 import re
 from typing import Any, Iterable
@@ -70,7 +70,10 @@ def _session() -> requests.Session:
         allowed_methods=frozenset({"GET"}),
     )
     session.mount("https://", HTTPAdapter(max_retries=retry))
-    session.headers.update({"User-Agent": "Teals-Sunday-Pickem/0.3 (+friends-only noncommercial)"})
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (compatible; TealsSundayPickem/0.3.1; +friends-only-noncommercial)",
+        "Accept": "application/json,text/plain,*/*",
+    })
     return session
 
 
@@ -86,16 +89,34 @@ class ESPNProvider:
         self.session = session or _session()
 
     def scoreboard(self, season: int, week: int) -> dict[str, Any]:
-        try:
-            response = self.session.get(
-                self.SCOREBOARD_URL,
-                params={"season": season, "week": week, "seasontype": NFL_SEASON_TYPE},
-                timeout=GATE3_HTTP_TIMEOUT_SECONDS,
-            )
-            response.raise_for_status()
-            return response.json()
-        except Exception as exc:
-            raise SourceError("ESPN schedule data is temporarily unavailable.") from exc
+        """Fetch a weekly scoreboard using two known ESPN query shapes.
+
+        ESPN's site API is undocumented and has accepted both `dates=YYYY` and
+        `season=YYYY` over time. Try the more widely documented `dates` form
+        first, then the `season` form. Schedule generation does not depend on
+        this call anymore; it is primarily a live-status convenience source.
+        """
+        errors: list[str] = []
+        param_sets = (
+            {"dates": str(season), "week": week, "seasontype": NFL_SEASON_TYPE},
+            {"season": season, "week": week, "seasontype": NFL_SEASON_TYPE},
+        )
+        for params in param_sets:
+            try:
+                response = self.session.get(
+                    self.SCOREBOARD_URL,
+                    params=params,
+                    timeout=GATE3_HTTP_TIMEOUT_SECONDS,
+                )
+                response.raise_for_status()
+                payload = response.json()
+                if isinstance(payload, dict) and payload.get("events") is not None:
+                    return payload
+                errors.append("unexpected payload")
+            except Exception as exc:
+                errors.append(type(exc).__name__)
+        detail = ", ".join(errors[:2]) or "unknown error"
+        raise SourceError(f"ESPN live scoreboard is temporarily unavailable ({detail}).")
 
     def summary(self, event_id: str) -> dict[str, Any]:
         try:
@@ -244,9 +265,82 @@ class SleeperProvider:
 
 class NFLverseProvider:
     PLAYER_STATS_URL = "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_{season}.csv"
+    SCHEDULE_URL = "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv"
 
     def __init__(self, session: requests.Session | None = None):
         self.session = session or _session()
+
+    def schedule_games(self, season: int, week: int, week_id: str | None = None) -> list[dict[str, Any]]:
+        """Load official-ish nflverse schedule rows for one regular-season week.
+
+        nflverse schedule data updates frequently during the season and exposes
+        ESPN event ids, so it is a much better schedule source than making the
+        undocumented ESPN site API a hard dependency.
+        """
+        try:
+            response = self.session.get(self.SCHEDULE_URL, timeout=max(GATE3_HTTP_TIMEOUT_SECONDS, 20))
+            response.raise_for_status()
+        except Exception as exc:
+            raise SourceError("nflverse schedule data is temporarily unavailable.") from exc
+
+        rows = csv.DictReader(StringIO(response.text))
+        games: list[dict[str, Any]] = []
+        now = datetime.now(UTC)
+        for row in rows:
+            if _safe_int(row.get("season")) != int(season):
+                continue
+            if str(row.get("game_type") or "").upper() != "REG":
+                continue
+            if _safe_int(row.get("week")) != int(week):
+                continue
+            gameday = str(row.get("gameday") or "").strip()
+            gametime = str(row.get("gametime") or "").strip()
+            if not gameday or not gametime:
+                continue
+            try:
+                kickoff_local = datetime.fromisoformat(f"{gameday}T{gametime}:00").replace(tzinfo=ET)
+            except ValueError:
+                continue
+            kickoff = kickoff_local.astimezone(UTC)
+            home_score = _safe_int(row.get("home_score"))
+            away_score = _safe_int(row.get("away_score"))
+            has_score = home_score is not None and away_score is not None
+            completed = bool(has_score and now >= kickoff + timedelta(hours=6))
+            if completed:
+                game_status = "FINAL"
+            elif has_score and now >= kickoff:
+                game_status = "LIVE"
+            else:
+                game_status = "SCHEDULED"
+
+            away_ml = _safe_float(row.get("away_moneyline"))
+            home_ml = _safe_float(row.get("home_moneyline"))
+            favored_team = None
+            if away_ml is not None and home_ml is not None:
+                favored_team = normalize_team(row.get("away_team")) if away_ml < home_ml else normalize_team(row.get("home_team"))
+
+            espn_id = str(row.get("espn") or "").strip()
+            stable_id = espn_id if espn_id and espn_id.lower() not in {"na", "nan"} else str(row.get("game_id") or "").strip()
+            if not stable_id:
+                continue
+            games.append({
+                "week_id": week_id,
+                "provider_event_id": stable_id,
+                "home_team": normalize_team(row.get("home_team")),
+                "away_team": normalize_team(row.get("away_team")),
+                "kickoff_at": kickoff.isoformat(),
+                "is_eligible": is_eligible_sunday_kickoff(kickoff),
+                "game_status": game_status,
+                "period": None,
+                "game_clock": None,
+                "home_score": home_score,
+                "away_score": away_score,
+                "completed": completed,
+                "over_under": _safe_float(row.get("total_line")),
+                "spread": _safe_float(row.get("spread_line")),
+                "favored_team": favored_team,
+            })
+        return [g for g in games if g.get("home_team") and g.get("away_team")]
 
     def weekly_player_stats(self, season: int, week: int | None = None) -> list[dict[str, str]]:
         url = self.PLAYER_STATS_URL.format(season=season)

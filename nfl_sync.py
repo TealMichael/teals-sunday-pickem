@@ -23,13 +23,52 @@ def _iso(dt: datetime) -> str:
     return dt.astimezone(UTC).isoformat()
 
 
-def sync_schedule(store, week: dict[str, Any], espn: ESPNProvider | None = None) -> list[dict[str, Any]]:
+def sync_schedule(
+    store,
+    week: dict[str, Any],
+    espn: ESPNProvider | None = None,
+    nflverse: NFLverseProvider | None = None,
+    *,
+    prefer_live: bool = False,
+) -> list[dict[str, Any]]:
+    """Sync one NFL week without making ESPN a hard schedule dependency.
+
+    nflverse is the primary schedule source. During live windows we prefer an
+    ESPN scoreboard snapshot for quarter/clock status, but automatically fall
+    back to nflverse if ESPN is unavailable.
+    """
     espn = espn or ESPNProvider()
-    payload = espn.scoreboard(int(week["season"]), int(week["nfl_week"]))
-    games = espn.normalize_games(payload, str(week["id"]))
+    nflverse = nflverse or NFLverseProvider()
+    season = int(week["season"])
+    nfl_week = int(week["nfl_week"])
+    week_id = str(week["id"])
+    games: list[dict[str, Any]] = []
+    errors: list[str] = []
+
+    if prefer_live:
+        try:
+            payload = espn.scoreboard(season, nfl_week)
+            games = espn.normalize_games(payload, week_id)
+        except Exception as exc:
+            errors.append(str(exc))
+
     if not games:
-        raise Gate3Error("No NFL games were returned for this week.")
-    store.upsert_nfl_games(str(week["id"]), games)
+        try:
+            games = nflverse.schedule_games(season, nfl_week, week_id)
+        except Exception as exc:
+            errors.append(str(exc))
+
+    if not games and not prefer_live:
+        try:
+            payload = espn.scoreboard(season, nfl_week)
+            games = espn.normalize_games(payload, week_id)
+        except Exception as exc:
+            errors.append(str(exc))
+
+    if not games:
+        suffix = f" ({'; '.join(errors[:2])})" if errors else ""
+        raise Gate3Error(f"No NFL schedule data was returned for this week{suffix}.")
+    store.upsert_nfl_games(week_id, games)
     return games
 
 
@@ -119,7 +158,7 @@ def publish_week_pool(store, week: dict[str, Any], *, force: bool = False) -> di
     opens = parse_timestamp(week.get("opens_at"))
     if not force and opens and now < opens:
         return {"published": False, "message": "Not time to publish yet."}
-    run_id = store.start_data_run("publish_pool", week_id=str(week["id"]), provider="ESPN+Sleeper+nflverse")
+    run_id = store.start_data_run("publish_pool", week_id=str(week["id"]), provider="nflverse+Sleeper")
     try:
         ranked, games, _ = build_pool_preview(store, week)
         store.publish_ranked_pool(week, ranked)
@@ -181,7 +220,7 @@ def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None =
     espn = espn or ESPNProvider()
     run_id = store.start_data_run("live_scores", week_id=str(week["id"]), provider="ESPN")
     try:
-        games = sync_schedule(store, week, espn)
+        games = sync_schedule(store, week, espn, prefer_live=True)
         # Before lock, schedule changes can still remove a now-ineligible game.
         if datetime.now(UTC) < (parse_timestamp(week.get("locks_at")) or datetime.max.replace(tzinfo=UTC)):
             store.reconcile_pool_schedule(week, games)
@@ -301,13 +340,26 @@ def reconcile_final(store, week: dict[str, Any], *, nflverse: NFLverseProvider |
         raise
 
 
-def ensure_week_shell_from_scoreboard(store, *, season: int, nfl_week: int, espn: ESPNProvider | None = None) -> dict[str, Any]:
+def ensure_week_shell_from_scoreboard(
+    store,
+    *,
+    season: int,
+    nfl_week: int,
+    espn: ESPNProvider | None = None,
+    nflverse: NFLverseProvider | None = None,
+) -> dict[str, Any]:
+    # Function name kept for compatibility; nflverse is now the primary source.
     espn = espn or ESPNProvider()
+    nflverse = nflverse or NFLverseProvider()
     existing = store.get_week_by_season_week(season, nfl_week)
     if existing:
         return existing
-    payload = espn.scoreboard(season, nfl_week)
-    games = espn.normalize_games(payload)
+    games: list[dict[str, Any]] = []
+    try:
+        games = nflverse.schedule_games(season, nfl_week)
+    except Exception:
+        payload = espn.scoreboard(season, nfl_week)
+        games = espn.normalize_games(payload)
     eligible = _eligible_games(games)
     if not eligible:
         raise Gate3Error(f"Could not find an eligible Sunday for Week {nfl_week}.")
@@ -327,7 +379,11 @@ def ensure_week_shell_from_scoreboard(store, *, season: int, nfl_week: int, espn
 
 
 def gate3_diagnostic(store, *, season: int = NFL_SEASON, nfl_week: int = 1) -> dict[str, Any]:
-    """Real-provider read check. It never publishes the weekly pool."""
+    """Real-provider read check. It never publishes the weekly pool.
+
+    Schedule validation uses nflverse first, so an ESPN outage cannot block a
+    Tuesday pool build or Commissioner diagnostic.
+    """
     week = store.get_week_by_season_week(season, nfl_week)
     if not week:
         week = ensure_week_shell_from_scoreboard(store, season=season, nfl_week=nfl_week)
