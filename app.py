@@ -446,6 +446,17 @@ if st.session_state.commish:
             st.session_state.gate3_scoring_diag = None
             st.error(f"Gate 3 scoring test failed: {exc}")
 
+    if st.button("Run Gate 3.5 Preseason Replay", use_container_width=True):
+        try:
+            from preseason_replay import run_preseason_replay
+            with st.spinner("Reading a real 2026 preseason box score and replaying it through Pick'em…"):
+                replay_diag = run_preseason_replay(store)
+            st.session_state.gate35_replay_diag = replay_diag
+            st.toast("Preseason box-score replay passed.")
+        except Exception as exc:
+            st.session_state.gate35_replay_diag = None
+            st.error(f"Preseason replay failed: {exc}")
+
     diag = st.session_state.get("gate3_diag")
     if diag:
         st.markdown("#### NFL data check")
@@ -481,6 +492,36 @@ if st.session_state.commish:
                 "Result": "PASS" if row.get("math_pass") and row.get("database_pass") else "FAIL",
             })
         st.dataframe(display_rows, use_container_width=True, hide_index=True)
+
+    replay_diag = st.session_state.get("gate35_replay_diag")
+    if replay_diag:
+        st.markdown("#### Real preseason box-score replay")
+        st.success("A completed 2026 preseason box score was read from ESPN, parsed, scored, persisted through Supabase, and fully cleaned up.")
+        st.caption(str(replay_diag.get("matchup") or "2026 preseason replay"))
+        r1, r2, r3, r4, r5 = st.columns(5)
+        with r1:
+            st.metric("Real box score", "PASS")
+        with r2:
+            st.metric("Known stat anchors", "PASS")
+        with r3:
+            st.metric("Supabase replay", "PASS")
+        with r4:
+            st.metric("Week 1 untouched", "PASS")
+        with r5:
+            st.metric("Test cleanup", "PASS")
+        replay_rows = []
+        for row in replay_diag.get("rows") or []:
+            replay_rows.append({
+                "Pos": row.get("position"),
+                "Real player": row.get("real_player"),
+                "Team": row.get("team"),
+                "Real stat line": row.get("stat_summary"),
+                "Pick'em points": f"{float(row.get('calculated') or 0):.2f}",
+                "Stored": f"{float(row.get('stored') or 0):.2f}",
+                "Result": "PASS" if row.get("database_pass") else "FAIL",
+            })
+        st.dataframe(replay_rows, use_container_width=True, hide_index=True)
+        st.caption("Independent anchors checked: Tyson Bagent 208 passing yards / 2 TDs and Zavion Thomas 5 catches / 140 receiving yards / 1 TD.")
     st.stop()
 
 if st.session_state.player:

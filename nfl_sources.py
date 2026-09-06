@@ -71,7 +71,7 @@ def _session() -> requests.Session:
     )
     session.mount("https://", HTTPAdapter(max_retries=retry))
     session.headers.update({
-        "User-Agent": "Mozilla/5.0 (compatible; TealsSundayPickem/0.3.1; +friends-only-noncommercial)",
+        "User-Agent": "Mozilla/5.0 (compatible; TealsSundayPickem/0.3.4; +friends-only-noncommercial)",
         "Accept": "application/json,text/plain,*/*",
     })
     return session
@@ -88,7 +88,7 @@ class ESPNProvider:
     def __init__(self, session: requests.Session | None = None):
         self.session = session or _session()
 
-    def scoreboard(self, season: int, week: int) -> dict[str, Any]:
+    def scoreboard(self, season: int, week: int, *, season_type: int | None = None) -> dict[str, Any]:
         """Fetch a weekly scoreboard using two known ESPN query shapes.
 
         ESPN's site API is undocumented and has accepted both `dates=YYYY` and
@@ -97,9 +97,10 @@ class ESPNProvider:
         this call anymore; it is primarily a live-status convenience source.
         """
         errors: list[str] = []
+        requested_season_type = int(season_type if season_type is not None else NFL_SEASON_TYPE)
         param_sets = (
-            {"dates": str(season), "week": week, "seasontype": NFL_SEASON_TYPE},
-            {"season": season, "week": week, "seasontype": NFL_SEASON_TYPE},
+            {"dates": str(season), "week": week, "seasontype": requested_season_type},
+            {"season": season, "week": week, "seasontype": requested_season_type},
         )
         for params in param_sets:
             try:
@@ -196,12 +197,18 @@ class ESPNProvider:
                     if not name:
                         continue
                     key = (team, normalize_name(name))
+                    position = str(((athlete.get("position") or {}).get("abbreviation") or (athlete.get("position") or {}).get("name") or "")).upper()
+                    if position == "PK":
+                        position = "K"
                     target = merged.setdefault(key, {
                         "team_abbr": team,
                         "player_name": name,
+                        "position": position or None,
                         "espn_player_id": str(athlete.get("id") or "") or None,
                         "stats": {},
                     })
+                    if not target.get("position") and position:
+                        target["position"] = position
                     raw_values = athlete_row.get("stats") or []
                     values = {labels[i]: raw_values[i] for i in range(min(len(labels), len(raw_values)))}
                     _merge_category(target["stats"], category_name, values)

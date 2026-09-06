@@ -37,6 +37,7 @@ required = [
     ROOT / "db/003_gate3_nfl_data.sql",
     ROOT / "nfl_scoring.py",
     ROOT / "scoring_diagnostic.py",
+    ROOT / "preseason_replay.py",
     ROOT / "nfl_sources.py",
     ROOT / "nfl_rankings.py",
     ROOT / "nfl_sync.py",

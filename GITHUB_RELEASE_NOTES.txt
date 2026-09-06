@@ -1,12 +1,3 @@
-v0.3.3 — Gate 3 Scoring Diagnostic
+v0.3.4 — Gate 3.5 Real Preseason Replay
 
-Adds the Commissioner-only end-to-end scoring acceptance test. The diagnostic uses hidden Gate 2 Test Week players, verifies all Pick'em scoring rules, round-trips controlled scores through Supabase, confirms Week 1 remains untouched, and restores the demo state after the test.
-
-Commit message:
-v0.3.3 — Gate 3 Scoring Diagnostic
-
-Commit changes:
-Adds the isolated Commissioner scoring test for scoring math, Supabase persistence, Week 1 isolation, and automatic cleanup.
-
-Tag:
-v0.3.3
+Adds a real completed NFL preseason box-score acceptance test before Gate 4. The Commissioner can replay Bears-Titans preseason data through ESPN parsing, Pick'em scoring, Supabase persistence, Week 1 isolation, and cleanup.
