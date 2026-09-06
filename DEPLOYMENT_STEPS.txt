@@ -1,0 +1,60 @@
+TEAL'S SUNDAY PICK'EM — GATE 1 v0.1.1 DEPLOYMENT
+================================================
+
+IMPORTANT
+---------
+Use the EXISTING YAHTZEE Supabase project.
+Do NOT use the Fact Challenge project.
+Do NOT create, pause, delete, or modify Yahtzee tables.
+Pick'em lives in its own `pickem` schema.
+
+1) OPEN THE YAHTZEE SUPABASE PROJECT
+   Confirm you are in the project that already powers Yahtzee.
+
+2) RUN THE PICK'EM SQL
+   Open SQL Editor and run:
+   db/001_gate1_foundation.sql
+
+   This creates only objects under the `pickem` schema.
+   It does not alter the existing Yahtzee `public` tables.
+
+3) EXPOSE THE PICK'EM SCHEMA TO THE DATA API
+   Go to Project Settings -> Data API.
+   Find Exposed schemas.
+   Keep `public` in the list and ADD:
+   pickem
+   Save.
+
+   NOTE: Exposing a schema only makes it addressable by PostgREST. The migration
+   still revokes table/schema access from anon + authenticated and grants Pick'em
+   table access only to service_role.
+
+4) CREATE A NEW GITHUB REPOSITORY
+   Suggested name: teals-sunday-pickem
+   Upload the CONTENTS of this Gate 1 folder.
+   Do not upload a real .streamlit/secrets.toml file.
+
+5) STREAMLIT COMMUNITY CLOUD
+   Create a NEW Streamlit app from the Pick'em GitHub repo.
+   Main file: app.py
+
+6) ADD STREAMLIT SECRETS
+   Use .streamlit/secrets.toml.example as the field list.
+   SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY should be the SAME Yahtzee project
+   values, but entered only in Pick'em's Streamlit Secrets.
+   Generate two new long random peppers specifically for Pick'em.
+   Add the Commissioner username and 6-digit PIN chosen in planning.
+   IMPORTANT: those credentials are intentionally NOT embedded in this ZIP.
+
+7) FIRST GATE-1 TEST
+   A. Open Pick'em on your phone.
+   B. Create a new player with nickname + emoji + 4-digit PIN.
+   C. Sign out and sign back in.
+   D. Leave Keep me signed in this season checked; close/reopen and confirm restore.
+   E. Try the same nickname with different capitalization; it should be rejected.
+   F. Open Commissioner and verify the separate admin login.
+   G. Open the same player on a second device and confirm both can remain signed in.
+   H. Open Yahtzee and confirm it still behaves normally.
+
+8) STOP AFTER GATE 1
+   Do not start Gate 2 until all tests above pass on the deployed URL.

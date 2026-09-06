@@ -1,0 +1,19 @@
+Teal's Sunday Pick'em v0.1.1 — Gate 1 Shared-Supabase Isolation
+
+Commit message:
+v0.1.1: isolate Pick'em inside Yahtzee Supabase project
+
+Release notes:
+- Reworked Gate 1 for the Supabase free-tier two-project limit.
+- Pick'em now uses the existing Yahtzee Supabase project infrastructure.
+- Added a dedicated `pickem` Postgres schema; existing Yahtzee `public` tables are untouched.
+- Configured supabase-py to target `pickem` explicitly.
+- Added server-only schema/table grants and RLS defense in depth.
+- Updated deployment instructions to add `pickem` to Data API Exposed schemas.
+- Retained unique nickname + emoji + 4-digit PIN signup.
+- Retained salted/peppered PBKDF2 PIN hashing and 210-day remembered-device sessions.
+- Retained separate Commissioner authentication from Streamlit Secrets.
+- Retained automated tests and release guard.
+
+Gate 1 intentionally does NOT include weekly picks, NFL data, scoring, standings,
+or Commissioner utilities beyond authentication.

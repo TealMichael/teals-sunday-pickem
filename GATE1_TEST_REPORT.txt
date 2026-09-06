@@ -1,0 +1,47 @@
+TEAL'S SUNDAY PICK'EM — v0.1.1 GATE 1 TEST REPORT
+===================================================
+
+Automated checks run in build environment:
+- pytest: 10 passed
+- release_guard.py: PASS
+- Python bytecode compile: PASS
+- Sensitive literal scan: PASS (Commissioner PIN is not embedded in package)
+
+Covered by tests:
+- PIN hashing/verification and salt behavior
+- Opaque remembered-session token hashing
+- nickname normalization / case-insensitive uniqueness behavior
+- 4-digit player PIN validation
+- single-emoji validation including flags/ZWJ/skin-tone cases
+- player registration/login flow
+- remembered-session restore
+- temporary remembered-login backend failure does not invalidate the cookie
+
+Security / resilience checks built into Gate 1:
+- plaintext player PINs are never stored
+- persistent session secret is not stored plaintext in Supabase
+- remembered cookie is Secure + SameSite=Lax
+- season-long remembered login is revocable and supports multiple devices
+- Commissioner credentials come only from Streamlit secrets
+- Supabase tables are server-only behind RLS / service-role access
+- login attempts are throttled
+- remembered-login database failures do not automatically erase a valid cookie
+
+Deployment-only checks still required before Gate 2:
+- actual Streamlit runtime imports/install on Streamlit Community Cloud
+- new Supabase project migration executes successfully
+- create/sign-in/sign-out on deployed phone browser
+- remembered login survives browser close/reopen
+- second-device login stays active
+- Commissioner login works from Streamlit Secrets
+
+Note: the build container did not have Streamlit/Supabase/extra-streamlit-components installed
+and cannot download PyPI packages, so the deployed browser/runtime checks must be completed
+on Streamlit Community Cloud. This is why Gate 1 stops before Gate 2.
+
+Shared-Supabase isolation audit:
+- Supabase client targets schema='pickem'.
+- Migration creates no Pick'em tables in public.
+- Existing Yahtzee public schema is not altered.
+- anon/authenticated are revoked from pickem schema/tables.
+- service_role is the only application role granted Pick'em table access.
