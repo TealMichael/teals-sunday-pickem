@@ -1,8 +1,8 @@
 Commit message:
-v0.3.6 — Gate 3.5 CDN Box Score Fallback
+v0.3.7 — Gate 3.5 Direct Replay Event
 
 Commit changes:
-Replaces the blocked ESPN site API in production scoring with ESPN's CDN box-score feed, keeps nflverse as the schedule source, and hardens the real preseason replay.
+Removes preseason schedule discovery from the one-game replay diagnostic and targets the verified completed ESPN event directly, keeping production regular-season schedule logic unchanged.
 
 Tag:
-v0.3.6
+v0.3.7
