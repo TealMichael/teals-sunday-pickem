@@ -21,19 +21,43 @@ TARGET_LABEL = "Chicago Bears 24 at Tennessee Titans 15 — 2026 Preseason Week 
 TARGET_ESPN_EVENT_ID = "401874394"
 POSITION_ORDER = ("QB", "RB", "WR", "TE", "K")
 
-# Independent anchors from the published NFL recap. These are intentionally
-# small and stable: they prove the ESPN summary parser mapped the real box
-# score into our normalized fields correctly, rather than merely proving the
-# fantasy-scoring formula against synthetic data.
+# The ESPN CDN box-score rows can omit athlete.position. Production live scoring
+# does not depend on that field: Pick'em already knows each selected player's
+# position from the weekly pool and matches ESPN stats by team + player name.
+# The replay mirrors that production behavior by targeting five independently
+# known players from this completed game and applying our own position labels.
+REPLAY_SAMPLES = {
+    "QB": "Tyson Bagent",
+    "RB": "Roschon Johnson",
+    "WR": "Zavion Thomas",
+    "TE": "Kylen Granson",
+    "K": "Joey Slye",
+}
+
+# Independent anchors from published game recaps / player logs. These span all
+# five Pick'em positions and prove the CDN parser mapped real box-score values
+# into our normalized fields rather than merely returning player names.
 ANCHORS = {
     "Tyson Bagent": {
         "passing_yards": 208.0,
         "passing_tds": 2.0,
     },
+    "Roschon Johnson": {
+        "rushing_yards": 52.0,
+        "rushing_tds": 1.0,
+    },
     "Zavion Thomas": {
         "receptions": 5.0,
         "receiving_yards": 140.0,
         "receiving_tds": 1.0,
+    },
+    "Kylen Granson": {
+        "receptions": 3.0,
+        "receiving_yards": 39.0,
+    },
+    "Joey Slye": {
+        "field_goals_made": 3.0,
+        "extra_points_made": 0.0,
     },
 }
 
@@ -94,23 +118,25 @@ def _has_meaningful_stats(row: dict[str, Any], position: str) -> bool:
 
 
 def _select_real_samples(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Select the fixed real replay players without trusting ESPN position.
+
+    ESPN's CDN box-score payload sometimes omits athlete.position. That is not
+    a production problem because the weekly Pick'em pool is the source of truth
+    for position. The replay intentionally mirrors that contract.
+    """
+    by_name = {normalize_name(row.get("player_name")): row for row in rows}
     selected: dict[str, dict[str, Any]] = {}
-    for position in POSITION_ORDER:
-        candidates = [
-            row for row in rows
-            if str(row.get("position") or "").upper() == position and _has_meaningful_stats(row, position)
-        ]
-        if not candidates:
+    for position, player_name in REPLAY_SAMPLES.items():
+        row = by_name.get(normalize_name(player_name))
+        if not row:
             raise PreseasonReplayError(
-                f"The real preseason box score did not expose a usable {position} stat line."
+                f"The real preseason box score did not include expected {position} sample {player_name}."
             )
-        # Prefer the player with the largest absolute scoring footprint so the
-        # replay exercises meaningful values instead of a token 0.1-point line.
-        candidates.sort(
-            key=lambda row: abs(score_stat_line(row.get("stats") or {}, position).points),
-            reverse=True,
-        )
-        selected[position] = candidates[0]
+        if not _has_meaningful_stats(row, position):
+            raise PreseasonReplayError(
+                f"The real preseason box score did not expose usable {position} stats for {player_name}."
+            )
+        selected[position] = row
     return selected
 
 

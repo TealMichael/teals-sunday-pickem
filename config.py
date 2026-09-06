@@ -2,7 +2,7 @@ from __future__ import annotations
 
 APP_NAME = "Teal's Sunday Pick'em"
 APP_TAGLINE = "Pick five. Own Sunday."
-APP_VERSION = "0.3.7"
+APP_VERSION = "0.3.8"
 TIMEZONE_NAME = "America/New_York"
 
 PLAYER_PIN_LENGTH = 4
