@@ -573,12 +573,19 @@ def _locked_home(store, week: dict, player: dict, pool: list[dict]) -> None:
         st.caption("Your five are set for Sunday. Live scoring arrives in the next build gate.")
 
 
-def render_player_game(store, player: dict, on_sign_out=None) -> None:
+def render_player_game(
+    store,
+    player: dict,
+    on_sign_out=None,
+    *,
+    allow_demo_week: bool = False,
+    skip_onboarding: bool = False,
+) -> None:
     if st.session_state.get("gate4_demo"):
         render_gate4_demo(player)
         return
 
-    if _onboarding(store, player):
+    if not skip_onboarding and _onboarding(store, player):
         return
 
     if "builder_mode" not in st.session_state:
@@ -588,9 +595,18 @@ def render_player_game(store, player: dict, on_sign_out=None) -> None:
     if "use_demo_week" not in st.session_state:
         st.session_state.use_demo_week = False
 
+    # Gate 2's synthetic test week is Commissioner-only in production. Any
+    # stale browser session left inside the old public preview is forced back
+    # to the real week before rendering the normal player app.
+    if not allow_demo_week and st.session_state.get("use_demo_week"):
+        st.session_state.use_demo_week = False
+        st.session_state.builder_mode = "home"
+        st.session_state.builder_position = None
+        st.session_state.pop("builder_return_mode", None)
+
     real_week = store.get_real_week()
-    demo_week = store.get_demo_week()
-    week = demo_week if st.session_state.use_demo_week and demo_week else real_week
+    demo_week = store.get_demo_week() if allow_demo_week else None
+    week = demo_week if allow_demo_week and st.session_state.use_demo_week and demo_week else real_week
 
     if not week:
         st.info("The next Sunday week is being prepared.")
@@ -617,23 +633,20 @@ def render_player_game(store, player: dict, on_sign_out=None) -> None:
 
     if bool(week.get("is_demo")):
         st.markdown('<div class="status-test"><strong>Gate 2 test week.</strong> Picks here are isolated and never count toward Week 1.</div>', unsafe_allow_html=True)
-        if st.button("Exit Test Week", use_container_width=True):
+        if st.button("Exit Gate 2 Test Week", use_container_width=True):
             st.session_state.use_demo_week = False
             st.session_state.builder_mode = "home"
             st.session_state.builder_position = None
             st.session_state.pop("builder_return_mode", None)
+            if st.session_state.get("commish"):
+                st.session_state.gate2_demo = False
+                st.session_state.pop("gate2_demo_player_id", None)
             st.rerun()
     elif phase == "upcoming":
         label = str(week.get("label") or f"Week {week.get('nfl_week', '')}")
         st.markdown(f"### {label} opens Tuesday")
         _countdown(str(week["opens_at"]), "New picks available in")
         st.caption(et_label(week.get("opens_at")))
-        if demo_week and st.button("Preview Gate 2 Test Week", use_container_width=True):
-            st.session_state.use_demo_week = True
-            st.session_state.builder_mode = "home"
-            st.session_state.builder_position = None
-            st.session_state.pop("builder_return_mode", None)
-            st.rerun()
         return
 
     if phase == "locked" and not bool(week.get("is_demo")):

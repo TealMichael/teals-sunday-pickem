@@ -21,5 +21,7 @@ def test_demo_accepts_synthetic_identity_and_clears_nav_state():
 
 def test_weekly_ui_deploy_reload_guard_present():
     text = (ROOT / "app.py").read_text()
-    assert '"on_sign_out" not in inspect.signature(_weekly_ui.render_player_game).parameters' in text
+    assert '_weekly_params = inspect.signature(_weekly_ui.render_player_game).parameters' in text
+    assert '"on_sign_out" not in _weekly_params' in text
+    assert '"allow_demo_week" not in _weekly_params' in text
     assert "importlib.reload(_weekly_ui)" in text

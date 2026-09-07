@@ -104,7 +104,42 @@ button[kind="primary"], [data-testid="stBaseButton-primary"], [data-testid="stBa
 [data-testid="stTextInput"] input { min-height:44px; border-radius:12px; background:#F3F5F7 !important; color:var(--ink) !important; -webkit-text-fill-color:var(--ink) !important; }
 [data-testid="stTextInput"] input::placeholder { color:#8A969F !important; }
 [data-testid="stCheckbox"] label, [data-testid="stWidgetLabel"] { color:var(--ink) !important; }
-[data-testid="stExpander"] { background:var(--surface) !important; }
+
+/* Keep the product visually light even when the phone/browser is in dark mode.
+   Streamlit renders popovers/menus in portals outside the normal .stApp tree,
+   so these surfaces need their own explicit light-theme contract. */
+[data-testid="stExpander"],
+[data-testid="stExpander"] details,
+[data-testid="stExpander"] summary,
+[data-testid="stExpanderDetails"],
+[data-testid="stPopoverBody"],
+[data-baseweb="popover"],
+[data-baseweb="popover"] > div,
+[data-baseweb="menu"],
+[role="dialog"] {
+  background:#FFFFFF !important;
+  color:var(--ink) !important;
+  color-scheme:light !important;
+}
+[data-testid="stExpander"] *,
+[data-testid="stPopoverBody"] *,
+[data-baseweb="popover"] *,
+[data-baseweb="menu"] *,
+[role="dialog"] * {
+  color:var(--ink) !important;
+  -webkit-text-fill-color:var(--ink) !important;
+}
+[data-baseweb="select"] > div,
+[data-baseweb="input"] > div {
+  background:#FFFFFF !important;
+  color:var(--ink) !important;
+  color-scheme:light !important;
+}
+
+/* The public app does not need Streamlit's in-app developer toolbar.
+   Community Cloud's owner-only Manage App control is host chrome and may still
+   appear, so the mobile nav also reserves a safe noninteractive zone for it. */
+[data-testid="stToolbar"], .stDeployButton { visibility:hidden !important; }
 hr { border-color:var(--line); }
 
 /* Gate 4 live Sunday / social UI */
@@ -262,7 +297,26 @@ div[class*="st-key-gate4_nav"] button:focus-visible { outline:2px solid #58AAA0 
   .hero { padding-top:.65rem; }
   .hero-kicker { line-height:1.5; padding-top:.18rem; }
   .hero-title { font-size:1.64rem; }
-  div[class*="st-key-gate4_nav"] { width:calc(100vw - .7rem) !important; bottom:calc(.35rem + env(safe-area-inset-bottom, 0px)) !important; border-radius:21px; }
+  div[class*="st-key-gate4_nav"] {
+    width:calc(100vw - .7rem) !important;
+    bottom:calc(.35rem + env(safe-area-inset-bottom, 0px)) !important;
+    border-radius:21px;
+    box-sizing:border-box !important;
+    /* Community Cloud shows an owner-only Manage App/avatar control in the
+       lower-right. Reserve that area so Profile stays tappable for the owner,
+       while normal viewers simply see a subtle branded end-cap. */
+    padding:.3rem 7rem .3rem .4rem !important;
+  }
+  div[class*="st-key-gate4_nav"]::after {
+    content:"🏈";
+    position:absolute;
+    right:2rem;
+    top:50%;
+    transform:translateY(-50%);
+    opacity:.18;
+    font-size:1.15rem;
+    pointer-events:none;
+  }
   div[class*="st-key-gate4_nav"] button { min-height:56px !important; }
   div[class*="st-key-gate4_nav"] button p { font-size:.63rem !important; }
   div[class*="st-key-gate4_nav"] button p span { min-width:38px !important; height:24px !important; font-size:1.16rem !important; }

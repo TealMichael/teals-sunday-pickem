@@ -1,3 +1,5 @@
-v1.0.0 — Week 1 Release
+v1.0.1 — Public Test-Week Isolation Hotfix
 
-Production release for Teal's Sunday Pick'em. Locks the final launch-ready app after Gates 1-6, adds the optimized v1 worker schedule, increases Sunday injury/status and live-score cadence to every 15 minutes beginning in the 11 AM ET window, and keeps sparse weekday polling plus Monday reconciliation retries. No SQL migration or new secrets are required.
+Removes the synthetic Gate 2 test week from the public player experience, automatically recovers stale demo sessions to the real week, and keeps the lineup-builder demo available only through Commissioner Diagnostics.
+
+Mobile launch polish: owner-safe bottom navigation and dark-mode-safe help/overlay surfaces.

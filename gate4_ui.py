@@ -299,13 +299,9 @@ def render_leaderboards(store, week: dict[str, Any], player: dict[str, Any], pha
     if not results:
         st.caption("Season points begin after Week 1 becomes FINAL on Monday.")
     _render_season_rows(standings, str(player.get("id")))
-    popover = getattr(st, "popover", None)
-    if popover:
-        with popover("ⓘ How season points work"):
-            st.write("1st 12 • 2nd 9 • 3rd 7 • 4th 6 • 5th 5 • 6th 4 • 7th 3 • 8th 2 • 9th 1 • 10th+ 0")
-            st.caption("Ties receive the full points for that rank; the next rank skips appropriately.")
-    else:
-        st.caption("ⓘ Season points: 12–9–7–6–5–4–3–2–1 for 1st through 9th. Ties receive the full points for that rank.")
+    with st.expander("ⓘ How season points work"):
+        st.write("1st 12 • 2nd 9 • 3rd 7 • 4th 6 • 5th 5 • 6th 4 • 7th 3 • 8th 2 • 9th 1 • 10th+ 0")
+        st.caption("Ties receive the full points for that rank; the next rank skips appropriately.")
 
 def render_history(store, season: int) -> None:
     st.markdown("### History")

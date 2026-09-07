@@ -26,7 +26,8 @@ import gate5_ui as _gate5_ui
 # and lacks the sign-out callback parameter, reload it from the just-deployed
 # file before binding the function. This is a deployment-safety guard, not a
 # normal per-rerun reload.
-if "on_sign_out" not in inspect.signature(_weekly_ui.render_player_game).parameters:
+_weekly_params = inspect.signature(_weekly_ui.render_player_game).parameters
+if "on_sign_out" not in _weekly_params or "allow_demo_week" not in _weekly_params:
     _weekly_ui = importlib.reload(_weekly_ui)
 render_player_game = _weekly_ui.render_player_game
 
@@ -465,6 +466,27 @@ if not st.session_state.player and not st.session_state.remember_restore_checked
 
 
 if st.session_state.commish:
+    # Gate 2's isolated lineup-builder test is Commissioner-only in v1.0.1.
+    # It can use a selected real account as the identity while all picks remain
+    # confined to the synthetic Gate 2 Test Week.
+    if st.session_state.get("gate2_demo"):
+        demo_player_id = str(st.session_state.get("gate2_demo_player_id") or "")
+        demo_player = store.get_player_by_id(demo_player_id) if demo_player_id else None
+        if demo_player:
+            st.info("Commissioner-only Gate 2 test week. These picks are isolated and never affect the real NFL week.")
+            st.session_state.use_demo_week = True
+            render_player_game(
+                store,
+                demo_player,
+                allow_demo_week=True,
+                skip_onboarding=True,
+            )
+        else:
+            st.session_state.gate2_demo = False
+            st.session_state.pop("gate2_demo_player_id", None)
+            st.error("The selected Gate 2 demo player is no longer available.")
+        st.stop()
+
     # Gate 4 demo remains an isolated Commissioner diagnostic. Gate 5 owns the
     # real admin dashboard and never requires a player login.
     if st.session_state.get("gate4_demo"):
@@ -478,20 +500,13 @@ if st.session_state.commish:
     st.stop()
 
 if st.session_state.player:
+    # Public/player sessions may never remain inside the synthetic Gate 2 week.
+    st.session_state.gate2_demo = False
+    st.session_state.pop("gate2_demo_player_id", None)
     try:
         render_player_game(store, st.session_state.player, on_sign_out=_sign_out_submit)
     except Exception as exc:
         _friendly_runtime_error("player", exc)
-    # The normal Gate 4 app keeps Sign Out in Profile. Gate 2's isolated test
-    # week has no Gate 4 navigation, so retain a local escape there.
-    if st.session_state.get("use_demo_week"):
-        st.button(
-            "Sign Out",
-            type="secondary",
-            use_container_width=True,
-            disabled=bool(_storage_sync_pending and _storage_sync_action == "set"),
-            on_click=_sign_out_submit,
-        )
     st.stop()
 
 player_login_ui()

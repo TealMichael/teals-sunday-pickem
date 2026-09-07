@@ -21,7 +21,7 @@ from weekly import POSITIONS, et_label, parse_timestamp
 from gate6_ui import render_launch_readiness
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 2
+GATE5_UI_SCHEMA_VERSION = 3
 
 
 def _status_label(row: dict[str, Any]) -> str:
@@ -332,6 +332,23 @@ def _render_corrections(store, week: dict[str, Any]) -> None:
 
 def _render_diagnostics(store) -> None:
     st.markdown("#### Diagnostics & Demos")
+
+    players = store.get_registered_players()
+    if players:
+        with st.expander("Gate 2 lineup-builder demo", expanded=False):
+            st.caption("Commissioner-only. Uses the isolated synthetic test week and never touches the real NFL week.")
+            labels = [f"{row.get('emoji') or '👤'} {row.get('nickname') or 'Player'}" for row in players]
+            by_label = {label: str(row["id"]) for label, row in zip(labels, players)}
+            selected_label = st.selectbox("Demo as player", labels, key="g5_gate2_demo_player")
+            if st.button("Preview Gate 2 Lineup Builder", use_container_width=True, key="g5_gate2_demo"):
+                st.session_state.gate2_demo = True
+                st.session_state.gate2_demo_player_id = by_label[selected_label]
+                st.session_state.use_demo_week = True
+                st.session_state.builder_mode = "home"
+                st.session_state.builder_position = None
+                st.session_state.pop("builder_return_mode", None)
+                st.rerun()
+
     d1, d2 = st.columns(2)
     with d1:
         if st.button("Run Gate 3 Data Check", use_container_width=True, key="g5_gate3_data"):
