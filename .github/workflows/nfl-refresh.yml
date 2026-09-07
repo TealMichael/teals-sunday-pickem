@@ -2,7 +2,7 @@ name: Pickem NFL Refresh
 
 on:
   schedule:
-    - cron: "*/30 0,7-23 * * *"
+    - cron: "*/30 0-1,7-23 * * *"
       timezone: "America/New_York"
   workflow_dispatch:
     inputs:
@@ -32,6 +32,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: pickem-nfl-refresh
+  cancel-in-progress: false
 
 jobs:
   refresh:
