@@ -2,7 +2,30 @@ name: Pickem NFL Refresh
 
 on:
   schedule:
-    - cron: "*/30 0-1,7-23 * * *"
+    # Tuesday-Thursday: routine injury/status maintenance every ~6 hours.
+    - cron: "7 1,7,13,19 * * 2-4"
+      timezone: "America/New_York"
+    # Tuesday noon: dedicated publication pass so the weekly five open on time.
+    - cron: "7 12 * * 2"
+      timezone: "America/New_York"
+    # Friday: injury/status maintenance every ~4 hours.
+    - cron: "7 1,5,9,13,17,21 * * 5"
+      timezone: "America/New_York"
+    # Saturday: injury/status maintenance every ~3 hours.
+    - cron: "7 1,4,7,10,13,16,19,22 * * 6"
+      timezone: "America/New_York"
+    # Sunday morning: hourly checks before the final two-hour window.
+    - cron: "7 8-10 * * 0"
+      timezone: "America/New_York"
+    # Sunday 11 AM-midnight: every 15 minutes for injuries, then live scoring after lock.
+    # The :07/:22/:37/:52 offsets avoid GitHub's top-of-hour congestion.
+    - cron: "7,22,37,52 11-23 * * 0"
+      timezone: "America/New_York"
+    # Long SNF/overtime buffer after midnight Monday.
+    - cron: "7,22,37,52 0-1 * * 1"
+      timezone: "America/New_York"
+    # Monday final reconciliation: retry hourly if official data is not settled at 9 AM.
+    - cron: "7 9-13 * * 1"
       timezone: "America/New_York"
   workflow_dispatch:
     inputs:
