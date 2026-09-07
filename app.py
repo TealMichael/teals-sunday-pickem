@@ -27,14 +27,18 @@ import gate5_ui as _gate5_ui
 # file before binding the function. This is a deployment-safety guard, not a
 # normal per-rerun reload.
 _weekly_params = inspect.signature(_weekly_ui.render_player_game).parameters
-if "on_sign_out" not in _weekly_params or "allow_demo_week" not in _weekly_params:
+if (
+    getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 2
+    or "on_sign_out" not in _weekly_params
+    or "allow_demo_week" not in _weekly_params
+):
     _weekly_ui = importlib.reload(_weekly_ui)
 render_player_game = _weekly_ui.render_player_game
 
 # Gate 4 navigation changed structurally in v0.4.4/v0.4.5. Streamlit Cloud can
 # occasionally keep an older helper module resident across a multi-file deploy,
 # so reload any pre-simplification Gate 4 module before binding the demo renderer.
-if getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 2:
+if getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 3:
     _gate4_ui = importlib.reload(_gate4_ui)
 render_gate4_demo = _gate4_ui.render_gate4_demo
 
@@ -466,7 +470,7 @@ if not st.session_state.player and not st.session_state.remember_restore_checked
 
 
 if st.session_state.commish:
-    # Gate 2's isolated lineup-builder test is Commissioner-only in v1.0.1.
+    # Gate 2's isolated lineup-builder test remains Commissioner-only in v1.0.2.
     # It can use a selected real account as the identity while all picks remain
     # confined to the synthetic Gate 2 Test Week.
     if st.session_state.get("gate2_demo"):

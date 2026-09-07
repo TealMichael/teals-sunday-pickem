@@ -10,6 +10,7 @@ ET = ZoneInfo(TIMEZONE_NAME)
 POSITIONS = ("QB", "RB", "WR", "TE", "K")
 VISIBLE_POOL_SIZE = 5
 HIDDEN_RANKING_SIZE = 10
+WEEKLY_LOGIC_SCHEMA_VERSION = 2
 
 
 def parse_timestamp(value: str | datetime | None) -> datetime | None:
@@ -95,6 +96,42 @@ def required_backup_positions(picks: list[dict], pool_by_id: dict[str, dict]) ->
         if not backup or str(backup.get("availability_status") or "HEALTHY").upper() == "OUT":
             needs.append(pos)
     return [pos for pos in POSITIONS if pos in needs]
+
+
+def questionable_starter_positions(picks: list[dict], pool_by_id: dict[str, dict]) -> list[str]:
+    """Return every position whose selected starter is currently Questionable.
+
+    This intentionally differs from ``required_backup_positions``: a player can
+    remain Questionable even after a valid emergency backup has been saved. The
+    Sunday status card needs both facts so it can say "Questionable — backup
+    ready" instead of hiding the injury flag once the lineup is technically
+    complete.
+    """
+    questionable: list[str] = []
+    for pos, pick in picks_by_position(picks).items():
+        starter = pool_by_id.get(str(pick.get("pool_player_id")))
+        if starter and safe_status(starter.get("availability_status")) == "QUESTIONABLE":
+            questionable.append(pos)
+    return [pos for pos in POSITIONS if pos in questionable]
+
+
+def lineup_readiness(picks: list[dict], pool_by_id: dict[str, dict]) -> dict:
+    """Summarize lineup health without changing any save/lock behavior."""
+    chosen, total = lineup_progress(picks)
+    by_pos = picks_by_position(picks)
+    missing = [pos for pos in POSITIONS if pos not in by_pos]
+    questionable = questionable_starter_positions(picks, pool_by_id)
+    needs_backup = required_backup_positions(picks, pool_by_id)
+    unavailable = unavailable_starter_positions(picks, pool_by_id)
+    return {
+        "chosen": chosen,
+        "total": total,
+        "missing": missing,
+        "questionable": questionable,
+        "needs_backup": needs_backup,
+        "unavailable": unavailable,
+        "ready": chosen == total and not needs_backup and not unavailable,
+    }
 
 
 def unavailable_starter_positions(picks: list[dict], pool_by_id: dict[str, dict]) -> list[str]:

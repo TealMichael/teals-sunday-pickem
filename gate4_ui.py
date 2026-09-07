@@ -1,23 +1,32 @@
 from __future__ import annotations
 
+import importlib
+import json
 from html import escape
 from datetime import datetime, timezone
 from typing import Any, Callable
 
 import streamlit as st
 
+import gate4 as _gate4
+
+if getattr(_gate4, "GATE4_LOGIC_SCHEMA_VERSION", 0) < 2:
+    _gate4 = importlib.reload(_gate4)
+
 from config import APP_VERSION, NFL_SEASON
 from gate4 import (
     add_zero_point_players,
     build_season_standings,
+    build_share_summary,
     build_storylines,
+    build_weekly_recap,
     build_weekly_leaderboard,
     profile_stats,
 )
 from validation import validate_single_emoji
 from weekly import parse_timestamp
 
-GATE4_UI_SCHEMA_VERSION = 2
+GATE4_UI_SCHEMA_VERSION = 3
 
 
 def _ordinal(rank: int) -> str:
@@ -156,6 +165,125 @@ def _storylines(bundle: dict[str, Any], leaderboard: list[dict[str, Any]]) -> No
     st.markdown(f'<div class="story-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
+def _copy_recap_button(text: str, week_id: str) -> None:
+    """Small first-party clipboard helper with a legacy fallback for phones."""
+    payload = json.dumps(str(text))
+    safe_id = "".join(ch for ch in str(week_id) if ch.isalnum())[:32] or "week"
+    st.components.v1.html(
+        f"""
+<div class="copy-wrap">
+  <button id="copy-{safe_id}" type="button">📋 Copy recap for group chat</button>
+  <span id="copy-status-{safe_id}" aria-live="polite"></span>
+</div>
+<style>
+  :root {{ color-scheme:light; }}
+  html,body {{ margin:0; padding:0; background:transparent; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+  .copy-wrap {{ display:flex; align-items:center; gap:10px; width:100%; }}
+  button {{ flex:1; min-height:44px; border:1px solid #0F766E; border-radius:12px; background:#0F766E; color:#fff; font-size:14px; font-weight:800; cursor:pointer; }}
+  span {{ color:#155E56; font-size:12px; font-weight:750; white-space:nowrap; }}
+</style>
+<script>
+const text = {payload};
+const button = document.getElementById("copy-{safe_id}");
+const status = document.getElementById("copy-status-{safe_id}");
+async function copyText() {{
+  let copied = false;
+  try {{ await navigator.clipboard.writeText(text); copied = true; }} catch (err) {{}}
+  if (!copied) {{
+    const area = document.createElement("textarea");
+    area.value = text; area.style.position = "fixed"; area.style.opacity = "0";
+    document.body.appendChild(area); area.focus(); area.select();
+    try {{ copied = document.execCommand("copy"); }} catch (err) {{ copied = false; }}
+    document.body.removeChild(area);
+  }}
+  status.textContent = copied ? "Copied!" : "Select the text below to copy.";
+  if (copied) setTimeout(() => status.textContent = "", 1800);
+}}
+button.addEventListener("click", copyText);
+</script>
+        """,
+        height=50,
+    )
+
+
+def _weekly_recap(store, week: dict[str, Any], bundle: dict[str, Any], leaderboard: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    season_results = store.get_weekly_results(season=int(week.get("season") or NFL_SEASON))
+    season = add_zero_point_players(build_season_standings(season_results), store.get_registered_players())
+    recap = build_weekly_recap(
+        bundle,
+        leaderboard,
+        season_results,
+        current_week=int(week.get("nfl_week") or 0),
+    )
+
+    champions = list(recap.get("champions") or [])
+    if champions:
+        names = " + ".join(str(row.get("nickname") or "Champion") for row in champions)
+        score = float(champions[0].get("score") or 0)
+        title = "Co-Champions" if len(champions) > 1 else "Champion"
+        st.markdown(
+            f'<div class="recap-hero"><div class="recap-kicker">🏆 WEEKLY {escape(title.upper())}</div><div class="recap-champion">{escape(names)}</div><div class="recap-score">{score:.1f} points</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    cards: list[str] = []
+    popular = recap.get("most_popular")
+    if popular and popular.get("player_name"):
+        cards.append(
+            f'<div class="recap-card"><div class="story-icon">🔥</div><div class="story-title">Most Popular</div><div class="story-main">{escape(str(popular["player_name"]))}</div><div class="small">{int(popular["count"])} of {int(popular["total"])} lineups</div></div>'
+        )
+
+    solo = recap.get("boldest_solo")
+    if solo:
+        cards.append(
+            f'<div class="recap-card"><div class="story-icon">🦄</div><div class="story-title">Boldest Solo</div><div class="story-main">{escape(str(solo["nickname"]))}</div><div class="small">Only one on {escape(str(solo["player_name"]))} • {float(solo["points"]):.1f} pts</div></div>'
+        )
+    else:
+        cards.append('<div class="recap-card"><div class="story-icon">🦄</div><div class="story-title">Boldest Solo</div><div class="small">No solo picks this week.</div></div>')
+
+    closest = recap.get("closest_finish")
+    if closest:
+        if closest.get("tied"):
+            closest_main = f'{escape(str(closest["upper"]))} + {escape(str(closest["lower"]))}'
+            closest_small = f'Dead heat at {float(closest["upper_score"]):.1f}'
+        else:
+            closest_main = f'{escape(str(closest["upper"]))} over {escape(str(closest["lower"]))}'
+            closest_small = f'Just {float(closest["gap"]):.1f} points apart'
+        cards.append(
+            f'<div class="recap-card"><div class="story-icon">🤏</div><div class="story-title">Closest Finish</div><div class="story-main">{closest_main}</div><div class="small">{closest_small}</div></div>'
+        )
+
+    same = recap.get("same_brain") or []
+    if same:
+        cards.append(
+            f'<div class="recap-card"><div class="story-icon">👯</div><div class="story-title">Same Brain</div><div class="story-main">{escape(" + ".join(str(name) for name in same[:3]))}</div><div class="small">Picked the exact same five</div></div>'
+        )
+    else:
+        cards.append('<div class="recap-card"><div class="story-icon">👯</div><div class="story-title">Same Brain</div><div class="small">No identical lineups this week.</div></div>')
+
+    mover = recap.get("biggest_mover")
+    if mover and mover.get("movers"):
+        names = " + ".join(str(row.get("nickname") or "Player") for row in mover["movers"][:3])
+        places = int(mover.get("places") or 0)
+        cards.append(
+            f'<div class="recap-card"><div class="story-icon">📈</div><div class="story-title">Biggest Mover</div><div class="story-main">{escape(names)}</div><div class="small">Up {places} place{"s" if places != 1 else ""} in the season race</div></div>'
+        )
+    elif int(week.get("nfl_week") or 0) <= 1:
+        cards.append('<div class="recap-card"><div class="story-icon">📈</div><div class="story-title">Season Race</div><div class="story-main">And we’re off</div><div class="small">Week 1 sets the starting order.</div></div>')
+    else:
+        cards.append('<div class="recap-card"><div class="story-icon">📈</div><div class="story-title">Biggest Mover</div><div class="small">No one climbed the season standings this week.</div></div>')
+
+    st.markdown("### Week in Review")
+    st.markdown(f'<div class="recap-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
+
+    share_text = build_share_summary(week, recap, leaderboard, season)
+    with st.expander("📤 Share Results", expanded=False):
+        st.caption("Copy this clean recap into the group chat.")
+        _copy_recap_button(share_text, str(week.get("id") or week.get("nfl_week") or "week"))
+        st.code(share_text, language=None)
+    return season, recap
+
+
 def _render_roster_detail(row: dict[str, Any], current_player_id: str) -> None:
     is_self = str(row.get("player_id")) == str(current_player_id)
     with st.container(border=True):
@@ -239,13 +367,14 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
         st.caption("Monday reconciliation is complete. These results are FINAL.")
     else:
         st.caption("Scores refresh automatically during Sunday games.")
-    if show_storylines:
+    season: list[dict[str, Any]] = []
+    if data_status == "FINAL":
+        season, _ = _weekly_recap(store, week, bundle, leaderboard)
+    elif show_storylines:
         _storylines(bundle, leaderboard)
     st.markdown("### Standings")
     _leaderboard_rows(leaderboard, str(player["id"]), detail=True)
     if data_status == "FINAL":
-        season_results = store.get_weekly_results(season=int(week.get("season") or NFL_SEASON))
-        season = add_zero_point_players(build_season_standings(season_results), store.get_registered_players())
         if season:
             leader = season[0]
             own = next((row for row in season if str(row.get("player_id")) == str(player.get("id"))), None)

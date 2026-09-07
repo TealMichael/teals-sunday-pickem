@@ -6,6 +6,7 @@ from typing import Any, Iterable
 from weekly import POSITIONS
 
 SEASON_POINTS = {1: 12, 2: 9, 3: 7, 4: 6, 5: 5, 6: 4, 7: 3, 8: 2, 9: 1}
+GATE4_LOGIC_SCHEMA_VERSION = 2
 
 
 def _score(row: dict[str, Any] | None) -> float:
@@ -179,6 +180,152 @@ def build_storylines(bundle: dict[str, Any], leaderboard: list[dict[str, Any]]) 
             same_brain.append(sorted(names, key=str.casefold))
     same_brain.sort(key=lambda names: (-len(names), [name.casefold() for name in names]))
     return {"most_popular": most_popular, "went_alone": alone, "same_brain": same_brain}
+
+
+def build_weekly_recap(
+    bundle: dict[str, Any],
+    leaderboard: list[dict[str, Any]],
+    season_results: list[dict[str, Any]] | None = None,
+    *,
+    current_week: int | None = None,
+) -> dict[str, Any]:
+    """Build the Monday recap from data the app already owns.
+
+    No recap fields are persisted. That keeps v1.0.2 schema-free and makes the
+    recap a presentation layer over the finalized current week.
+    """
+    story = build_storylines(bundle, leaderboard)
+    pool = {str(row.get("id")): row for row in bundle.get("pool") or []}
+    picks = list(bundle.get("picks") or [])
+    players_by_lineup = {str(row.get("lineup_id")): row for row in leaderboard}
+
+    champions = [row for row in leaderboard if int(row.get("rank") or 0) == 1]
+
+    # Closest adjacent finish in the final standings. Ignore an all-zero pair so
+    # two incomplete lineups do not become the featured "closest finish."
+    closest = None
+    for upper, lower in zip(leaderboard, leaderboard[1:]):
+        upper_score = float(upper.get("score") or 0)
+        lower_score = float(lower.get("score") or 0)
+        if upper_score == 0 and lower_score == 0:
+            continue
+        gap = round(abs(upper_score - lower_score), 1)
+        candidate = {
+            "upper": str(upper.get("nickname") or "Player"),
+            "lower": str(lower.get("nickname") or "Player"),
+            "upper_score": upper_score,
+            "lower_score": lower_score,
+            "gap": gap,
+            "tied": gap == 0,
+        }
+        if closest is None or gap < float(closest["gap"]):
+            closest = candidate
+
+    # "Boldest solo" = highest-scoring starter selected by exactly one lineup.
+    pick_counts: Counter[str] = Counter(str(p.get("pool_player_id")) for p in picks if p.get("pool_player_id"))
+    solo_candidates: list[dict[str, Any]] = []
+    for pick in picks:
+        pool_id = str(pick.get("pool_player_id") or "")
+        if not pool_id or pick_counts.get(pool_id) != 1:
+            continue
+        owner = players_by_lineup.get(str(pick.get("lineup_id")))
+        player_row = pool.get(pool_id)
+        if not owner or not player_row:
+            continue
+        solo_candidates.append({
+            "nickname": str(owner.get("nickname") or "Player"),
+            "player_name": str(player_row.get("player_name") or "Player"),
+            "points": round(_score(player_row), 1),
+        })
+    solo_candidates.sort(key=lambda row: (-float(row["points"]), str(row["player_name"]).casefold(), str(row["nickname"]).casefold()))
+    boldest_solo = solo_candidates[0] if solo_candidates else None
+
+    # Rank movement compares the standings entering this week with the standings
+    # after this week. New entrants are not treated as having "moved" from an
+    # invented prior rank.
+    biggest_mover = None
+    if season_results and current_week and int(current_week) > 1:
+        previous_results = [r for r in season_results if int(r.get("nfl_week") or 0) < int(current_week)]
+        through_current = [r for r in season_results if int(r.get("nfl_week") or 0) <= int(current_week)]
+        before = {str(r.get("player_id")): r for r in build_season_standings(previous_results) if r.get("player_id")}
+        after = {str(r.get("player_id")): r for r in build_season_standings(through_current) if r.get("player_id")}
+        movers: list[dict[str, Any]] = []
+        for player_id, old in before.items():
+            new = after.get(player_id)
+            if not new:
+                continue
+            places = int(old.get("rank") or 0) - int(new.get("rank") or 0)
+            if places > 0:
+                movers.append({
+                    "nickname": str(new.get("nickname") or "Player"),
+                    "places": places,
+                    "from_rank": int(old.get("rank") or 0),
+                    "to_rank": int(new.get("rank") or 0),
+                })
+        if movers:
+            best = max(int(row["places"]) for row in movers)
+            tied = [row for row in movers if int(row["places"]) == best]
+            tied.sort(key=lambda row: str(row["nickname"]).casefold())
+            biggest_mover = {"places": best, "movers": tied}
+
+    return {
+        "champions": champions,
+        "most_popular": story.get("most_popular"),
+        "boldest_solo": boldest_solo,
+        "closest_finish": closest,
+        "same_brain": (story.get("same_brain") or [None])[0],
+        "biggest_mover": biggest_mover,
+    }
+
+
+def build_share_summary(
+    week: dict[str, Any],
+    recap: dict[str, Any],
+    leaderboard: list[dict[str, Any]],
+    season_standings: list[dict[str, Any]] | None = None,
+) -> str:
+    """Return a compact group-chat-friendly recap."""
+    label = str(week.get("label") or f"Week {week.get('nfl_week', '')}").strip()
+    lines = [f"🏈 Teal's Sunday Pick'em — {label} FINAL"]
+
+    champions = list(recap.get("champions") or [])
+    if champions:
+        names = " + ".join(str(row.get("nickname") or "Champion") for row in champions)
+        score = float(champions[0].get("score") or 0)
+        lines.append(f"🏆 Champion{'s' if len(champions) > 1 else ''}: {names} — {score:.1f} pts")
+
+    podium = leaderboard[:3]
+    if podium:
+        lines.append("Final: " + " • ".join(f"{int(row.get('rank') or 0)}. {row.get('nickname','Player')} {float(row.get('score') or 0):.1f}" for row in podium))
+
+    popular = recap.get("most_popular")
+    if popular and popular.get("player_name"):
+        lines.append(f"🔥 Most popular: {popular['player_name']} ({int(popular.get('count') or 0)}/{int(popular.get('total') or 0)} lineups)")
+
+    solo = recap.get("boldest_solo")
+    if solo:
+        lines.append(f"🦄 Boldest solo: {solo['nickname']} on {solo['player_name']} — {float(solo['points']):.1f} pts")
+
+    closest = recap.get("closest_finish")
+    if closest:
+        if closest.get("tied"):
+            lines.append(f"🤏 Closest finish: {closest['upper']} + {closest['lower']} tied at {float(closest['upper_score']):.1f}")
+        else:
+            lines.append(f"🤏 Closest finish: {closest['upper']} over {closest['lower']} by {float(closest['gap']):.1f}")
+
+    same = recap.get("same_brain") or []
+    if same:
+        lines.append(f"👯 Same Brain: {' + '.join(str(name) for name in same)}")
+
+    mover = recap.get("biggest_mover")
+    if mover and mover.get("movers"):
+        names = " + ".join(str(row.get("nickname") or "Player") for row in mover["movers"])
+        lines.append(f"📈 Biggest mover: {names} (+{int(mover.get('places') or 0)} place{'s' if int(mover.get('places') or 0) != 1 else ''})")
+
+    if season_standings:
+        leader = season_standings[0]
+        lines.append(f"⭐ Season leader: {leader.get('nickname','Player')} — {int(leader.get('season_points') or 0)} pts")
+    return "\n".join(lines)
 
 
 def build_season_standings(results: list[dict[str, Any]]) -> list[dict[str, Any]]:

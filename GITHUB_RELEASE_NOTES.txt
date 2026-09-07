@@ -1,5 +1,7 @@
-v1.0.1 — Public Test-Week Isolation Hotfix
+v1.0.2 — Sunday Confidence + Weekly Recap
 
-Removes the synthetic Gate 2 test week from the public player experience, automatically recovers stale demo sessions to the real week, and keeps the lineup-builder demo available only through Commissioner Diagnostics.
+Adds a one-glance Sunday status card with lineup readiness, Questionable/OUT alerts, lock timing, and NFL-data freshness.
 
-Mobile launch polish: owner-safe bottom navigation and dark-mode-safe help/overlay surfaces.
+When Monday reconciliation marks a week FINAL, Sunday now becomes a richer weekly recap with champion/co-champions, most popular pick, boldest solo pick, closest finish, Same Brain, biggest season mover, and a copyable group-chat recap.
+
+No SQL, secrets, Supabase settings, scoring rules, lock rules, or GitHub Actions changes.

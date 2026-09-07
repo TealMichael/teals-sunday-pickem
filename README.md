@@ -1,6 +1,6 @@
 # Teal's Sunday Pick'em
 
-Current build: **v1.0.0 — Week 1 Release**
+Current build: **v1.0.2 — Sunday Confidence + Weekly Recap**
 
 ## Release status
 - Gate 1 — player identity, PIN auth, remembered devices ✅
@@ -14,4 +14,6 @@ Current build: **v1.0.0 — Week 1 Release**
 ## v1.0 live cadence
 The backend uses one shared GitHub worker for all players. Sunday injury checks run every 15 minutes beginning in the 11 AM ET window. After the universal 1:00 PM ET lock, the same cadence powers live score refreshes through the late-Sunday/SNF window. Weekday injury checks remain intentionally sparse.
 
-No SQL migration and no new secrets are required for v1.0.0.
+v1.0.2 adds Sunday lineup confidence and the Monday weekly recap without changing the database schema, scoring rules, lock rules, or worker schedule.
+
+No SQL migration and no new secrets are required for v1.0.2.

@@ -1,0 +1,25 @@
+Teal's Sunday Pick'em v1.0.2 — Release Test Report
+
+Automated pytest suite: 138/138 PASS
+Full-week in-memory rehearsal: 9/9 PASS
+Python compileall: PASS
+release_guard.py: PASS
+
+New v1.0.2 coverage includes:
+- Lineup readiness with Questionable starters before and after emergency backup selection.
+- OUT starter + incomplete-lineup readiness reporting.
+- Final weekly recap champion, Most Popular, Boldest Solo, Closest Finish, Same Brain, and Biggest Mover logic.
+- Shareable group-chat recap generation.
+- UI scope contract: Sunday Status before lock; richer recap only when data_status is FINAL.
+- Streamlit hot-deploy schema-version reload guards for the updated weekly and Gate 4 modules.
+
+Regression scope audit:
+- No db/*.sql changes.
+- No .github/workflows changes.
+- No store.py changes.
+- No auth.py / security.py changes.
+- No nfl_scoring.py / nfl_sync.py / nfl_sources.py / nfl_rankings.py changes.
+- No season-points, scoring, universal-lock, or emergency-activation logic changes.
+
+Baseline ZIP SHA-256:
+6cf1078bc5e6e4e8f679947f6e533b1f859fe5baa491d1b7d2ccb2a38d389011

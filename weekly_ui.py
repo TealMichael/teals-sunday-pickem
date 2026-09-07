@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import html
+import importlib
 import random
 import time
 from datetime import datetime, timezone
 
 import streamlit as st
+
+import weekly as _weekly
+
+if getattr(_weekly, "WEEKLY_LOGIC_SCHEMA_VERSION", 0) < 2:
+    _weekly = importlib.reload(_weekly)
 
 from config import APP_VERSION
 from gate4_ui import (
@@ -21,19 +27,118 @@ from weekly import (
     POSITIONS,
     et_label,
     first_incomplete_position,
+    lineup_readiness,
     lineup_progress,
     next_position,
+    parse_timestamp,
     picks_by_position,
     pool_is_ready,
     position_pool,
     previous_position,
     required_backup_positions,
+    seconds_until,
     unavailable_starter_positions,
     safe_status,
     week_phase,
 )
 
 UTC = timezone.utc
+WEEKLY_UI_SCHEMA_VERSION = 2
+
+
+def _compact_duration(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return "less than a minute"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} min"
+    hours = minutes // 60
+    remaining_minutes = minutes % 60
+    if hours < 24:
+        return f"{hours} hr" + (f" {remaining_minutes} min" if remaining_minutes else "")
+    days = hours // 24
+    remaining_hours = hours % 24
+    return f"{days} day{'s' if days != 1 else ''}" + (f" {remaining_hours} hr" if remaining_hours else "")
+
+
+def _refresh_age_label(value: str | datetime | None) -> tuple[str, int | None]:
+    stamp = parse_timestamp(value)
+    if not stamp:
+        return "refresh pending", None
+    age_seconds = max(0, int((datetime.now(UTC) - stamp).total_seconds()))
+    if age_seconds < 60:
+        return "just now", age_seconds
+    if age_seconds < 3600:
+        minutes = age_seconds // 60
+        return f"{minutes} min ago", age_seconds
+    if age_seconds < 86400:
+        hours = age_seconds // 3600
+        return f"{hours} hr ago", age_seconds
+    days = age_seconds // 86400
+    return f"{days} day{'s' if days != 1 else ''} ago", age_seconds
+
+
+def _render_sunday_status_card(week: dict, picks: list[dict], pool_by_id: dict[str, dict]) -> None:
+    """One-glance pre-lock confidence card for the real weekly game."""
+    status = lineup_readiness(picks, pool_by_id)
+    chosen = int(status["chosen"])
+    total = int(status["total"])
+    unavailable = list(status["unavailable"])
+    needs_backup = list(status["needs_backup"])
+    questionable = list(status["questionable"])
+
+    if unavailable:
+        tone = "danger"
+        icon = "🚫"
+        title = "Lineup needs a replacement"
+        subtitle = f"{chosen} of {total} picks saved"
+    elif chosen < total:
+        tone = "warn"
+        icon = "🧩"
+        title = "Finish your five"
+        subtitle = f"{chosen} of {total} picks complete"
+    elif needs_backup:
+        tone = "warn"
+        icon = "⚠️"
+        title = "Lineup needs attention"
+        subtitle = "All five picks are saved"
+    else:
+        tone = "ok"
+        icon = "✅"
+        title = "Lineup ready"
+        subtitle = "All five picks are set"
+
+    injury_parts: list[str] = []
+    if unavailable:
+        injury_parts.append(f"🚫 {len(unavailable)} starter{'s' if len(unavailable) != 1 else ''} OUT")
+    if questionable:
+        if needs_backup:
+            injury_parts.append(f"⚠️ {len(questionable)} Questionable • {len(needs_backup)} backup{'s' if len(needs_backup) != 1 else ''} needed")
+        else:
+            injury_parts.append(f"⚠️ {len(questionable)} Questionable • emergency backup{'s' if len(questionable) != 1 else ''} ready")
+    if not injury_parts:
+        injury_parts.append("✅ No starter injury flags")
+    injury_text = " • ".join(injury_parts)
+
+    lock_seconds = seconds_until(week.get("locks_at"))
+    lock_text = f"Locks in {_compact_duration(lock_seconds)}" if lock_seconds > 0 else "Picks are locked"
+    refresh_label, refresh_age = _refresh_age_label(week.get("last_data_refresh_at"))
+    near_lock = 0 < lock_seconds <= 2 * 3600
+    stale_near_lock = near_lock and (refresh_age is None or refresh_age > 30 * 60)
+    refresh_icon = "⚠️" if stale_near_lock else "🏈"
+    refresh_text = f"NFL data updated {refresh_label}" if refresh_age is not None else "NFL data refresh pending"
+
+    st.markdown(
+        f'''<div class="sunday-status sunday-status-{tone}">
+  <div class="sunday-status-head"><span class="sunday-status-icon">{icon}</span><div><div class="eyebrow">Sunday status</div><div class="sunday-status-title">{html.escape(title)}</div></div></div>
+  <div class="sunday-status-sub">{html.escape(subtitle)}</div>
+  <div class="sunday-status-lines"><div>{html.escape(injury_text)}</div><div>🕐 {html.escape(lock_text)}</div><div>{refresh_icon} {html.escape(refresh_text)}</div></div>
+</div>''',
+        unsafe_allow_html=True,
+    )
+    if stale_near_lock:
+        st.caption("NFL status data is older than expected this close to lock. Your saved lineup is safe; check again after the next refresh.")
 
 
 def _countdown(target_iso: str, label: str) -> None:
@@ -525,18 +630,14 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
         else:
             st.success("Lineup saved. You can make changes until Sunday at 1:00 PM ET.")
 
-    if unavailable:
-        st.markdown(f'<div class="status-warn"><strong>🚫 {len(unavailable)} starter is OUT.</strong><br>Choose a replacement before the 1:00 PM ET lock.</div>', unsafe_allow_html=True)
-    elif needs:
-        st.markdown(f'<div class="status-warn"><strong>⚠️ {len(needs)} player needs attention.</strong><br>Add a healthy emergency backup before Sunday.</div>', unsafe_allow_html=True)
+    if not bool(week.get("is_demo")):
+        _render_sunday_status_card(week, picks, pool_by_id)
 
     if chosen == total and not needs and not unavailable:
         st.markdown("### ✅ YOUR FIVE ARE READY")
         st.markdown(f'<div class="card">{_summary_rows(picks, pool_by_id)}</div>', unsafe_allow_html=True)
         if bool(week.get("is_demo")):
             st.markdown('<div class="status-test"><strong>TEST WEEK • LOCK OPEN</strong><br>Build and edit freely while testing.</div>', unsafe_allow_html=True)
-        else:
-            _countdown(str(week["locks_at"]), "Picks lock in")
         if st.button("EDIT LINEUP", type="primary", use_container_width=True):
             st.session_state.pop("builder_return_mode", None)
             st.session_state.builder_position = None
@@ -549,8 +650,6 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
         )
         if bool(week.get("is_demo")):
             st.markdown('<div class="status-test"><strong>TEST WEEK • LOCK OPEN</strong><br>Build and edit freely while testing.</div>', unsafe_allow_html=True)
-        else:
-            _countdown(str(week["locks_at"]), "Picks lock in")
         label = "Replace OUT Player" if unavailable else ("Fix Injury Backup" if needs else ("Continue Building" if chosen else "Build My Five"))
         if st.button(label, type="primary", use_container_width=True):
             if needs or unavailable:

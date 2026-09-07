@@ -35,6 +35,7 @@ h4 { font-size:1.05rem !important; line-height:1.2 !important; margin-top:.9rem 
 .big-number { font-size:1.9rem; font-weight:850; letter-spacing:-.04em; }
 .status-ok { background:#ECF8F6; border:1px solid #B9E3DD; border-radius:14px; padding:.8rem .9rem; color:#155E56; }
 .status-warn { background:#FFF8E7; border:1px solid #F1D69B; border-radius:14px; padding:.8rem .9rem; color:#7A4A00; }
+.status-danger { background:#FFF1F0; border:1px solid #F3C3BF; border-radius:14px; padding:.8rem .9rem; color:#8F241D; }
 .status-test { background:#EEF4FF; border:1px solid #C6D7FA; border-radius:14px; padding:.8rem .9rem; color:#294E8C; }
 .position-pill { display:inline-block; min-width:2.4rem; padding:.18rem .45rem; border-radius:999px; text-align:center; background:#ECF8F6; color:#155E56; font-size:.75rem; font-weight:850; }
 .player-name { font-weight:820; font-size:1rem; }
@@ -143,12 +144,27 @@ button[kind="primary"], [data-testid="stBaseButton-primary"], [data-testid="stBa
 hr { border-color:var(--line); }
 
 /* Gate 4 live Sunday / social UI */
+.sunday-status { background:#FFFFFF; border:1px solid var(--line); border-radius:18px; padding:.9rem .95rem; margin:.65rem 0 .8rem; box-shadow:0 3px 16px rgba(23,32,39,.04); }
+.sunday-status-ok { border-color:#B9E3DD; background:#F7FCFB; }
+.sunday-status-warn { border-color:#F1D69B; background:#FFFCF4; }
+.sunday-status-danger { border-color:#F3C3BF; background:#FFF8F7; }
+.sunday-status-head { display:flex; align-items:center; gap:.66rem; }
+.sunday-status-icon { font-size:1.45rem; line-height:1; }
+.sunday-status-title { font-size:1.16rem; line-height:1.15; font-weight:900; letter-spacing:-.025em; color:var(--ink); margin-top:.08rem; }
+.sunday-status-sub { font-size:.9rem; font-weight:720; color:#46545D; margin:.55rem 0 .48rem; }
+.sunday-status-lines { display:grid; grid-template-columns:1fr 1fr; gap:.45rem; padding-top:.5rem; border-top:1px solid rgba(214,222,227,.75); color:var(--muted); font-size:.84rem; font-weight:700; }
 .story-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.55rem; margin:.25rem 0 .75rem; }
 .story-card { background:#FFFFFF; border:1px solid var(--line); border-radius:15px; padding:.76rem; min-height:112px; box-shadow:0 2px 10px rgba(23,32,39,.03); }
 .story-icon { font-size:1.18rem; }
 .story-title { color:var(--teal); text-transform:uppercase; letter-spacing:.06em; font-size:.7rem; font-weight:850; margin:.2rem 0; }
 .story-main { font-size:1rem; font-weight:820; color:var(--ink); }
 .story-more { color:var(--teal); font-size:.78rem; font-weight:760; margin-top:.32rem; }
+.recap-hero { background:linear-gradient(135deg,#F4FBFA 0%,#FFFFFF 62%); border:1px solid #B9E3DD; border-radius:20px; padding:1rem 1.05rem; margin:.6rem 0 .8rem; box-shadow:0 4px 18px rgba(23,32,39,.05); text-align:center; }
+.recap-kicker { color:var(--teal); font-size:.72rem; font-weight:900; letter-spacing:.1em; }
+.recap-champion { color:var(--ink); font-size:1.5rem; line-height:1.12; font-weight:920; letter-spacing:-.04em; margin:.24rem 0 .12rem; }
+.recap-score { color:#155E56; font-size:1.02rem; font-weight:820; }
+.recap-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.55rem; margin:.25rem 0 .7rem; }
+.recap-card { background:#FFFFFF; border:1px solid var(--line); border-radius:15px; padding:.78rem; min-height:112px; box-shadow:0 2px 10px rgba(23,32,39,.03); }
 .you-strip { display:flex; justify-content:space-between; align-items:center; background:#ECF8F6; border:1px solid #B9E3DD; color:#155E56; padding:.58rem .72rem; border-radius:13px; margin:.4rem 0 .5rem; }
 .score-row { display:flex; align-items:center; gap:.6rem; background:#FFFFFF; border-bottom:1px solid #EEF1F3; padding:.58rem .12rem; }
 .score-row:last-child { border-bottom:0; }
@@ -290,6 +306,8 @@ div[class*="st-key-gate4_nav"] button:focus-visible { outline:2px solid #58AAA0 
 
 @media (max-width: 560px) {
   .story-grid { grid-template-columns:1fr; }
+  .recap-grid { grid-template-columns:1fr; }
+  .sunday-status-lines { grid-template-columns:1fr; gap:.32rem; }
   .profile-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 480px) {
