@@ -15,6 +15,8 @@ from gate4 import (
 )
 from validation import validate_single_emoji
 
+GATE4_UI_SCHEMA_VERSION = 2
+
 
 def _ordinal(rank: int) -> str:
     if 10 <= rank % 100 <= 20:
@@ -29,6 +31,10 @@ def _medal(rank: int) -> str:
 
 
 def render_nav() -> str:
+    # v0.4.5 hard-cleans the legacy Leaderboard sub-tab state so the second
+    # destination is always a dedicated season-standings screen.
+    st.session_state.pop("gate4_subtab", None)
+    st.session_state.pop("gate4_leaderboard_subtab", None)
     # Four stable top-level destinations. Keep the stored values unchanged for
     # backward compatibility, but render consistent Material icons instead of
     # platform-dependent emoji. This mirrors native mobile tab-bar guidance:
@@ -477,7 +483,7 @@ def render_gate4_demo(current_player: dict[str, Any] | None = None) -> None:
         if phase == "final":
             st.caption("Demo includes a first-place tie, traditional competition ranking, and full season points for tied champions.")
     elif tab == "🏆 Season":
-        st.markdown("### Season")
+        st.markdown("### Season Standings")
         demo_results = []
         for row in leaderboard:
             demo_results.append({

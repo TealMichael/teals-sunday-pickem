@@ -18,7 +18,7 @@ from security import safe_secret_match
 from store import SupabaseStore
 from ui import hero, inject_css, page_config
 import weekly_ui as _weekly_ui
-from gate4_ui import render_gate4_demo
+import gate4_ui as _gate4_ui
 
 # Streamlit Cloud can rerun app.py while a previously imported helper module
 # is still resident in the Python process. If that older module predates Gate 4
@@ -28,6 +28,13 @@ from gate4_ui import render_gate4_demo
 if "on_sign_out" not in inspect.signature(_weekly_ui.render_player_game).parameters:
     _weekly_ui = importlib.reload(_weekly_ui)
 render_player_game = _weekly_ui.render_player_game
+
+# Gate 4 navigation changed structurally in v0.4.4/v0.4.5. Streamlit Cloud can
+# occasionally keep an older helper module resident across a multi-file deploy,
+# so reload any pre-simplification Gate 4 module before binding the demo renderer.
+if getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 2:
+    _gate4_ui = importlib.reload(_gate4_ui)
+render_gate4_demo = _gate4_ui.render_gate4_demo
 
 page_config()
 inject_css()
