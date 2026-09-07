@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from html import escape
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 import streamlit as st
@@ -14,6 +15,7 @@ from gate4 import (
     profile_stats,
 )
 from validation import validate_single_emoji
+from weekly import parse_timestamp
 
 GATE4_UI_SCHEMA_VERSION = 2
 
@@ -100,9 +102,22 @@ def render_nav() -> str:
 
 
 def _last_updated(week: dict[str, Any]) -> None:
-    stamp = week.get("last_data_refresh_at")
-    if stamp:
-        st.caption(f"NFL data last refreshed: {stamp}")
+    stamp = parse_timestamp(week.get("last_data_refresh_at"))
+    status = str(week.get("data_status") or "").upper()
+    if not stamp:
+        if status == "LIVE":
+            st.warning("Live scores are waiting for their first refresh. Your lineup is safe.")
+        return
+    age_minutes = max(0, int((datetime.now(timezone.utc) - stamp).total_seconds() // 60))
+    if age_minutes < 1:
+        label = "just now"
+    elif age_minutes == 1:
+        label = "1 minute ago"
+    else:
+        label = f"{age_minutes} minutes ago"
+    st.caption(f"NFL data refreshed {label}.")
+    if status == "LIVE" and age_minutes > 45:
+        st.warning("Scores may be delayed right now. The last NFL refresh is more than 45 minutes old; no lineup data has been lost.")
 
 
 def _storylines(bundle: dict[str, Any], leaderboard: list[dict[str, Any]]) -> None:
@@ -354,6 +369,10 @@ def render_profile(store, player: dict[str, Any], season: int, on_sign_out: Call
                     st.session_state.player = updated
                 st.toast("Emoji updated.")
                 st.rerun()
+
+    with st.expander("Add to Home Screen"):
+        st.markdown("**iPhone/iPad (Safari):** Share → **Add to Home Screen**.\n\n**Android (Chrome):** Menu → **Add to Home screen** or **Install app** if offered.")
+        st.caption("Optional, but it makes Sunday Pick'em feel much more like a regular phone app. Notifications are not required for Week 1.")
 
     _how_to_play()
     st.markdown("#### Trophy Case")

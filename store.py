@@ -86,6 +86,14 @@ class SupabaseStore:
             if week_id in {str(part) for part in key}:
                 cache.pop(key, None)
 
+    def _cache_drop_prefix(self, prefix: str) -> None:
+        cache = getattr(self, "_public_cache", None)
+        if not cache:
+            return
+        for key in list(cache):
+            if key and str(key[0]) == str(prefix):
+                cache.pop(key, None)
+
     def healthcheck(self) -> bool:
         try:
             self._table("app_meta").select("key").limit(1).execute()
@@ -1229,6 +1237,10 @@ class SupabaseStore:
         week_id: str | None = None,
         player_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        cache_key = ("weekly_results", season, str(week_id) if week_id is not None else None, str(player_id) if player_id is not None else None)
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return list(cached)
         query = self._table("weekly_results").select(
             "id,week_id,season,nfl_week,player_id,nickname_snapshot,emoji_snapshot,weekly_score,finish_rank,season_points,is_champion,finalized_at"
         )
@@ -1238,27 +1250,35 @@ class SupabaseStore:
             query = query.eq("week_id", str(week_id))
         if player_id is not None:
             query = query.eq("player_id", str(player_id))
-        return list(query.order("nfl_week", desc=True).order("finish_rank").execute().data or [])
+        rows = list(query.order("nfl_week", desc=True).order("finish_rank").execute().data or [])
+        return list(self._cache_set(cache_key, rows, 30))
 
     def upsert_weekly_results(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not rows:
             return []
         res = self._table("weekly_results").upsert(rows, on_conflict="week_id,player_id").execute()
-        self._public_cache.pop(("weekly_results",), None)
+        self._cache_drop_prefix("weekly_results")
         return list(res.data or [])
 
     def get_season_champions(self, season: int | None = None) -> list[dict[str, Any]]:
+        cache_key = ("season_champions", int(season) if season is not None else None)
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return list(cached)
         query = self._table("season_champions").select(
             "id,season,player_id,nickname_snapshot,emoji_snapshot,season_points,total_fantasy_points,awarded_at"
         )
         if season is not None:
             query = query.eq("season", int(season))
-        return list(query.order("season", desc=True).order("nickname_snapshot").execute().data or [])
+        rows = list(query.order("season", desc=True).order("nickname_snapshot").execute().data or [])
+        return list(self._cache_set(cache_key, rows, 60))
 
     def upsert_season_champions(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not rows:
             return []
-        return list(self._table("season_champions").upsert(rows, on_conflict="season,player_id").execute().data or [])
+        result = list(self._table("season_champions").upsert(rows, on_conflict="season,player_id").execute().data or [])
+        self._cache_drop_prefix("season_champions")
+        return result
 
     def purge_prior_week_rosters(self, *, season: int, before_nfl_week: int) -> list[int]:
         candidates = list(

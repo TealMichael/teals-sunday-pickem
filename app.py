@@ -37,7 +37,7 @@ if getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 2:
     _gate4_ui = importlib.reload(_gate4_ui)
 render_gate4_demo = _gate4_ui.render_gate4_demo
 
-if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 1:
+if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 2:
     _gate5_ui = importlib.reload(_gate5_ui)
 render_commissioner_dashboard = _gate5_ui.render_commissioner_dashboard
 
@@ -120,6 +120,43 @@ if missing:
     st.stop()
 
 store = get_store(secret("SUPABASE_URL"), supabase_server_key(), APP_VERSION)
+
+
+def _record_ui_incident(scope: str, exc: Exception) -> None:
+    """Record a privacy-safe runtime incident once per browser session.
+
+    Never persist raw exception text: provider/client exceptions can contain
+    URLs or implementation details. Commissioner activity only needs the error
+    type, app build, and UI scope to diagnose a launch issue.
+    """
+    fingerprint = f"ui_incident::{scope}::{type(exc).__name__}"
+    if st.session_state.get(fingerprint):
+        return
+    st.session_state[fingerprint] = True
+    try:
+        week = store.get_real_week()
+        run_id = store.start_data_run(
+            "ui_error",
+            week_id=str(week["id"]) if week else None,
+            provider="streamlit",
+            metadata={"scope": scope, "error_type": type(exc).__name__, "build": APP_VERSION},
+        )
+        store.finish_data_run(
+            run_id,
+            success=False,
+            message=f"{scope} UI error ({type(exc).__name__})",
+            metadata={"scope": scope, "error_type": type(exc).__name__, "build": APP_VERSION},
+        )
+    except Exception:
+        pass
+
+
+def _friendly_runtime_error(scope: str, exc: Exception) -> None:
+    _record_ui_incident(scope, exc)
+    st.error("Sunday Pick'em hit a temporary snag. Your saved lineup and scores are safe.")
+    st.caption("Try again in a moment. If this keeps happening, Mike can see the incident in Commissioner activity without exposing technical details here.")
+    if st.button("Try Again", type="primary", use_container_width=True, key=f"retry::{scope}"):
+        st.rerun()
 
 
 # -----------------------------
@@ -434,11 +471,17 @@ if st.session_state.commish:
         render_gate4_demo()
         st.stop()
 
-    render_commissioner_dashboard(store, pin_pepper=secret("PIN_PEPPER"))
+    try:
+        render_commissioner_dashboard(store, pin_pepper=secret("PIN_PEPPER"))
+    except Exception as exc:
+        _friendly_runtime_error("commissioner", exc)
     st.stop()
 
 if st.session_state.player:
-    render_player_game(store, st.session_state.player, on_sign_out=_sign_out_submit)
+    try:
+        render_player_game(store, st.session_state.player, on_sign_out=_sign_out_submit)
+    except Exception as exc:
+        _friendly_runtime_error("player", exc)
     # The normal Gate 4 app keeps Sign Out in Profile. Gate 2's isolated test
     # week has no Gate 4 navigation, so retain a local escape there.
     if st.session_state.get("use_demo_week"):

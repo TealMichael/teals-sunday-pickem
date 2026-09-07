@@ -1,0 +1,10 @@
+Teal's Sunday Pick'em v0.6.0 — Gate 6 Test Report
+
+Automated test suite: 128 PASS
+Full-week in-memory rehearsal: 9/9 PASS
+Python compile check: PASS
+Release guard: PASS
+
+Gate 6 coverage includes launch-readiness logic, automation heartbeat contract,
+quality-gate workflow, dynamic future-week copy, friendly runtime error boundary,
+result-cache invalidation, emergency-backup rehearsal, tie ranking, and co-champion behavior.

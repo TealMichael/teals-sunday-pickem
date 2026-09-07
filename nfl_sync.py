@@ -428,59 +428,84 @@ def run_auto(store, *, now: datetime | None = None) -> dict[str, Any]:
     if not week:
         week = ensure_week_shell_from_scoreboard(store, season=NFL_SEASON, nfl_week=1)
     week = store.get_week_by_season_week(int(week["season"]), int(week["nfl_week"])) or week
+    heartbeat_week_id = str(week["id"])
+    heartbeat_run_id = store.start_data_run(
+        "auto_cycle",
+        week_id=heartbeat_week_id,
+        provider="github-actions",
+        metadata={"build_phase": "gate6"},
+    )
     actions: list[str] = []
 
-    # Finalization is normally Monday at 9 AM ET, but keep retrying on later
-    # runs if nflverse or an official game was not settled at exactly 9:00.
-    lock = parse_timestamp(week.get("locks_at"))
-    if lock and now >= lock and str(week.get("data_status")) != "FINAL":
-        lock_local = lock.astimezone(ET)
-        final_local = datetime.combine(lock_local.date() + timedelta(days=1), dtime(9, 0), tzinfo=ET)
-        if now >= final_local.astimezone(UTC):
-            try:
-                reconcile_final(store, week)
-                actions.append("finalized")
-                next_week_num = int(week["nfl_week"]) + 1
-                if next_week_num <= 18:
-                    week = ensure_week_shell_from_scoreboard(store, season=int(week["season"]), nfl_week=next_week_num)
-                    week = store.get_week_by_season_week(int(week["season"]), int(week["nfl_week"])) or week
-                    actions.append("next_week_shell")
-                else:
+    def finish_heartbeat(*, success: bool = True, error_type: str | None = None) -> None:
+        safe_actions = [str(action).split(":", 1)[0] for action in actions]
+        metadata = {"actions": safe_actions, "build_phase": "gate6"}
+        if error_type:
+            metadata["error_type"] = error_type
+        message = "Auto cycle completed" + (f" ({', '.join(safe_actions)})" if safe_actions else " (no action due)")
+        store.finish_data_run(heartbeat_run_id, success=success, message=message, metadata=metadata)
+
+    try:
+        # Finalization is normally Monday at 9 AM ET, but keep retrying on later
+        # runs if nflverse or an official game was not settled at exactly 9:00.
+        lock = parse_timestamp(week.get("locks_at"))
+        if lock and now >= lock and str(week.get("data_status")) != "FINAL":
+            lock_local = lock.astimezone(ET)
+            final_local = datetime.combine(lock_local.date() + timedelta(days=1), dtime(9, 0), tzinfo=ET)
+            if now >= final_local.astimezone(UTC):
+                try:
+                    reconcile_final(store, week)
+                    actions.append("finalized")
+                    next_week_num = int(week["nfl_week"]) + 1
+                    if next_week_num <= 18:
+                        week = ensure_week_shell_from_scoreboard(store, season=int(week["season"]), nfl_week=next_week_num)
+                        week = store.get_week_by_season_week(int(week["season"]), int(week["nfl_week"])) or week
+                        actions.append("next_week_shell")
+                    else:
+                        finish_heartbeat()
+                        return {"actions": actions}
+                except Exception as exc:
+                    actions.append(f"finalize_deferred:{exc}")
+                    finish_heartbeat()
                     return {"actions": actions}
-            except Exception as exc:
-                actions.append(f"finalize_deferred:{exc}")
-                return {"actions": actions}
 
-    # Tuesday noon: automatically publish only when all 10×5 candidates resolve.
-    opens = parse_timestamp(week.get("opens_at"))
-    if not week.get("published_at") and opens and now >= opens:
-        try:
-            publish_week_pool(store, week)
-            actions.append("published_pool")
-            week = store.get_week_by_season_week(int(week["season"]), int(week["nfl_week"])) or week
-        except Exception as exc:
-            actions.append(f"publish_failed:{exc}")
-
-    # Injury status ramps up as Sunday approaches. This is a shared backend
-    # refresh; user phones never call Sleeper themselves.
-    if week.get("published_at"):
-        last_injury = store.last_successful_run("injury_refresh", week_id=str(week["id"]))
-        if _run_due(last_injury, injury_interval_minutes(now_et), now):
+        # Tuesday noon: automatically publish only when all 10×5 candidates resolve.
+        opens = parse_timestamp(week.get("opens_at"))
+        if not week.get("published_at") and opens and now >= opens:
             try:
-                refresh_injuries(store, week)
-                actions.append("injuries")
+                publish_week_pool(store, week)
+                actions.append("published_pool")
+                week = store.get_week_by_season_week(int(week["season"]), int(week["nfl_week"])) or week
             except Exception as exc:
-                actions.append(f"injury_failed:{exc}")
+                actions.append(f"publish_failed:{exc}")
 
-    # Sunday 1 PM through roughly 1 AM Monday: one shared scoring refresh every
-    # scheduled GitHub Action run (workflow cadence = 30 minutes). The small
-    # post-midnight buffer covers a long SNF/overtime without polling overnight.
-    scoring_lock = parse_timestamp(week.get("locks_at"))
-    if scoring_lock and scoring_lock <= now <= scoring_lock + timedelta(hours=12) and week.get("published_at"):
+        # Injury status ramps up as Sunday approaches. This is a shared backend
+        # refresh; user phones never call Sleeper themselves.
+        if week.get("published_at"):
+            last_injury = store.last_successful_run("injury_refresh", week_id=str(week["id"]))
+            if _run_due(last_injury, injury_interval_minutes(now_et), now):
+                try:
+                    refresh_injuries(store, week)
+                    actions.append("injuries")
+                except Exception as exc:
+                    actions.append(f"injury_failed:{exc}")
+
+        # Sunday 1 PM through roughly 1 AM Monday: one shared scoring refresh every
+        # scheduled GitHub Action run (workflow cadence = 30 minutes). The small
+        # post-midnight buffer covers a long SNF/overtime without polling overnight.
+        scoring_lock = parse_timestamp(week.get("locks_at"))
+        if scoring_lock and scoring_lock <= now <= scoring_lock + timedelta(hours=12) and week.get("published_at"):
+            try:
+                refresh_live_scores(store, week)
+                actions.append("live_scores")
+            except Exception as exc:
+                actions.append(f"scores_failed:{exc}")
+
+        finish_heartbeat()
+        return {"actions": actions}
+    except Exception as exc:
         try:
-            refresh_live_scores(store, week)
-            actions.append("live_scores")
-        except Exception as exc:
-            actions.append(f"scores_failed:{exc}")
+            finish_heartbeat(success=False, error_type=type(exc).__name__)
+        finally:
+            raise
 
-    return {"actions": actions}

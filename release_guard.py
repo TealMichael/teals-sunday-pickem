@@ -41,6 +41,8 @@ required = [
     ROOT / "gate4_results.py",
     ROOT / "gate5.py",
     ROOT / "gate5_ui.py",
+    ROOT / "gate6.py",
+    ROOT / "gate6_ui.py",
     ROOT / "nfl_scoring.py",
     ROOT / "scoring_diagnostic.py",
     ROOT / "preseason_replay.py",
@@ -49,6 +51,7 @@ required = [
     ROOT / "nfl_sync.py",
     ROOT / "scripts/nfl_refresh.py",
     ROOT / ".github/workflows/nfl-refresh.yml",
+    ROOT / ".github/workflows/quality-gate.yml",
     ROOT / "requirements-backend.txt",
 ]
 missing = [str(p.relative_to(ROOT)) for p in required if not p.exists()]

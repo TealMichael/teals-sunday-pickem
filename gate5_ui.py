@@ -18,9 +18,10 @@ from gate5 import (
     week_snapshot,
 )
 from weekly import POSITIONS, et_label, parse_timestamp
+from gate6_ui import render_launch_readiness
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 1
+GATE5_UI_SCHEMA_VERSION = 2
 
 
 def _status_label(row: dict[str, Any]) -> str:
@@ -411,8 +412,8 @@ def _render_diagnostics(store) -> None:
 
 
 def render_commissioner_dashboard(store, *, pin_pepper: str) -> None:
-    st.markdown("### Commissioner • Gate 5")
-    st.success("Commissioner controls are live. Player lineups remain protected by the universal Sunday 1:00 PM ET database lock.")
+    st.markdown("### Commissioner • Gate 6")
+    st.success("Launch-readiness controls are live. Player lineups remain protected by the universal Sunday 1:00 PM ET database lock.")
     _render_flash()
 
     week = store.get_real_week()
@@ -432,8 +433,8 @@ def render_commissioner_dashboard(store, *, pin_pepper: str) -> None:
     with top1:
         tool = st.segmented_control(
             "Commissioner tool",
-            ["Week", "Players", "Corrections", "Diagnostics"],
-            default="Week",
+            ["Launch", "Week", "Players", "Corrections", "Diagnostics"],
+            default="Launch",
             key="g5_tool",
             width="stretch",
             label_visibility="collapsed",
@@ -444,7 +445,9 @@ def render_commissioner_dashboard(store, *, pin_pepper: str) -> None:
             st.session_state.pop("g5_tool", None)
             st.rerun()
 
-    if tool == "Week":
+    if tool == "Launch":
+        render_launch_readiness(store, week)
+    elif tool == "Week":
         _render_week_overview(store, week)
     elif tool == "Players":
         _render_players(store, week, pin_pepper)

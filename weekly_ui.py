@@ -624,7 +624,8 @@ def render_player_game(store, player: dict, on_sign_out=None) -> None:
             st.session_state.pop("builder_return_mode", None)
             st.rerun()
     elif phase == "upcoming":
-        st.markdown("### Week 1 opens Tuesday")
+        label = str(week.get("label") or f"Week {week.get('nfl_week', '')}")
+        st.markdown(f"### {label} opens Tuesday")
         _countdown(str(week["opens_at"]), "New picks available in")
         st.caption(et_label(week.get("opens_at")))
         if demo_week and st.button("Preview Gate 2 Test Week", use_container_width=True):

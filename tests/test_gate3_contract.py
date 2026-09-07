@@ -13,7 +13,7 @@ def test_gate3_migration_isolated_and_server_only():
 
 def test_scheduler_is_30_minute_and_has_manual_dispatch():
     text = Path(".github/workflows/nfl-refresh.yml").read_text()
-    assert 'cron: "*/30 0,7-23 * * *"' in text
+    assert 'cron: "*/30 0-1,7-23 * * *"' in text
     assert 'timezone: "America/New_York"' in text
     assert "workflow_dispatch:" in text
     assert "SUPABASE_SECRET_KEY" in text
@@ -34,3 +34,11 @@ def test_kicker_rule_documented_in_code_is_flat_three():
     text = Path("nfl_scoring.py").read_text()
     assert "fg_made * 3.0" in text
     assert "regardless of distance" in text
+
+
+def test_gate3_schedule_does_not_hard_depend_on_espn():
+    sources = Path("nfl_sources.py").read_text()
+    sync = Path("nfl_sync.py").read_text()
+    assert 'SCHEDULE_URL = "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv"' in sources
+    assert "nflverse.schedule_games" in sync
+    assert "prefer_live" in sync
