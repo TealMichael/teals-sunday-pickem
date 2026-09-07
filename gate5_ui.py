@@ -98,8 +98,11 @@ def _render_week_overview(store, week: dict[str, Any]) -> None:
         st.caption("Refreshes schedule/player status now. After lock it also runs the production live-score path.")
         if st.button("Refresh NFL Data Now", type="primary", use_container_width=True, key="g5_refresh_nfl"):
             try:
-                with st.spinner("Refreshing NFL data…"):
-                    result = refresh_nfl_now(store, week)
+                # Toast feedback avoids inserting a spinner into the page layout.
+                # Streamlit keeps the prior widget tree visible while a long action runs;
+                # adding a spinner here made the Week controls appear duplicated/ghosted.
+                st.toast("Refreshing NFL data…")
+                result = refresh_nfl_now(store, week)
                 st.session_state.g5_last_refresh = result
                 _set_flash("NFL data refresh completed. The Week screen now shows the latest stored status and refresh time.")
                 st.rerun()
@@ -282,7 +285,7 @@ def _render_corrections(store, week: dict[str, Any]) -> None:
     st.markdown("#### Manual Score Override")
     st.caption("A manual value stays authoritative through automatic refreshes until you clear it.")
     if not week.get("published_at"):
-        st.info("Score corrections become available once the weekly pool is published.")
+        st.info("Score correction tools appear after Tuesday’s pool publishes; applying a correction remains locked until Sunday at 1:00 PM ET.")
         return
     lock = parse_timestamp(week.get("locks_at"))
     after_lock = bool(lock and datetime.now(UTC) >= lock)
