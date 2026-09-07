@@ -918,6 +918,249 @@ class SupabaseStore:
         return changes
 
     # -------------------------
+    # Gate 5 Commissioner controls
+    # -------------------------
+    def reset_player_pin(self, player_id: str, *, pin_salt: str, pin_hash: str, revoke_sessions: bool = True) -> None:
+        self._table("players").update({"pin_salt": pin_salt, "pin_hash": pin_hash}).eq("id", str(player_id)).execute()
+        if revoke_sessions:
+            stamp = _iso(datetime.now(UTC))
+            self._table("player_sessions").update({"revoked_at": stamp}).eq("player_id", str(player_id)).execute()
+        self._public_cache.pop(("registered_players",), None)
+
+    def get_week_lineup_admin(self, week_id: str) -> list[dict[str, Any]]:
+        players = self.get_registered_players()
+        lineups = list(
+            self._table("lineups")
+            .select("id,player_id,confirmed_at,updated_at")
+            .eq("week_id", str(week_id))
+            .execute()
+            .data
+            or []
+        )
+        lineup_by_player = {str(row["player_id"]): row for row in lineups}
+        lineup_ids = [str(row["id"]) for row in lineups]
+        pick_counts: dict[str, int] = {}
+        if lineup_ids:
+            picks = list(
+                self._table("lineup_picks")
+                .select("lineup_id,position")
+                .in_("lineup_id", lineup_ids)
+                .execute()
+                .data
+                or []
+            )
+            for pick in picks:
+                lid = str(pick.get("lineup_id") or "")
+                pick_counts[lid] = pick_counts.get(lid, 0) + 1
+
+        rows: list[dict[str, Any]] = []
+        for player in players:
+            player_id = str(player["id"])
+            lineup = lineup_by_player.get(player_id)
+            lineup_id = str(lineup.get("id")) if lineup else ""
+            count = int(pick_counts.get(lineup_id, 0)) if lineup_id else 0
+            rows.append({
+                **player,
+                "lineup_id": lineup_id or None,
+                "pick_count": count,
+                "confirmed": bool(lineup and lineup.get("confirmed_at")),
+                "lineup_updated_at": lineup.get("updated_at") if lineup else None,
+            })
+        return rows
+
+    def get_pool_usage(self, week_id: str, pool_player_id: str) -> dict[str, Any]:
+        starter_rows = list(
+            self._table("lineup_picks")
+            .select("lineup_id")
+            .eq("pool_player_id", str(pool_player_id))
+            .execute()
+            .data
+            or []
+        )
+        backup_rows = list(
+            self._table("lineup_picks")
+            .select("lineup_id")
+            .eq("emergency_pool_player_id", str(pool_player_id))
+            .execute()
+            .data
+            or []
+        )
+        lineup_ids = sorted({str(row["lineup_id"]) for row in starter_rows + backup_rows if row.get("lineup_id")})
+        names: list[str] = []
+        if lineup_ids:
+            lineups = list(
+                self._table("lineups")
+                .select("id,player_id")
+                .eq("week_id", str(week_id))
+                .in_("id", lineup_ids)
+                .execute()
+                .data
+                or []
+            )
+            player_ids = [str(row["player_id"]) for row in lineups if row.get("player_id")]
+            if player_ids:
+                players = list(
+                    self._table("players")
+                    .select("id,nickname")
+                    .in_("id", player_ids)
+                    .execute()
+                    .data
+                    or []
+                )
+                names = sorted([str(row.get("nickname") or "Player") for row in players], key=str.casefold)
+        return {
+            "starter_count": len(starter_rows),
+            "backup_count": len(backup_rows),
+            "affected_lineups": len(lineup_ids),
+            "affected_nicknames": names,
+        }
+
+    def replace_visible_pool_player(
+        self,
+        week_id: str,
+        *,
+        outgoing_pool_id: str,
+        replacement_pool_id: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        week = self.get_week(str(week_id))
+        if not week:
+            raise StoreError("Week not found.")
+        locks_at = parse_timestamp(week.get("locks_at"))
+        if locks_at and datetime.now(UTC) >= locks_at:
+            raise PicksLocked("Player-pool overrides are disabled after the universal lock.")
+
+        pool = {str(row["id"]): row for row in self.get_full_week_pool(str(week_id))}
+        outgoing = pool.get(str(outgoing_pool_id))
+        replacement = pool.get(str(replacement_pool_id))
+        if not outgoing or not replacement:
+            raise StoreError("One of those pool players is no longer available.")
+        if not outgoing.get("is_visible"):
+            raise StoreError("The player being replaced is not currently visible.")
+        if replacement.get("is_visible"):
+            raise StoreError("The replacement is already visible.")
+        if str(outgoing.get("position")) != str(replacement.get("position")):
+            raise StoreError("A replacement must come from the same position.")
+        if str(replacement.get("availability_status") or "HEALTHY").upper() == "OUT":
+            raise StoreError("An OUT player cannot be promoted into the weekly pool.")
+        if not bool(replacement.get("schedule_eligible", True)):
+            raise StoreError("That replacement no longer has an eligible Sunday game.")
+
+        impact = self.get_pool_usage(str(week_id), str(outgoing_pool_id))
+        stamp = _iso(datetime.now(UTC))
+        starter_rows = list(
+            self._table("lineup_picks")
+            .select("id,lineup_id")
+            .eq("pool_player_id", str(outgoing_pool_id))
+            .execute()
+            .data
+            or []
+        )
+        if starter_rows:
+            lineup_ids = [str(row["lineup_id"]) for row in starter_rows]
+            self._table("lineup_picks").delete().eq("pool_player_id", str(outgoing_pool_id)).execute()
+            self._table("lineups").update({"confirmed_at": None, "updated_at": stamp}).in_("id", lineup_ids).execute()
+        self._table("lineup_picks").update({"emergency_pool_player_id": None, "updated_at": stamp}).eq(
+            "emergency_pool_player_id", str(outgoing_pool_id)
+        ).execute()
+
+        self._table("player_pool").update({
+            "is_visible": False,
+            "schedule_note": f"Commissioner override: {reason}",
+            "provider_updated_at": stamp,
+        }).eq("id", str(outgoing_pool_id)).execute()
+        self._table("player_pool").update({
+            "is_visible": True,
+            "schedule_note": f"Commissioner override replacement: {reason}",
+            "provider_updated_at": stamp,
+        }).eq("id", str(replacement_pool_id)).execute()
+        self.clear_week_cache(str(week_id))
+        return {
+            "position": str(outgoing.get("position")),
+            "outgoing_id": str(outgoing_pool_id),
+            "outgoing_name": str(outgoing.get("player_name") or "Player"),
+            "replacement_id": str(replacement_pool_id),
+            "replacement_name": str(replacement.get("player_name") or "Player"),
+            "reason": reason,
+            **impact,
+        }
+
+    def set_manual_score_override(self, week_id: str, pool_player_id: str, score: float, note: str) -> dict[str, Any]:
+        stamp = _iso(datetime.now(UTC))
+        res = (
+            self._table("player_pool")
+            .update({
+                "manual_score_override": float(score),
+                "manual_override_at": stamp,
+                "manual_override_note": note,
+                "score_total": float(score),
+                "score_updated_at": stamp,
+            })
+            .eq("week_id", str(week_id))
+            .eq("id", str(pool_player_id))
+            .execute()
+        )
+        if not res.data:
+            raise StoreError("That pool player could not be found.")
+        self.clear_week_cache(str(week_id))
+        return dict(res.data[0])
+
+    def clear_manual_score_override(self, week_id: str, pool_player_id: str) -> dict[str, Any]:
+        stat_rows = list(
+            self._table("player_week_stats")
+            .select("points")
+            .eq("week_id", str(week_id))
+            .eq("pool_player_id", str(pool_player_id))
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        provider_score = float(stat_rows[0].get("points") or 0) if stat_rows else None
+        stamp = _iso(datetime.now(UTC))
+        res = (
+            self._table("player_pool")
+            .update({
+                "manual_score_override": None,
+                "manual_override_at": None,
+                "manual_override_note": None,
+                "score_total": provider_score,
+                "score_updated_at": stamp,
+            })
+            .eq("week_id", str(week_id))
+            .eq("id", str(pool_player_id))
+            .execute()
+        )
+        if not res.data:
+            raise StoreError("That pool player could not be found.")
+        self.clear_week_cache(str(week_id))
+        return dict(res.data[0])
+
+    def get_recent_data_runs(self, *, week_id: str | None = None, limit: int = 12) -> list[dict[str, Any]]:
+        query = self._table("data_runs").select(
+            "id,week_id,run_type,provider,started_at,completed_at,success,message,metadata"
+        )
+        if week_id:
+            query = query.eq("week_id", str(week_id))
+        return list(query.order("started_at", desc=True).limit(int(limit)).execute().data or [])
+
+    def record_commissioner_action(
+        self,
+        action: str,
+        *,
+        week_id: str | None = None,
+        player_id: str | None = None,
+        message: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        data = dict(metadata or {})
+        if player_id:
+            data["player_id"] = str(player_id)
+        run_id = self.start_data_run(f"commissioner_{action}", week_id=week_id, provider="commissioner", metadata=data)
+        self.finish_data_run(run_id, success=True, message=message, metadata=data)
+        return run_id
+
+    # -------------------------
     # Gate 4 live Sunday / season data
     # -------------------------
     def get_registered_players(self) -> list[dict[str, Any]]:

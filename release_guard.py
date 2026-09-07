@@ -39,6 +39,8 @@ required = [
     ROOT / "gate4.py",
     ROOT / "gate4_ui.py",
     ROOT / "gate4_results.py",
+    ROOT / "gate5.py",
+    ROOT / "gate5_ui.py",
     ROOT / "nfl_scoring.py",
     ROOT / "scoring_diagnostic.py",
     ROOT / "preseason_replay.py",

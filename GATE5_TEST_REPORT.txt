@@ -1,0 +1,16 @@
+Teal's Sunday Pick'em v0.5.0 — Gate 5 Acceptance Build
+
+Automated test suite: 114 passed
+Release guard: PASS
+Python compileall: PASS
+
+Gate 5 regression coverage includes:
+- Commissioner route and UI contract
+- PIN reset validation + normal PBKDF2/pepper hashing path
+- Remembered-session revocation contract
+- Current-week lineup readiness snapshot
+- Emergency pool override blocked after universal lock
+- Manual score override blocked before universal lock
+- Manual score clear blocked before universal lock
+- Failed-pool regeneration protected from early/already-published use
+- Gate 1–4 regression suite remains passing

@@ -19,6 +19,7 @@ from store import SupabaseStore
 from ui import hero, inject_css, page_config
 import weekly_ui as _weekly_ui
 import gate4_ui as _gate4_ui
+import gate5_ui as _gate5_ui
 
 # Streamlit Cloud can rerun app.py while a previously imported helper module
 # is still resident in the Python process. If that older module predates Gate 4
@@ -35,6 +36,10 @@ render_player_game = _weekly_ui.render_player_game
 if getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 2:
     _gate4_ui = importlib.reload(_gate4_ui)
 render_gate4_demo = _gate4_ui.render_gate4_demo
+
+if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 1:
+    _gate5_ui = importlib.reload(_gate5_ui)
+render_commissioner_dashboard = _gate5_ui.render_commissioner_dashboard
 
 page_config()
 inject_css()
@@ -423,161 +428,13 @@ if not st.session_state.player and not st.session_state.remember_restore_checked
 
 
 if st.session_state.commish:
-    # Gate 4 demo is a Commissioner diagnostic. It should never require a
-    # separate player login or leave admin mode. Use a synthetic demo identity
-    # and keep every demo interaction isolated from the real player session.
+    # Gate 4 demo remains an isolated Commissioner diagnostic. Gate 5 owns the
+    # real admin dashboard and never requires a player login.
     if st.session_state.get("gate4_demo"):
         render_gate4_demo()
         st.stop()
 
-    st.markdown("### Commissioner • Gate 4")
-    st.success("Admin authentication is working. Gate 3 diagnostics remain available, and the Gate 4 live-Sunday demo is connected. Full Commissioner controls remain Gate 5.")
-
-    current_week = store.get_real_week()
-    if current_week:
-        data_week = store.get_week_by_season_week(int(current_week["season"]), int(current_week["nfl_week"])) or current_week
-        st.caption(
-            f"{data_week.get('label', 'Current week')} • NFL data: {data_week.get('data_status', 'WAITING')}"
-            + (f" • {data_week.get('data_message')}" if data_week.get('data_message') else "")
-        )
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("Check database", use_container_width=True):
-            st.toast("Database connected." if store.healthcheck() else "Database check failed.")
-    with col2:
-        if st.button("Run Gate 3 Data Check", use_container_width=True):
-            try:
-                from nfl_sync import gate3_diagnostic
-                with st.spinner("Checking schedule, players, injuries, and Week 1 ranking…"):
-                    diag = gate3_diagnostic(store)
-                st.session_state.gate3_diag = diag
-                st.toast("Gate 3 data check passed.")
-            except Exception as exc:
-                st.session_state.gate3_diag = None
-                st.error(f"Gate 3 data check failed: {exc}")
-    with col3:
-        if st.button("Exit Commissioner", use_container_width=True):
-            st.session_state.commish = False
-            st.rerun()
-
-    if st.button("Run Gate 3 Scoring Test", type="primary", use_container_width=True):
-        try:
-            from scoring_diagnostic import run_scoring_diagnostic
-            with st.spinner("Testing scoring math, Supabase persistence, Week 1 isolation, and cleanup…"):
-                scoring_diag = run_scoring_diagnostic(store)
-            st.session_state.gate3_scoring_diag = scoring_diag
-            st.toast("Gate 3 scoring test passed.")
-        except Exception as exc:
-            st.session_state.gate3_scoring_diag = None
-            st.error(f"Gate 3 scoring test failed: {exc}")
-
-    st.caption("Gate 3.5 provider replay runs in GitHub Actions — the same environment that will perform Sunday scoring.")
-    if st.button("Preview Gate 4 Live Sunday Demo", type="secondary", use_container_width=True):
-        st.session_state.gate4_demo = True
-        st.session_state.gate4_demo_phase = "live"
-        st.session_state.gate4_tab = "🏈 Sunday"
-        # Clear any old widget-backed navigation state before the demo mounts.
-        st.session_state.pop("gate4_nav", None)
-        st.session_state.pop("gate4_nav_fallback", None)
-        st.session_state.pop("gate4_detail_player_id", None)
-        # Stay in Commissioner mode; the demo is an admin-only diagnostic.
-        st.rerun()
-
-    replay_col1, replay_col2 = st.columns(2)
-    with replay_col1:
-        st.link_button(
-            "Open Gate 3.5 Replay Runner",
-            "https://github.com/TealMichael/teals-sunday-pickem/actions/workflows/nfl-refresh.yml",
-            use_container_width=True,
-        )
-    with replay_col2:
-        if st.button("Refresh Gate 3.5 Result", use_container_width=True):
-            replay_run = store.last_successful_run("preseason_replay")
-            if replay_run:
-                metadata = replay_run.get("metadata") or {}
-                st.session_state.gate35_replay_diag = {
-                    "success": True,
-                    "matchup": metadata.get("matchup"),
-                    "provider_event_id": metadata.get("provider_event_id"),
-                    "boxscore_pass": bool(metadata.get("anchor_pass")),
-                    "anchor_pass": bool(metadata.get("anchor_pass")),
-                    "database_pass": bool(metadata.get("database_pass")),
-                    "week1_isolation_pass": bool(metadata.get("week1_isolation_pass")),
-                    "cleanup_pass": bool(metadata.get("cleanup_pass")),
-                    "rows": metadata.get("rows") or [],
-                    "anchors": metadata.get("anchors") or [],
-                }
-                st.toast("Latest Gate 3.5 replay result loaded.")
-            else:
-                st.session_state.gate35_replay_diag = None
-                st.info("No successful Gate 3.5 replay has been recorded yet. Run mode preseason_replay in GitHub Actions first.")
-
-    diag = st.session_state.get("gate3_diag")
-    if diag:
-        st.markdown("#### NFL data check")
-        st.metric("Eligible Sunday games", int(diag.get("eligible_games") or 0))
-        st.caption("Ranking preview only — this button does not publish Week 1 early.")
-        preview = diag.get("visible_preview") or {}
-        for position in ("QB", "RB", "WR", "TE", "K"):
-            names = preview.get(position) or []
-            st.markdown(f"**{position}:** " + " • ".join(names))
-
-    scoring_diag = st.session_state.get("gate3_scoring_diag")
-    if scoring_diag:
-        st.markdown("#### Scoring pipeline check")
-        st.success("Gate 3 scoring passed end-to-end. Controlled demo scores were written, read back, and fully cleaned up.")
-        check1, check2, check3, check4 = st.columns(4)
-        with check1:
-            st.metric("Scoring math", "PASS")
-        with check2:
-            st.metric("Supabase round trip", "PASS")
-        with check3:
-            st.metric("Week 1 untouched", "PASS")
-        with check4:
-            st.metric("Test cleanup", "PASS")
-        st.caption("This test uses hidden players in the isolated Gate 2 Test Week. It restores their prior score/stat state before finishing.")
-        display_rows = []
-        for row in scoring_diag.get("rows") or []:
-            display_rows.append({
-                "Pos": row.get("position"),
-                "Controlled test": row.get("scenario"),
-                "Expected": f"{float(row.get('expected') or 0):.2f}",
-                "Calculated": f"{float(row.get('calculated') or 0):.2f}",
-                "Stored": f"{float(row.get('stored_pool') or 0):.2f}",
-                "Result": "PASS" if row.get("math_pass") and row.get("database_pass") else "FAIL",
-            })
-        st.dataframe(display_rows, use_container_width=True, hide_index=True)
-
-    replay_diag = st.session_state.get("gate35_replay_diag")
-    if replay_diag:
-        st.markdown("#### Real preseason box-score replay")
-        st.success("A completed 2026 preseason box score was read by the production GitHub worker, parsed, scored, persisted through Supabase, and fully cleaned up.")
-        st.caption(str(replay_diag.get("matchup") or "2026 preseason replay"))
-        r1, r2, r3, r4, r5 = st.columns(5)
-        with r1:
-            st.metric("Real box score", "PASS")
-        with r2:
-            st.metric("Known stat anchors", "PASS")
-        with r3:
-            st.metric("Supabase replay", "PASS")
-        with r4:
-            st.metric("Week 1 untouched", "PASS")
-        with r5:
-            st.metric("Test cleanup", "PASS")
-        replay_rows = []
-        for row in replay_diag.get("rows") or []:
-            replay_rows.append({
-                "Pos": row.get("position"),
-                "Real player": row.get("real_player"),
-                "Team": row.get("team"),
-                "Real stat line": row.get("stat_summary"),
-                "Pick'em points": f"{float(row.get('calculated') or 0):.2f}",
-                "Stored": f"{float(row.get('stored') or 0):.2f}",
-                "Result": "PASS" if row.get("database_pass") else "FAIL",
-            })
-        st.dataframe(replay_rows, use_container_width=True, hide_index=True)
-        st.caption("Independent anchors checked: Tyson Bagent 208 passing yards / 2 TDs and Zavion Thomas 5 catches / 140 receiving yards / 1 TD.")
+    render_commissioner_dashboard(store, pin_pepper=secret("PIN_PEPPER"))
     st.stop()
 
 if st.session_state.player:
