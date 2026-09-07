@@ -6,7 +6,7 @@ ROOT = Path(__file__).parents[1]
 def test_gate6_files_and_version_present():
     assert (ROOT / "gate6.py").exists()
     assert (ROOT / "gate6_ui.py").exists()
-    assert 'APP_VERSION = "0.6.0"' in (ROOT / "config.py").read_text()
+    assert 'APP_VERSION = "1.0.0"' in (ROOT / "config.py").read_text()
 
 
 def test_commissioner_has_launch_readiness_destination():
@@ -41,7 +41,10 @@ def test_nfl_worker_has_heartbeat_and_extended_snf_buffer_schedule():
     workflow = (ROOT / ".github/workflows/nfl-refresh.yml").read_text()
     assert '"auto_cycle"' in sync_text
     assert 'provider="github-actions"' in sync_text
-    assert 'cron: "*/30 0-1,7-23 * * *"' in workflow
+    assert 'cron: "7,22,37,52 11-23 * * 0"' in workflow
+    assert 'cron: "7,22,37,52 0-1 * * 1"' in workflow
+    assert 'cron: "7 9-13 * * 1"' in workflow
+    assert 'LIVE_SCORE_REFRESH_MINUTES = 15' in (ROOT / "config.py").read_text()
     assert "concurrency:" in workflow
 
 

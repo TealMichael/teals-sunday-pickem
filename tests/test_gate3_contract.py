@@ -11,9 +11,11 @@ def test_gate3_migration_isolated_and_server_only():
     assert "public.players" not in text
 
 
-def test_scheduler_is_30_minute_and_has_manual_dispatch():
+def test_scheduler_matches_release_cadence_and_has_manual_dispatch():
     text = Path(".github/workflows/nfl-refresh.yml").read_text()
-    assert 'cron: "*/30 0-1,7-23 * * *"' in text
+    assert 'cron: "7,22,37,52 11-23 * * 0"' in text
+    assert 'cron: "7,22,37,52 0-1 * * 1"' in text
+    assert 'cron: "7 9-13 * * 1"' in text
     assert 'timezone: "America/New_York"' in text
     assert "workflow_dispatch:" in text
     assert "SUPABASE_SECRET_KEY" in text

@@ -1,3 +1,3 @@
-v0.6.0 — Gate 6 Launch Readiness
+v1.0.0 — Week 1 Release
 
-Final pre-release hardening for Week 1: adds a Commissioner launch go/no-go dashboard and full-week rehearsal, GitHub automation heartbeat, CI quality gate, friendly player error recovery, stale-live-data warnings, future-week-safe copy, season/history caching, and phone Home Screen guidance. No SQL migration or new secrets are required.
+Production release for Teal's Sunday Pick'em. Locks the final launch-ready app after Gates 1-6, adds the optimized v1 worker schedule, increases Sunday injury/status and live-score cadence to every 15 minutes beginning in the 11 AM ET window, and keeps sparse weekday polling plus Monday reconciliation retries. No SQL migration or new secrets are required.

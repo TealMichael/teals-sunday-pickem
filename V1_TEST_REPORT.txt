@@ -1,0 +1,16 @@
+Teal's Sunday Pick'em v1.0.0 — Release Test Report
+
+Automated test suite: 128 PASS
+Full-week in-memory rehearsal: 9/9 PASS
+Python compile check: PASS
+Release guard: PASS
+
+Release-specific verification:
+- APP_VERSION = 1.0.0
+- Sunday injury/status cadence = 15 minutes beginning at 11 AM ET
+- Live score cadence = 15 minutes after the 1 PM ET lock
+- Manual auto-cycle live-score throttling prevents duplicate over-fetching
+- Weekday GitHub schedule is reduced to the planned injury cadence
+- Tuesday noon publication pass is preserved
+- Monday final reconciliation has hourly retry coverage
+- Workflow names remain permanent: nfl-refresh.yml and quality-gate.yml

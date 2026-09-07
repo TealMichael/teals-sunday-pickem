@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, time as dtime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from config import NFL_SEASON, TIMEZONE_NAME
+from config import LIVE_SCORE_REFRESH_MINUTES, NFL_SEASON, TIMEZONE_NAME
 from nfl_rankings import WEEK1_KICKER_TEAM_ORDER, nflverse_rankings, week1_rankings
 from nfl_scoring import score_stat_line
 from gate4_results import archive_week_results
@@ -406,10 +406,8 @@ def injury_interval_minutes(now_et: datetime) -> int:
     if weekday == 6:
         if 8 <= now_et.hour < 11:
             return 60
-        if 11 <= now_et.hour < 13:
-            return 30
-        if now_et.hour >= 13:
-            return 60
+        if now_et.hour >= 11:
+            return 15
         return 180
     return 360
 
@@ -490,16 +488,18 @@ def run_auto(store, *, now: datetime | None = None) -> dict[str, Any]:
                 except Exception as exc:
                     actions.append(f"injury_failed:{exc}")
 
-        # Sunday 1 PM through roughly 1 AM Monday: one shared scoring refresh every
-        # scheduled GitHub Action run (workflow cadence = 30 minutes). The small
-        # post-midnight buffer covers a long SNF/overtime without polling overnight.
+        # Sunday 1 PM through roughly 1 AM Monday: live scoring is due every
+        # 15 minutes. The workflow itself runs on the same Sunday cadence, while
+        # this guard prevents an extra manual auto-cycle from over-fetching.
         scoring_lock = parse_timestamp(week.get("locks_at"))
         if scoring_lock and scoring_lock <= now <= scoring_lock + timedelta(hours=12) and week.get("published_at"):
-            try:
-                refresh_live_scores(store, week)
-                actions.append("live_scores")
-            except Exception as exc:
-                actions.append(f"scores_failed:{exc}")
+            last_live = store.last_successful_run("live_scores", week_id=str(week["id"]))
+            if _run_due(last_live, LIVE_SCORE_REFRESH_MINUTES, now):
+                try:
+                    refresh_live_scores(store, week)
+                    actions.append("live_scores")
+                except Exception as exc:
+                    actions.append(f"scores_failed:{exc}")
 
         finish_heartbeat()
         return {"actions": actions}

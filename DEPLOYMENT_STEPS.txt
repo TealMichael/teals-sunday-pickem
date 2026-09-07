@@ -1,44 +1,30 @@
-TEAL'S SUNDAY PICK'EM — v0.3.0 GATE 3 INSTALL
+TEAL'S SUNDAY PICK'EM — v1.0.0 WEEK 1 RELEASE INSTALL
 
-A. SUPABASE MIGRATION
-1. Keep the existing Yahtzee Supabase project and existing `pickem` exposed schema.
-2. In Supabase SQL Editor, create a new query and run ALL of:
-   db/003_gate3_nfl_data.sql
-3. Supabase may warn that the query changes database objects. This migration adds Gate 3 columns/tables and does not drop Yahtzee or Gate 1/2 data.
-4. Go to Integrations -> Data API -> Settings -> Exposed tables.
-5. Enable these NEW Pick'em tables only:
-   pickem.nfl_games
-   pickem.nfl_players
-   pickem.player_week_stats
-   pickem.data_runs
-   Keep the existing Pick'em tables enabled. Leave Yahtzee table settings unchanged.
+A. DATABASE / SECRETS
+1. No SQL migration is required for v1.0.0.
+2. Do not change Supabase exposed tables.
+3. Do not change Streamlit Secrets or GitHub Actions repository secrets.
 
 B. GITHUB UPDATE
-6. Upload/replace the v0.3.0 GitHub Update files in the existing teals-sunday-pickem repo.
-7. requirements.txt changes, so allow Streamlit to do a full dependency rebuild.
+4. Upload/replace the files from the v1.0.0 GitHub Update ZIP in the existing teals-sunday-pickem repository.
+5. Make sure the workflow files have the permanent paths:
+   .github/workflows/nfl-refresh.yml
+   .github/workflows/quality-gate.yml
+   Do not keep versioned duplicate workflow filenames.
+6. Commit directly to main. Streamlit should redeploy automatically.
 
-C. GITHUB ACTIONS SECRETS — NEW FOR GATE 3
-8. In GitHub repo -> Settings -> Secrets and variables -> Actions, create two Repository secrets:
-   SUPABASE_URL
-   SUPABASE_SECRET_KEY
-   Use the SAME values already used by this Pick'em Streamlit app / Yahtzee Supabase project.
-   Do NOT add PIN_PEPPER, SESSION_PEPPER, or Commissioner credentials to GitHub Actions; the NFL job does not need them.
-9. The new workflow should appear under Actions as: Pickem NFL Refresh.
+C. WORKFLOW CHECK
+7. In GitHub → Actions, confirm Pickem Quality Gate runs green after the commit.
+8. Confirm Pickem NFL Refresh remains visible. The optimized v1 schedule is intentionally sparse on weekdays and becomes every 15 minutes from the Sunday 11 AM ET window through the late-Sunday live-scoring window.
 
-D. REAL PROVIDER ACCEPTANCE TEST
-10. Open the deployed Pick'em app and enter Commissioner mode.
-11. Click Run Gate 3 Data Check.
-12. Expected before Week 1:
-    - Eligible Sunday games: 13
-    - QB / RB / WR / TE / K ranking counts: 10 each
-    - Five player names shown as the preview at each position
-    - No Week 1 early publication
-13. In GitHub -> Actions -> Pickem NFL Refresh -> Run workflow, choose `diagnostic` once. This proves the scheduled runner can read the two GitHub secrets and reach the data providers/Supabase.
-14. Do NOT force-publish Week 1 before Tuesday noon. The normal `auto` workflow publishes automatically once Week 1 opens.
+D. APP CHECK
+9. Open the deployed app and confirm Build 1.0.0 appears where the build label is shown.
+10. Enter Commissioner → Launch → Run Launch Check. Expect READY (or only a temporary heartbeat warning until the next successful auto worker run).
+11. Run Full Week Rehearsal. Expect 9/9 PASS.
 
-E. TUESDAY ACCEPTANCE
-15. At/after Tuesday 12:00 PM ET, confirm the automatic workflow has published the pool.
-16. The normal player app should immediately show five real choices at each QB/RB/WR/TE/K instead of the prepared-pool message.
-17. Verify the same Gate 2 lineup/edit/Questionable backup flow with real players.
+E. RELEASE
+12. Commit message: v1.0.0 — Week 1 Release
+13. Tag: v1.0.0
+14. Keep WEEK1_LAUNCH_CHECKLIST.md available through the first real Tuesday/Sunday/Monday cycle.
 
-No new Streamlit Secrets are required for Gate 3.
+No new Streamlit secrets, GitHub secrets, or Supabase changes are required for v1.0.0.
