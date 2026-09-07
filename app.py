@@ -410,9 +410,31 @@ def player_login_ui() -> None:
         st.caption("One nickname. One emoji. One PIN. That's it.")
         with st.form("signup_form"):
             st.text_input("Choose a nickname", max_chars=15, key="signup_nickname")
-            st.text_input("Choose one emoji", max_chars=8, placeholder="🏈", key="signup_emoji")
-            st.text_input("Create a 4-digit PIN", type="password", max_chars=4, key="signup_pin")
-            st.text_input("Confirm PIN", type="password", max_chars=4, key="signup_pin_confirm")
+            st.text_input(
+                "Choose one emoji",
+                max_chars=8,
+                placeholder="Tap here, then choose an emoji",
+                autocomplete="off",
+                key="signup_emoji",
+            )
+            st.text_input(
+                "Create a 4-digit PIN",
+                type="phone",
+                max_chars=4,
+                placeholder="4 digits",
+                autocomplete="off",
+                icon="",
+                key="signup_pin",
+            )
+            st.text_input(
+                "Confirm PIN",
+                type="phone",
+                max_chars=4,
+                placeholder="4 digits",
+                autocomplete="off",
+                icon="",
+                key="signup_pin_confirm",
+            )
             st.checkbox("Keep me signed in this season", value=True, key="signup_remember")
             st.form_submit_button(
                 "Create Player",

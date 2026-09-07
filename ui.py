@@ -104,6 +104,12 @@ button[kind="primary"], [data-testid="stBaseButton-primary"], [data-testid="stBa
 .stButton button[kind="secondary"]:hover, [data-testid="stBaseButton-secondary"]:hover { background:#F3F5F7 !important; color:var(--ink) !important; border-color:#BFC9CF !important; }
 [data-testid="stTextInput"] input { min-height:44px; border-radius:12px; background:#F3F5F7 !important; color:var(--ink) !important; -webkit-text-fill-color:var(--ink) !important; }
 [data-testid="stTextInput"] input::placeholder { color:#8A969F !important; }
+/* Player signup PINs are intentionally phone/tel inputs so iOS opens a numeric
+   keypad and does not treat them as account passwords. Mask the four digits
+   visually without changing the underlying input back to type=password. */
+div[class*="st-key-signup_pin"] input {
+  -webkit-text-security:disc;
+}
 [data-testid="stCheckbox"] label, [data-testid="stWidgetLabel"] { color:var(--ink) !important; }
 
 /* Keep the product visually light even when the phone/browser is in dark mode.
