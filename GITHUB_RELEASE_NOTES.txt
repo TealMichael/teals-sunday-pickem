@@ -1,3 +1,10 @@
-v0.4.3 — Gate 4 Native App-Shell Polish
+v0.4.4 — Gate 4 Navigation Simplification
 
-Reworks the Gate 4 mobile navigation into a compact native-style four-destination tab bar with consistent Material icons, safe-area handling, and a clear selected state. Also tightens headings, cards, standings, storylines, history, and profile spacing so the live Sunday experience feels less like default Streamlit and more like a finished phone-first app. No game, scoring, NFL-data, auth, or Supabase logic changes.
+Commit message:
+v0.4.4 — Gate 4 Navigation Simplification
+
+Commit changes:
+Removes the duplicate weekly leaderboard destination so Sunday owns the current week and Season becomes a focused championship-standings tab.
+
+Tag:
+v0.4.4

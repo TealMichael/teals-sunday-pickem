@@ -132,12 +132,6 @@ div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"] p { width:100% !im
 div[class*="st-key-leaderbtn_"] [data-testid="stButton"] button:hover,
 div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"]:hover { background:#F3F7F7 !important; border-color:#9CCFC8 !important; transform:translateY(-1px); }
 
-/* Gate 4 leaderboard switch: persistent across reruns, unlike st.tabs. */
-div[class*="st-key-gate4_leaderboard_view"] { margin:.15rem 0 .7rem !important; }
-div[class*="st-key-gate4_leaderboard_view"] [data-testid="stSegmentedControl"] { background:#EEF2F4 !important; border-radius:14px !important; padding:.22rem !important; }
-div[class*="st-key-gate4_leaderboard_view"] button { min-height:42px !important; border:0 !important; border-radius:11px !important; background:transparent !important; color:var(--muted) !important; font-weight:780 !important; }
-div[class*="st-key-gate4_leaderboard_view"] button[aria-pressed="true"] { background:#FFFFFF !important; color:#155E56 !important; box-shadow:0 2px 8px rgba(23,32,39,.08) !important; }
-
 .season-left { min-width:0; }
 .season-name { font-weight:820; color:var(--ink); }
 .you-badge { display:inline-block; margin-left:.3rem; padding:.08rem .35rem; border-radius:999px; background:#ECF8F6; color:#155E56; font-size:.66rem; letter-spacing:.04em; font-weight:900; vertical-align:.08rem; }

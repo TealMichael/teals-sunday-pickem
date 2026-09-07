@@ -603,7 +603,7 @@ def render_player_game(store, player: dict, on_sign_out=None) -> None:
     # normal app gets the four-tab Gate 4 navigation.
     if not bool(week.get("is_demo")):
         tab = render_nav()
-        if tab == "🏆 Leaderboard":
+        if tab == "🏆 Season":
             render_leaderboards(store, week, player, phase)
             return
         if tab == "🕘 History":

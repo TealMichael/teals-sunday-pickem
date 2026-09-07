@@ -33,14 +33,20 @@ def render_nav() -> str:
     # backward compatibility, but render consistent Material icons instead of
     # platform-dependent emoji. This mirrors native mobile tab-bar guidance:
     # familiar icon + single-word label + persistent selected state.
-    options = ["🏈 Sunday", "🏆 Leaderboard", "🕘 History", "👤 Profile"]
+    options = ["🏈 Sunday", "🏆 Season", "🕘 History", "👤 Profile"]
     nav_labels = {
         "🏈 Sunday": ":material/sports_football: Sunday",
-        "🏆 Leaderboard": ":material/leaderboard: Leaderboard",
+        "🏆 Season": ":material/emoji_events: Season",
         "🕘 History": ":material/history: History",
         "👤 Profile": ":material/person: Profile",
     }
     default = st.session_state.get("gate4_tab") or options[0]
+    # v0.4.4 simplifies the app shell: the current-week leaderboard lives on
+    # Sunday, while the old Leaderboard destination becomes Season. Preserve a
+    # user's old tab intent across the deploy instead of bouncing them to Sunday.
+    if default == "🏆 Leaderboard":
+        default = "🏆 Season"
+        st.session_state.gate4_tab = default
     if default not in options:
         default = options[0]
 
@@ -48,7 +54,11 @@ def render_nav() -> str:
     # stale state before mounting the Gate 4 navigator so Streamlit never has to
     # reconcile a value of the wrong shape/type.
     existing = st.session_state.get("gate4_nav")
-    if existing is not None and existing not in options:
+    if existing == "🏆 Leaderboard":
+        st.session_state.pop("gate4_nav", None)
+        existing = None
+        default = "🏆 Season"
+    elif existing is not None and existing not in options:
         st.session_state.pop("gate4_nav", None)
         existing = None
 
@@ -226,38 +236,6 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
     _last_updated(week)
 
 
-def _leaderboard_view_switcher() -> str:
-    options = ["This Week", "Season"]
-    default = st.session_state.get("gate4_leaderboard_tab") or options[0]
-    if default not in options:
-        default = options[0]
-    existing = st.session_state.get("gate4_leaderboard_view")
-    if existing is not None and existing not in options:
-        st.session_state.pop("gate4_leaderboard_view", None)
-        existing = None
-    segmented = getattr(st, "segmented_control", None)
-    if segmented:
-        selected = segmented(
-            "Leaderboard view",
-            options,
-            default=None if existing in options else default,
-            key="gate4_leaderboard_view",
-            label_visibility="collapsed",
-        )
-    else:
-        selected = st.radio(
-            "Leaderboard view",
-            options,
-            index=options.index(default),
-            horizontal=True,
-            key="gate4_leaderboard_view_fallback",
-            label_visibility="collapsed",
-        )
-    selected = selected or default
-    st.session_state.gate4_leaderboard_tab = selected
-    return selected
-
-
 def _render_season_rows(standings: list[dict[str, Any]], current_player_id: str | None = None) -> None:
     if not standings:
         st.info("Season standings will appear after the first finalized Sunday.")
@@ -288,24 +266,13 @@ def _profile_stat_grid(stats: dict[str, Any]) -> None:
 
 
 def render_leaderboards(store, week: dict[str, Any], player: dict[str, Any], phase: str) -> None:
-    st.markdown("### Leaderboard")
-    view = _leaderboard_view_switcher()
+    """Render the season championship destination.
 
-    if view == "This Week":
-        if phase != "locked":
-            registered = store.get_registered_players()
-            bundle = store.get_week_public_bundle(str(week["id"])) if week.get("published_at") else {"lineups": []}
-            ready = sum(1 for row in bundle.get("lineups") or [] if row.get("confirmed_at"))
-            st.markdown('<div class="card-tight"><div class="eyebrow">This Week</div><div class="week-title">Lineups stay private until 1:00 PM ET</div></div>', unsafe_allow_html=True)
-            st.metric("Lineups ready", f"{ready} / {len(registered)}")
-        else:
-            bundle = store.get_week_public_bundle(str(week["id"]))
-            leaderboard = build_weekly_leaderboard(bundle)
-            _leaderboard_rows(leaderboard, str(player["id"]), detail=True)
-            _last_updated(week)
-        return
-
-    st.markdown("#### Season Standings")
+    The current-week leaderboard intentionally lives on Sunday after the 1 PM
+    lock, so this top-level destination has one job: season standings. Keeping
+    this function name avoids churn in the Gate 4 integration layer.
+    """
+    st.markdown("### Season")
     results = store.get_weekly_results(season=int(week.get("season") or NFL_SEASON))
     standings = add_zero_point_players(build_season_standings(results), store.get_registered_players())
     if not results:
@@ -318,7 +285,6 @@ def render_leaderboards(store, week: dict[str, Any], player: dict[str, Any], pha
             st.caption("Ties receive the full points for that rank; the next rank skips appropriately.")
     else:
         st.caption("ⓘ Season points: 12–9–7–6–5–4–3–2–1 for 1st through 9th. Ties receive the full points for that rank.")
-
 
 def render_history(store, season: int) -> None:
     st.markdown("### History")
@@ -510,21 +476,16 @@ def render_gate4_demo(current_player: dict[str, Any] | None = None) -> None:
         _leaderboard_rows(leaderboard, demo_player_id, detail=True)
         if phase == "final":
             st.caption("Demo includes a first-place tie, traditional competition ranking, and full season points for tied champions.")
-    elif tab == "🏆 Leaderboard":
-        st.markdown("### Leaderboard")
-        view = _leaderboard_view_switcher()
-        if view == "This Week":
-            _leaderboard_rows(leaderboard, demo_player_id, detail=True)
-        else:
-            st.markdown("#### Season Standings")
-            demo_results = []
-            for row in leaderboard:
-                demo_results.append({
-                    "player_id": row["player_id"], "nickname_snapshot": row["nickname"], "emoji_snapshot": row["emoji"],
-                    "season_points": row["season_points_if_final"], "weekly_score": row["score"], "finish_rank": row["rank"],
-                })
-            _render_season_rows(build_season_standings(demo_results), demo_player_id)
-            st.caption("Demo season standings use the exact weekly placement points that will feed the real season leaderboard.")
+    elif tab == "🏆 Season":
+        st.markdown("### Season")
+        demo_results = []
+        for row in leaderboard:
+            demo_results.append({
+                "player_id": row["player_id"], "nickname_snapshot": row["nickname"], "emoji_snapshot": row["emoji"],
+                "season_points": row["season_points_if_final"], "weekly_score": row["score"], "finish_rank": row["rank"],
+            })
+        _render_season_rows(build_season_standings(demo_results), demo_player_id)
+        st.caption("Demo season standings use the exact weekly placement points that will feed the real season leaderboard.")
     elif tab == "🕘 History":
         st.markdown("### History")
         st.markdown(
