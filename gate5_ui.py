@@ -46,6 +46,28 @@ def _ago(value: str | None) -> str:
     return f"{seconds // 86400} d ago"
 
 
+def _set_flash(message: str, *, kind: str = "success") -> None:
+    st.session_state["g5_flash"] = {"message": message, "kind": kind}
+
+
+def _render_flash() -> None:
+    flash = st.session_state.pop("g5_flash", None)
+    if not flash:
+        return
+    message = str(flash.get("message") or "").strip()
+    kind = str(flash.get("kind") or "success")
+    if not message:
+        return
+    if kind == "error":
+        st.error(message)
+    elif kind == "warning":
+        st.warning(message)
+    elif kind == "info":
+        st.info(message)
+    else:
+        st.success(message)
+
+
 def _render_week_overview(store, week: dict[str, Any]) -> None:
     snapshot = week_snapshot(store, week)
     c1, c2, c3, c4 = st.columns(4)
@@ -58,8 +80,12 @@ def _render_week_overview(store, week: dict[str, Any]) -> None:
         f"Locks {et_label(week.get('locks_at'))} • Last NFL refresh: {_ago(week.get('last_data_refresh_at'))}"
     )
 
+    now = datetime.now(UTC)
+    opens = parse_timestamp(week.get("opens_at"))
     needs = snapshot.get("needs_attention") or []
-    if needs:
+    if opens and now < opens:
+        st.info(f"Lineups open {et_label(opens)}. No player action is needed yet.")
+    elif needs:
         with st.expander(f"Needs attention • {len(needs)} player{'s' if len(needs) != 1 else ''}"):
             for row in needs:
                 st.write(f"{row.get('emoji') or '🏈'} **{row.get('nickname')}** — {_status_label(row)}")
@@ -74,8 +100,8 @@ def _render_week_overview(store, week: dict[str, Any]) -> None:
             try:
                 with st.spinner("Refreshing NFL data…"):
                     result = refresh_nfl_now(store, week)
-                st.success("NFL data refresh completed.")
                 st.session_state.g5_last_refresh = result
+                _set_flash("NFL data refresh completed. The Week screen now shows the latest stored status and refresh time.")
                 st.rerun()
             except Exception as exc:
                 st.error(f"NFL refresh failed: {exc}")
@@ -84,8 +110,6 @@ def _render_week_overview(store, week: dict[str, Any]) -> None:
             st.toast("Database connected." if store.healthcheck() else "Database check failed.")
 
     st.markdown("#### Week Controls")
-    now = datetime.now(UTC)
-    opens = parse_timestamp(week.get("opens_at"))
     lock = parse_timestamp(week.get("locks_at"))
     published = bool(week.get("published_at"))
     can_generate = bool(not published and opens and now >= opens)
@@ -103,7 +127,7 @@ def _render_week_overview(store, week: dict[str, Any]) -> None:
             try:
                 with st.spinner("Rebuilding the weekly player pool…"):
                     generate_pool_again(store, week)
-                st.success("Weekly pool generated and published.")
+                _set_flash("Weekly pool generated and published successfully.")
                 st.rerun()
             except Exception as exc:
                 st.error(str(exc))
@@ -123,7 +147,7 @@ def _render_week_overview(store, week: dict[str, Any]) -> None:
             try:
                 with st.spinner("Reconciling official stats…"):
                     result = finalize_week_now(store, week)
-                st.success(f"Week finalized. {int(result.get('results') or 0)} result rows archived.")
+                _set_flash(f"Week finalized. {int(result.get('results') or 0)} result rows archived.")
                 st.rerun()
             except Exception as exc:
                 st.error(f"Finalization deferred: {exc}")
@@ -247,7 +271,7 @@ def _render_corrections(store, week: dict[str, Any]) -> None:
                     replacement_pool_id=str(replacement["id"]),
                     reason=reason,
                 )
-                st.success(f"{result['outgoing_name']} replaced by {result['replacement_name']}.")
+                _set_flash(f"{result['outgoing_name']} replaced by {result['replacement_name']}.")
                 st.rerun()
             except Exception as exc:
                 st.error(str(exc))
@@ -284,7 +308,7 @@ def _render_corrections(store, week: dict[str, Any]) -> None:
             if st.button("Apply Override", type="primary", use_container_width=True, disabled=not after_lock, key="g5_score_apply"):
                 try:
                     set_score_override(store, week, pool_player_id=str(player["id"]), score=float(corrected), note=note)
-                    st.success("Manual score override applied.")
+                    _set_flash("Manual score override applied. Automatic refreshes will not overwrite it until you clear the override.")
                     st.rerun()
                 except Exception as exc:
                     st.error(str(exc))
@@ -292,7 +316,7 @@ def _render_corrections(store, week: dict[str, Any]) -> None:
             if st.button("Clear Override", use_container_width=True, disabled=not after_lock or current_manual is None, key="g5_score_clear"):
                 try:
                     clear_score_override(store, week, pool_player_id=str(player["id"]))
-                    st.success("Manual override cleared; provider score restored.")
+                    _set_flash("Manual override cleared; provider scoring is active again.")
                     st.rerun()
                 except Exception as exc:
                     st.error(str(exc))
@@ -386,6 +410,7 @@ def _render_diagnostics(store) -> None:
 def render_commissioner_dashboard(store, *, pin_pepper: str) -> None:
     st.markdown("### Commissioner • Gate 5")
     st.success("Commissioner controls are live. Player lineups remain protected by the universal Sunday 1:00 PM ET database lock.")
+    _render_flash()
 
     week = store.get_real_week()
     if not week:
