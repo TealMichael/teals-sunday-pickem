@@ -30,7 +30,7 @@ def test_questionable_selection_uses_full_wording():
 
 def test_position_selection_waits_for_explicit_next():
     text = _ui()
-    assert 'Tap a player to select it, then tap Next. Choices autosave immediately.' in text
+    assert 'Tap a player to highlight it. Your choice saves only when you tap Next.' in text
     assert 'next_label = f"Next: {nxt} →" if nxt else "Review My Five →"' in text
     assert 'disabled=not current_id' in text
 

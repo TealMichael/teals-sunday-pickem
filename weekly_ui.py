@@ -43,7 +43,7 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 3
+WEEKLY_UI_SCHEMA_VERSION = 4
 
 
 def _compact_duration(seconds: int) -> str:
@@ -296,11 +296,18 @@ def _merge_saved_pick(picks: list[dict], saved_pick: dict) -> list[dict]:
     return merged
 
 
-def _load_lineup(store, week: dict, player: dict, pool: list[dict]) -> tuple[dict | None, list[dict], list[dict], dict[str, dict]]:
+def _load_lineup(
+    store,
+    week: dict,
+    player: dict,
+    pool: list[dict],
+    *,
+    snapshot_ttl_seconds: float = LINEUP_SNAPSHOT_TTL_SECONDS,
+) -> tuple[dict | None, list[dict], list[dict], dict[str, dict]]:
     key = _lineup_snapshot_key(week, player)
     snapshot = st.session_state.get(key) or {}
     age = time.monotonic() - float(snapshot.get("at") or 0.0)
-    if snapshot and age <= LINEUP_SNAPSHOT_TTL_SECONDS:
+    if snapshot and age <= float(snapshot_ttl_seconds):
         lineup = snapshot.get("lineup")
         picks = list(snapshot.get("picks") or [])
         return lineup, picks, pool, _player_lookup(pool)
@@ -319,7 +326,7 @@ def _onboarding(store, player: dict) -> bool:
         st.caption("QB · RB · WR · TE · K")
     with st.container(border=True):
         st.markdown("**2 · Change your five until Sunday at 1.**")
-        st.caption("Every choice autosaves as you go.")
+        st.caption("Tap a player, then tap Next to save each position.")
     with st.container(border=True):
         st.markdown("**3 · Beat your friends.**")
         st.caption("Weekly finishes will feed the season standings.")
@@ -384,23 +391,61 @@ def _complete_builder_step(position: str) -> None:
     _advance_builder(position)
 
 
-def _select_starter(
+def _pending_builder_key(kind: str, week: dict, player: dict, position: str) -> str:
+    return f"builder_pending::{kind}::{week['id']}::{player['id']}::{position}"
+
+
+def _clear_pending_builder(week: dict, player: dict, position: str) -> None:
+    st.session_state.pop(_pending_builder_key("starter", week, player, position), None)
+    st.session_state.pop(_pending_builder_key("backup", week, player, position), None)
+
+
+def _select_starter(week: dict, player: dict, position: str, row: dict) -> None:
+    """Stage a starter locally. Supabase is not touched until the user taps Next."""
+    st.session_state[_pending_builder_key("starter", week, player, position)] = str(row["id"])
+    # A different starter cannot inherit a previously staged emergency backup.
+    st.session_state.pop(_pending_builder_key("backup", week, player, position), None)
+    st.session_state.builder_position = position
+    st.session_state.builder_mode = "pick"
+
+
+def _select_backup(week: dict, player: dict, position: str, row: dict) -> None:
+    """Stage an emergency backup locally. Starter + backup save together on Next."""
+    st.session_state[_pending_builder_key("backup", week, player, position)] = str(row["id"])
+    st.session_state.builder_position = position
+    st.session_state.builder_mode = "backup"
+
+
+def _save_selected_position(
     store,
     week: dict,
     player: dict,
     position: str,
-    row: dict,
     *,
     lineup: dict | None,
     picks: list[dict],
     pool: list[dict],
-) -> None:
+    starter_id: str,
+    backup_id: str = "",
+) -> tuple[dict | None, list[dict]]:
+    """Persist one confirmed position exactly once, then refresh the local snapshot."""
+    by_pos = picks_by_position(picks)
+    current = by_pos.get(position)
+    current_starter_id = str(current.get("pool_player_id") or "") if current else ""
+    current_backup_id = str(current.get("emergency_pool_player_id") or "") if current else ""
+
+    # Tapping the already-saved choice and pressing Next should not generate a
+    # redundant Supabase upsert. It is navigation only.
+    if current and current_starter_id == str(starter_id) and current_backup_id == str(backup_id or ""):
+        _clear_pending_builder(week, player, position)
+        return lineup, picks
+
     saved = store.save_pick(
         week_id=str(week["id"]),
         player_id=str(player["id"]),
         position=position,
-        pool_player_id=str(row["id"]),
-        emergency_pool_player_id=None,
+        pool_player_id=str(starter_id),
+        emergency_pool_player_id=str(backup_id) if backup_id else None,
         lineup_id=str(lineup["id"]) if lineup else None,
         known_week=week,
         known_pool=pool,
@@ -411,41 +456,10 @@ def _select_starter(
         "player_id": str(player["id"]),
         "confirmed_at": None,
     }
-    _stash_lineup_snapshot(week, player, resolved_lineup, _merge_saved_pick(picks, saved))
-    # Selection saves immediately, but navigation is deliberate. Keeping the
-    # user on this position makes the selected-card highlight visible and lets
-    # them change their mind before tapping Next.
-    st.session_state.builder_position = position
-    st.session_state.builder_mode = "pick"
-
-
-def _select_backup(
-    store,
-    week: dict,
-    player: dict,
-    position: str,
-    row: dict,
-    *,
-    lineup: dict,
-    picks: list[dict],
-    current: dict,
-    pool: list[dict],
-) -> None:
-    saved = store.set_emergency_backup(
-        week_id=str(week["id"]),
-        player_id=str(player["id"]),
-        position=position,
-        emergency_pool_player_id=str(row["id"]),
-        starter_pool_player_id=str(current["pool_player_id"]),
-        lineup_id=str(lineup["id"]),
-        known_week=week,
-        known_pool=pool,
-    )
-    _stash_lineup_snapshot(week, player, lineup, _merge_saved_pick(picks, saved))
-    # As with starters, save immediately but wait for an explicit Next tap so
-    # the chosen emergency backup remains visibly selected.
-    st.session_state.builder_position = position
-    st.session_state.builder_mode = "backup"
+    merged = _merge_saved_pick(picks, saved)
+    _stash_lineup_snapshot(week, player, resolved_lineup, merged)
+    _clear_pending_builder(week, player, position)
+    return resolved_lineup, merged
 
 
 def _markdown_escape(value: str) -> str:
@@ -486,72 +500,115 @@ def _render_player_card_button(row: dict, *, key: str, selected: bool = False, d
 
 
 def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -> None:
-    lineup, picks, pool, pool_by_id = _load_lineup(store, week, player, pool)
+    # While the builder is open, keep the already-loaded lineup snapshot warm.
+    # The database remains authoritative when Next performs the actual write.
+    lineup, picks, pool, pool_by_id = _load_lineup(
+        store, week, player, pool, snapshot_ttl_seconds=300.0
+    )
     by_pos = picks_by_position(picks)
-    chosen, total = lineup_progress(picks)
-    current = by_pos.get(position)
-    current_id = str(current.get("pool_player_id")) if current else ""
+    saved_current = by_pos.get(position)
+    saved_starter_id = str(saved_current.get("pool_player_id") or "") if saved_current else ""
+    saved_backup_id = str(saved_current.get("emergency_pool_player_id") or "") if saved_current else ""
+
+    pending_starter_id = str(
+        st.session_state.get(_pending_builder_key("starter", week, player, position)) or ""
+    )
+    current_id = pending_starter_id or saved_starter_id
+
+    pending_backup_id = str(
+        st.session_state.get(_pending_builder_key("backup", week, player, position)) or ""
+    )
+    if pending_backup_id:
+        backup_id = pending_backup_id
+    elif current_id and current_id == saved_starter_id:
+        backup_id = saved_backup_id
+    else:
+        backup_id = ""
+
     rows = _stable_order(str(player["id"]), str(week["id"]), position, position_pool(pool, position))
     mode = st.session_state.get("builder_mode", "pick")
 
     st.markdown(f"### Choose your {position}")
-    st.caption("Tap a player to select it, then tap Next. Choices autosave immediately.")
+    st.caption("Tap a player to highlight it. Your choice saves only when you tap Next.")
 
-    if mode == "backup" and current:
-        starter = pool_by_id.get(current_id)
-        if starter and safe_status(starter.get("availability_status")) == "QUESTIONABLE":
-            st.markdown(
-                f'<div class="status-warn"><strong>⚠️ {_display_name(starter)} is Questionable.</strong><br>Choose one of the other {position}s as your emergency backup.</div>',
-                unsafe_allow_html=True,
-            )
-            st.info(
-                "How the emergency backup works: If your starter is ruled OUT/inactive after the 1:00 PM ET lock "
-                "and does not play, your emergency backup replaces them. If your starter plays at all, your starter counts. "
-                "Your backup stays private unless it activates."
-            )
-            backup_id = str(current.get("emergency_pool_player_id") or "")
-            for row in rows:
-                if str(row["id"]) == current_id:
-                    continue
-                if _render_player_card_button(row, key=f"backup::{position}::{row['id']}", selected=str(row["id"]) == backup_id):
-                    if lineup:
-                        _select_backup(
-                            store, week, player, position, row,
-                            lineup=lineup, picks=picks, current=current, pool=pool,
-                        )
-                    st.toast("Emergency backup saved.")
-                    st.rerun()
+    starter = pool_by_id.get(current_id) if current_id else None
+    backup = pool_by_id.get(backup_id) if backup_id else None
+    backup_ready = bool(
+        starter
+        and backup
+        and str(backup.get("id")) != str(starter.get("id"))
+        and safe_status(backup.get("availability_status")) != "OUT"
+    )
 
-            return_mode = st.session_state.get("builder_return_mode")
-            left, right = st.columns(2)
-            with left:
-                if st.button("Change starter", use_container_width=True):
-                    st.session_state.builder_mode = "pick"
-                    st.rerun()
-            with right:
-                if return_mode == "review":
-                    next_label = "Return to Review →"
-                elif return_mode == "home":
-                    next_label = "Return to Lineup →"
-                else:
-                    nxt = next_position(position)
-                    next_label = f"Next: {nxt} →" if nxt else "Review My Five →"
-                if st.button(next_label, type="primary", use_container_width=True, disabled=not backup_id):
+    if mode == "backup":
+        if not starter or safe_status(starter.get("availability_status")) != "QUESTIONABLE":
+            st.session_state.builder_mode = "pick"
+            st.rerun()
+
+        st.markdown(
+            f'<div class="status-warn"><strong>⚠️ {_display_name(starter)} is Questionable.</strong><br>Choose one of the other {position}s as your emergency backup.</div>',
+            unsafe_allow_html=True,
+        )
+        st.info(
+            "How the emergency backup works: If your starter is ruled OUT/inactive after the 1:00 PM ET lock "
+            "and does not play, your emergency backup replaces them. If your starter plays at all, your starter counts. "
+            "Your backup stays private unless it activates."
+        )
+        for row in rows:
+            if str(row["id"]) == current_id:
+                continue
+            if _render_player_card_button(
+                row,
+                key=f"backup::{position}::{row['id']}",
+                selected=str(row["id"]) == backup_id,
+            ):
+                _select_backup(week, player, position, row)
+                st.toast("Emergency backup selected.")
+                st.rerun()
+
+        return_mode = st.session_state.get("builder_return_mode")
+        left, right = st.columns(2)
+        with left:
+            if st.button("Change starter", use_container_width=True):
+                st.session_state.pop(_pending_builder_key("backup", week, player, position), None)
+                st.session_state.builder_mode = "pick"
+                st.rerun()
+        with right:
+            if return_mode == "review":
+                next_label = "Return to Review →"
+            elif return_mode == "home":
+                next_label = "Return to Lineup →"
+            else:
+                nxt = next_position(position)
+                next_label = f"Next: {nxt} →" if nxt else "Review My Five →"
+            if st.button(next_label, type="primary", use_container_width=True, disabled=not backup_ready):
+                try:
+                    _save_selected_position(
+                        store,
+                        week,
+                        player,
+                        position,
+                        lineup=lineup,
+                        picks=picks,
+                        pool=pool,
+                        starter_id=current_id,
+                        backup_id=backup_id,
+                    )
                     _complete_builder_step(position)
                     st.rerun()
-            return
+                except Exception as exc:
+                    st.error(str(exc))
+        return
 
     for row in rows:
-        if _render_player_card_button(row, key=f"starter::{position}::{row['id']}", selected=str(row["id"]) == current_id):
-            try:
-                _select_starter(
-                    store, week, player, position, row,
-                    lineup=lineup, picks=picks, pool=pool,
-                )
-                st.toast(f"{position} saved.")
-                st.rerun()
-            except Exception as exc:
-                st.error(str(exc))
+        if _render_player_card_button(
+            row,
+            key=f"starter::{position}::{row['id']}",
+            selected=str(row["id"]) == current_id,
+        ):
+            _select_starter(week, player, position, row)
+            st.toast(f"{position} selected.")
+            st.rerun()
 
     left, right = st.columns(2)
     with left:
@@ -560,6 +617,8 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
         back_disabled = prev is None and return_mode not in {"review", "home"}
         back_label = "← Review" if return_mode == "review" else ("← Lineup" if return_mode == "home" else "← Back")
         if st.button(back_label, use_container_width=True, disabled=back_disabled):
+            # Back means "discard this unconfirmed tap"; only Next commits it.
+            _clear_pending_builder(week, player, position)
             if return_mode in {"review", "home"}:
                 st.session_state.pop("builder_return_mode", None)
                 st.session_state.builder_position = None
@@ -570,7 +629,8 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
             st.rerun()
     with right:
         starter = pool_by_id.get(current_id) if current_id else None
-        starter_needs_backup = bool(current and position in required_backup_positions([current], pool_by_id))
+        starter_is_questionable = bool(starter and safe_status(starter.get("availability_status")) == "QUESTIONABLE")
+        starter_needs_backup = bool(starter_is_questionable and not backup_ready)
         if starter_needs_backup:
             next_label = "Choose Emergency Backup →"
         elif return_mode == "review":
@@ -585,9 +645,24 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
             if starter_needs_backup:
                 st.session_state.builder_position = position
                 st.session_state.builder_mode = "backup"
+                st.rerun()
             else:
-                _complete_builder_step(position)
-            st.rerun()
+                try:
+                    _save_selected_position(
+                        store,
+                        week,
+                        player,
+                        position,
+                        lineup=lineup,
+                        picks=picks,
+                        pool=pool,
+                        starter_id=current_id,
+                        backup_id=backup_id if starter_is_questionable else "",
+                    )
+                    _complete_builder_step(position)
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
 
 
 def _review(store, week: dict, player: dict, pool: list[dict]) -> None:

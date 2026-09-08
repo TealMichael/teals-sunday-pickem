@@ -1,28 +1,26 @@
-Teal's Sunday Pick'em — v1.0.3 Test Report
+Teal's Sunday Pick'em — v1.0.3 Picker Speed Hotfix Test Report
 Date: 2026-09-08
 
-Automated pytest suite: 145/145 PASS
+Automated pytest suite: 150/150 PASS
 Full-week in-memory rehearsal: 9/9 PASS
 Python compileall: PASS
 Release guard: PASS
 
-New v1.0.3 coverage verifies:
-- version/reload schema guards
-- starter tap autosaves without auto-advancing
-- backup tap autosaves without auto-advancing
-- deliberate Next / Review / Return actions
-- Questionable starter routes to emergency backup only when needed
-- Tuesday publication retry window exists
-- manual publish remains available
+Hotfix coverage verifies:
+- player taps stage locally instead of calling Supabase save methods
+- Next owns the single confirmed position write
+- unchanged selections skip redundant upserts
+- Questionable starter + emergency backup commit together
+- Back discards unconfirmed local selection
+- active builder uses the longer local lineup snapshot
+- v1.0.3 Tuesday publication retry contract remains intact
 
 Protected-area audit:
-- db/001_gate1_foundation.sql unchanged
-- db/002_gate2_weekly_game.sql unchanged
-- db/003_gate3_nfl_data.sql unchanged
-- db/004_gate4_live_social.sql unchanged
+- all SQL migrations unchanged
+- store.py unchanged
 - nfl_scoring.py unchanged
 - nfl_sync.py unchanged
-- store.py unchanged
 - auth.py unchanged
 - security.py unchanged
+- .github/workflows/nfl-refresh.yml unchanged
 - .github/workflows/quality-gate.yml unchanged

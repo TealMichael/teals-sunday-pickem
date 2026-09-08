@@ -8,7 +8,7 @@
 This release contains only the two changes approved after the real Week 1 pool/pick-flow rehearsal.
 
 ### 1. Deliberate lineup selection flow
-- Tapping a player still **autosaves immediately**.
+- Tapping a player now stages the choice **locally and instantly**; Supabase is not written until Next/Return is tapped.
 - The selected player now remains on screen with a stronger teal highlight and checkmark.
 - Navigation no longer auto-advances after the tap.
 - The right-side action becomes **Next: RB →**, **Next: WR →**, **Next: TE →**, **Next: K →**, then **Review My Five →**.
@@ -35,3 +35,14 @@ This release contains only the two changes approved after the real Week 1 pool/p
 
 ## Deployment
 No SQL, Supabase, or secret changes are required. The only workflow file changed is `.github/workflows/nfl-refresh.yml`.
+
+
+### Picker speed hotfix — September 8, 2026
+- Player-card taps no longer write to Supabase before confirmation.
+- The checkmark/highlight is session-local, so changing your mind between cards creates no database traffic.
+- **Next / Return** performs the single position save and then advances.
+- If the selected player is Questionable, the starter and emergency backup are staged locally and committed together in one `lineup_picks` upsert.
+- Pressing Next on an unchanged already-saved selection skips the redundant upsert entirely.
+- The existing lineup snapshot stays warm for up to five minutes while the builder is open to avoid an unnecessary lineup re-read during selection.
+- Back discards an unconfirmed local tap.
+- No scoring, pool ranking, NFL provider, database schema, auth, lock, or standings behavior changed.
