@@ -17,7 +17,7 @@ def test_gate2_ui_contract_keeps_simple_five_position_flow():
     text = (ROOT / "weekly_ui.py").read_text()
     assert "SAVE MY LINEUP" in text
     assert "QB · RB · WR · TE · K" in text
-    assert "One tap selects" in text
+    assert "Tap a player to select it, then tap Next" in text
     assert "emergency backup" in text.lower()
     assert "Preview Gate 2 Test Week" not in text
     diagnostics = (ROOT / "gate5_ui.py").read_text()

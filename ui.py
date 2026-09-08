@@ -68,8 +68,9 @@ div[class*="st-key-pickbtn_"] [data-testid^="stBaseButton"]:hover {
 }
 div[class*="st-key-pickbtn_selected_"] [data-testid="stButton"] button,
 div[class*="st-key-pickbtn_selected_"] [data-testid^="stBaseButton"] {
-  background:#F7FCFB !important;
-  border-color:#8FD3CA !important;
+  background:#E7F7F4 !important;
+  border:2px solid var(--teal) !important;
+  box-shadow:0 0 0 2px rgba(15,118,110,.08) !important;
 }
 div[class*="st-key-pickbtn_"] [data-testid="stButton"] button p,
 div[class*="st-key-pickbtn_"] [data-testid^="stBaseButton"] p {

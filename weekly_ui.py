@@ -43,7 +43,7 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 2
+WEEKLY_UI_SCHEMA_VERSION = 3
 
 
 def _compact_duration(seconds: int) -> str:
@@ -412,11 +412,11 @@ def _select_starter(
         "confirmed_at": None,
     }
     _stash_lineup_snapshot(week, player, resolved_lineup, _merge_saved_pick(picks, saved))
-    if safe_status(row.get("availability_status")) == "QUESTIONABLE":
-        st.session_state.builder_position = position
-        st.session_state.builder_mode = "backup"
-    else:
-        _complete_builder_step(position)
+    # Selection saves immediately, but navigation is deliberate. Keeping the
+    # user on this position makes the selected-card highlight visible and lets
+    # them change their mind before tapping Next.
+    st.session_state.builder_position = position
+    st.session_state.builder_mode = "pick"
 
 
 def _select_backup(
@@ -442,7 +442,10 @@ def _select_backup(
         known_pool=pool,
     )
     _stash_lineup_snapshot(week, player, lineup, _merge_saved_pick(picks, saved))
-    _complete_builder_step(position)
+    # As with starters, save immediately but wait for an explicit Next tap so
+    # the chosen emergency backup remains visibly selected.
+    st.session_state.builder_position = position
+    st.session_state.builder_mode = "backup"
 
 
 def _markdown_escape(value: str) -> str:
@@ -492,7 +495,7 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
     mode = st.session_state.get("builder_mode", "pick")
 
     st.markdown(f"### Choose your {position}")
-    st.caption("One tap selects. Choices autosave immediately.")
+    st.caption("Tap a player to select it, then tap Next. Choices autosave immediately.")
 
     if mode == "backup" and current:
         starter = pool_by_id.get(current_id)
@@ -518,9 +521,24 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
                         )
                     st.toast("Emergency backup saved.")
                     st.rerun()
-            if st.button("Change starter", use_container_width=True):
-                st.session_state.builder_mode = "pick"
-                st.rerun()
+
+            return_mode = st.session_state.get("builder_return_mode")
+            left, right = st.columns(2)
+            with left:
+                if st.button("Change starter", use_container_width=True):
+                    st.session_state.builder_mode = "pick"
+                    st.rerun()
+            with right:
+                if return_mode == "review":
+                    next_label = "Return to Review →"
+                elif return_mode == "home":
+                    next_label = "Return to Lineup →"
+                else:
+                    nxt = next_position(position)
+                    next_label = f"Next: {nxt} →" if nxt else "Review My Five →"
+                if st.button(next_label, type="primary", use_container_width=True, disabled=not backup_id):
+                    _complete_builder_step(position)
+                    st.rerun()
             return
 
     for row in rows:
@@ -551,9 +569,24 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
                 st.session_state.builder_mode = "pick"
             st.rerun()
     with right:
-        if st.button("Review My Five", use_container_width=True, disabled=chosen < total):
-            st.session_state.builder_position = None
-            st.session_state.builder_mode = "review"
+        starter = pool_by_id.get(current_id) if current_id else None
+        starter_needs_backup = bool(current and position in required_backup_positions([current], pool_by_id))
+        if starter_needs_backup:
+            next_label = "Choose Emergency Backup →"
+        elif return_mode == "review":
+            next_label = "Return to Review →"
+        elif return_mode == "home":
+            next_label = "Return to Lineup →"
+        else:
+            nxt = next_position(position)
+            next_label = f"Next: {nxt} →" if nxt else "Review My Five →"
+
+        if st.button(next_label, type="primary", use_container_width=True, disabled=not current_id):
+            if starter_needs_backup:
+                st.session_state.builder_position = position
+                st.session_state.builder_mode = "backup"
+            else:
+                _complete_builder_step(position)
             st.rerun()
 
 
