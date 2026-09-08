@@ -1,0 +1,5 @@
+v1.0.3 Picker Rerun Hotfix verification
+pytest: 152 passed
+Full Week Rehearsal: 9/9 PASS
+compileall: PASS
+release_guard: PASS

@@ -5,8 +5,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_v103_version_and_weekly_ui_reload_guard():
     assert 'APP_VERSION = "1.0.3"' in (ROOT / "config.py").read_text("utf-8")
-    assert 'WEEKLY_UI_SCHEMA_VERSION = 4' in (ROOT / "weekly_ui.py").read_text("utf-8")
-    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 4' in (ROOT / "app.py").read_text("utf-8")
+    assert 'WEEKLY_UI_SCHEMA_VERSION = 5' in (ROOT / "weekly_ui.py").read_text("utf-8")
+    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 5' in (ROOT / "app.py").read_text("utf-8")
 
 
 def test_player_tap_is_local_and_next_owns_the_supabase_write():

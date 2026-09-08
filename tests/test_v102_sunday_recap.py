@@ -131,8 +131,8 @@ def test_v102_ui_contract_final_recap_and_sunday_status_are_scoped():
     gate4_ui = (ROOT / "gate4_ui.py").read_text("utf-8")
     ui = (ROOT / "ui.py").read_text("utf-8")
 
-    assert "WEEKLY_UI_SCHEMA_VERSION = 4" in weekly_ui
-    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 4' in app
+    assert "WEEKLY_UI_SCHEMA_VERSION = 5" in weekly_ui
+    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 5' in app
     assert "GATE4_UI_SCHEMA_VERSION = 3" in gate4_ui
     assert 'getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 3' in app
     assert "_render_sunday_status_card(week, picks, pool_by_id)" in weekly_ui

@@ -43,7 +43,7 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 4
+WEEKLY_UI_SCHEMA_VERSION = 5
 
 
 def _compact_duration(seconds: int) -> str:
@@ -470,7 +470,15 @@ def _markdown_escape(value: str) -> str:
     return text
 
 
-def _render_player_card_button(row: dict, *, key: str, selected: bool = False, disabled: bool = False) -> bool:
+def _render_player_card_button(
+    row: dict,
+    *,
+    key: str,
+    selected: bool = False,
+    disabled: bool = False,
+    on_click=None,
+    args: tuple = (),
+) -> bool:
     """Render one real full-size button as the player card.
 
     Do not layer an invisible button over separate HTML. The visible card IS the
@@ -496,6 +504,8 @@ def _render_player_card_button(row: dict, *, key: str, selected: bool = False, d
         type="secondary",
         width="stretch",
         wrap=True,
+        on_click=on_click,
+        args=args,
     )
 
 
@@ -557,14 +567,13 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
         for row in rows:
             if str(row["id"]) == current_id:
                 continue
-            if _render_player_card_button(
+            _render_player_card_button(
                 row,
                 key=f"backup::{position}::{row['id']}",
                 selected=str(row["id"]) == backup_id,
-            ):
-                _select_backup(week, player, position, row)
-                st.toast("Emergency backup selected.")
-                st.rerun()
+                on_click=_select_backup,
+                args=(week, player, position, row),
+            )
 
         return_mode = st.session_state.get("builder_return_mode")
         left, right = st.columns(2)
@@ -601,14 +610,13 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
         return
 
     for row in rows:
-        if _render_player_card_button(
+        _render_player_card_button(
             row,
             key=f"starter::{position}::{row['id']}",
             selected=str(row["id"]) == current_id,
-        ):
-            _select_starter(week, player, position, row)
-            st.toast(f"{position} selected.")
-            st.rerun()
+            on_click=_select_starter,
+            args=(week, player, position, row),
+        )
 
     left, right = st.columns(2)
     with left:

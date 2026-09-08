@@ -39,3 +39,23 @@ def test_picker_copy_matches_confirm_before_save_behavior():
     text = (ROOT / "weekly_ui.py").read_text("utf-8")
     assert "Tap a player to highlight it. Your choice saves only when you tap Next." in text
     assert "Tap a player, then tap Next to save each position." in text
+
+
+def test_player_tap_uses_callback_without_forced_second_rerun():
+    text = (ROOT / "weekly_ui.py").read_text("utf-8")
+    assert "on_click=_select_starter" in text
+    assert "on_click=_select_backup" in text
+    starter_loop = text[text.index("    for row in rows:\n        _render_player_card_button("):text.index("    left, right = st.columns(2)", text.index("    for row in rows:\n        _render_player_card_button("))]
+    assert "st.rerun()" not in starter_loop
+    backup_start = text.index("        for row in rows:", text.index('if mode == "backup":'))
+    backup_end = text.index("        return_mode =", backup_start)
+    assert "st.rerun()" not in text[backup_start:backup_end]
+
+
+def test_player_card_supports_pre_rerun_selection_callback():
+    text = (ROOT / "weekly_ui.py").read_text("utf-8")
+    block = text[text.index("def _render_player_card_button"):text.index("def _builder")]
+    assert "on_click=None" in block
+    assert "args: tuple = ()" in block
+    assert "on_click=on_click" in block
+    assert "args=args" in block
