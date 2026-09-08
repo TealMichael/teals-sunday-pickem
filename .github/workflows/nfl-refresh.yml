@@ -5,8 +5,10 @@ on:
     # Tuesday-Thursday: routine injury/status maintenance every ~6 hours.
     - cron: "7 1,7,13,19 * * 2-4"
       timezone: "America/New_York"
-    # Tuesday noon: dedicated publication pass so the weekly five open on time.
-    - cron: "7 12 * * 2"
+    # Tuesday noon: redundant publication window. GitHub scheduled jobs can be
+    # delayed, so retry every 10 minutes through 12:57. Auto mode is idempotent:
+    # once the pool is published, later retries simply see no publication due.
+    - cron: "7,17,27,37,47,57 12 * * 2"
       timezone: "America/New_York"
     # Friday: injury/status maintenance every ~4 hours.
     - cron: "7 1,5,9,13,17,21 * * 5"
