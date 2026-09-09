@@ -330,8 +330,155 @@ def _render_corrections(store, week: dict[str, Any]) -> None:
             st.caption("Because this week is FINAL, applying or clearing an override also rebuilds the archived weekly standings.")
 
 
-def _render_diagnostics(store) -> None:
+def _render_live_dress_rehearsal(store, week: dict[str, Any]) -> None:
+    with st.expander("Wednesday Live Game Dress Rehearsal", expanded=True):
+        st.caption(
+            "Commissioner-only and read-only. This uses the same nflverse schedule, ESPN CDN box-score parser, "
+            "team/name matching, and Pick'em scoring formula as production live scoring. It does not write Week 1 scores, lineups, standings, or NFL data."
+        )
+
+        if st.button("Load / refresh current-week games", use_container_width=True, key="g5_live_test_load_games"):
+            try:
+                from live_dress_rehearsal import discover_rehearsal_games
+
+                with st.spinner("Loading the real NFL schedule for this week…"):
+                    st.session_state.g5_live_test_games = discover_rehearsal_games(
+                        season=int(week["season"]),
+                        nfl_week=int(week["nfl_week"]),
+                    )
+                st.toast("Current-week games loaded.")
+            except Exception as exc:
+                st.session_state.g5_live_test_games = []
+                st.error(f"Could not load the current-week games: {exc}")
+
+        games = st.session_state.get("g5_live_test_games") or []
+        if not games:
+            st.info("Load the current-week games first. On Wednesday, choose the Wednesday night matchup and run the test after kickoff.")
+            return
+
+        labels = [str(row.get("label") or row.get("provider_event_id")) for row in games]
+        by_label = {str(row.get("label") or row.get("provider_event_id")): row for row in games}
+        selected_label = st.selectbox("Game to test", labels, key="g5_live_test_game")
+        selected = by_label[selected_label]
+
+        run_col, clear_col = st.columns([3, 1])
+        with run_col:
+            run_now = st.button("Run Live Game Test Now", type="primary", use_container_width=True, key="g5_live_test_run")
+        with clear_col:
+            if st.button("Clear", use_container_width=True, key="g5_live_test_clear"):
+                st.session_state.pop("g5_live_test_result", None)
+                st.session_state.pop("g5_live_test_previous", None)
+                st.rerun()
+
+        if run_now:
+            try:
+                from live_dress_rehearsal import compare_rehearsal_snapshots, run_live_game_rehearsal
+
+                previous = st.session_state.get("g5_live_test_result")
+                with st.spinner("Reading the real game feed and running the production parser/scorer…"):
+                    result = run_live_game_rehearsal(
+                        store,
+                        season=int(week["season"]),
+                        nfl_week=int(week["nfl_week"]),
+                        provider_event_id=str(selected.get("provider_event_id") or ""),
+                    )
+                result["comparison"] = compare_rehearsal_snapshots(previous, result)
+                if previous:
+                    st.session_state.g5_live_test_previous = previous
+                st.session_state.g5_live_test_result = result
+                st.toast("Live-game test complete. No Week 1 data was changed.")
+            except Exception as exc:
+                st.error(f"Live-game test failed: {exc}")
+
+        result = st.session_state.get("g5_live_test_result")
+        if not result:
+            st.caption("Run this several times during the game. We want to see the status and player stat lines change between snapshots.")
+            return
+
+        if str(result.get("provider_event_id")) != str(selected.get("provider_event_id")):
+            st.info("The result below is from a different game selection. Run the test again for the selected game.")
+
+        live_status = str(result.get("espn_status") or "SCHEDULED")
+        active_rows = int(result.get("active_stat_rows") or 0)
+        fantasy_rows = int(result.get("fantasy_rows") or 0)
+        rate = float(result.get("match_rate") or 0.0) * 100.0
+        if live_status in {"LIVE", "FINAL"} and active_rows > 0:
+            st.success("READ-ONLY LIVE PASS — real schedule → ESPN box score → parser → identity match → Pick'em scoring.")
+        elif live_status == "SCHEDULED":
+            st.info("CONNECTION PASS — the real game was found and ESPN responded. Re-run after kickoff to verify moving live stats and scoring.")
+        else:
+            st.warning("The game feed is live, but no fantasy-scoring stat rows were parsed yet. Re-run after a few plays.")
+        st.caption(f"{result.get('matchup')} • tested {_ago(result.get('fetched_at'))}")
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Game", live_status)
+        c2.metric("Parsed rows", int(result.get("parsed_rows") or 0))
+        c3.metric("Active scoring rows", active_rows)
+        c4.metric("Sleeper matches", f"{rate:.0f}%" if fantasy_rows else "—")
+
+        if live_status in {"LIVE", "FINAL"} and fantasy_rows and rate < 85.0:
+            st.warning("Cross-provider player matching is below 85%. Inspect the unmatched rows before trusting Sunday live scoring.")
+
+        score_bits = []
+        if result.get("away_team"):
+            score_bits.append(f"{result.get('away_team')} {result.get('away_score') if result.get('away_score') is not None else '—'}")
+        if result.get("home_team"):
+            score_bits.append(f"{result.get('home_team')} {result.get('home_score') if result.get('home_score') is not None else '—'}")
+        game_detail = " • ".join(score_bits)
+        if result.get("period") or result.get("clock"):
+            game_detail += f" • Q{result.get('period') or '?'} {result.get('clock') or ''}"
+        if game_detail:
+            st.caption(game_detail)
+
+        comparison = result.get("comparison") or {}
+        if st.session_state.get("g5_live_test_previous"):
+            changed = int(comparison.get("changed_players") or 0)
+            if changed:
+                st.info(f"Since the previous snapshot: {changed} player stat line(s) changed. That is exactly what we want to see during live play.")
+            elif str(result.get("espn_status")) == "LIVE":
+                st.warning("No player stat lines changed since the previous snapshot yet. Try another refresh after the next few plays.")
+            else:
+                st.caption("No player stat changes since the previous snapshot.")
+
+        samples = result.get("samples") or {}
+        if samples:
+            st.markdown("##### Live scoring samples")
+            for position in POSITIONS:
+                row = samples.get(position)
+                if not row:
+                    continue
+                match_mark = "✓ matched" if row.get("matched_cached_player") else "⚠ unmatched"
+                st.markdown(
+                    f"**{position} — {row.get('player_name')} ({row.get('team_abbr')}) — {row.get('display_points')} pts**  \n"
+                    f"{row.get('stat_formula')}  \n"
+                    f"`{row.get('points_formula')}` • {match_mark}"
+                )
+
+        with st.expander("All parsed fantasy-position rows", expanded=False):
+            table_rows = []
+            for row in result.get("rows") or []:
+                table_rows.append({
+                    "Pos": row.get("position"),
+                    "Player": row.get("player_name"),
+                    "Team": row.get("team_abbr"),
+                    "Pts": row.get("display_points"),
+                    "Matched": "Yes" if row.get("matched_cached_player") else "No",
+                    "Scoring stats": row.get("stat_formula"),
+                })
+            if table_rows:
+                st.dataframe(table_rows, use_container_width=True, hide_index=True)
+            else:
+                st.caption("No QB/RB/WR/TE/K rows have appeared in the box score yet.")
+
+        st.caption(
+            "Wednesday success target: the game moves to LIVE, parsed rows appear, identity matching stays healthy, "
+            "fantasy totals update across multiple snapshots, and the raw scoring ingredients agree with the TV/box score."
+        )
+
+
+def _render_diagnostics(store, week: dict[str, Any]) -> None:
     st.markdown("#### Diagnostics & Demos")
+    _render_live_dress_rehearsal(store, week)
 
     players = store.get_registered_players()
     if players:
@@ -471,4 +618,4 @@ def render_commissioner_dashboard(store, *, pin_pepper: str) -> None:
     elif tool == "Corrections":
         _render_corrections(store, week)
     else:
-        _render_diagnostics(store)
+        _render_diagnostics(store, week)

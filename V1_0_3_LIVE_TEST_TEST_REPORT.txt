@@ -1,0 +1,12 @@
+v1.0.3 Commissioner Live Test verification
+
+pytest: 156/156 PASS
+Full Week Rehearsal: 9/9 PASS
+compileall: PASS
+release_guard: PASS
+
+Diff audit versus Teals_Sunday_Pickem_v1.0.3_Final_Full_PICKER_RERUN_HOTFIX.zip:
+- modified runtime file: gate5_ui.py (Commissioner UI only)
+- new runtime file: live_dress_rehearsal.py (read-only diagnostic)
+- new test file: tests/test_commissioner_live_dress_rehearsal.py
+- no changes to app.py, public UI, weekly picker, store, NFL scoring/sync/providers, auth, SQL, or GitHub workflows
