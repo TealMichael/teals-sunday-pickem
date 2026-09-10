@@ -48,7 +48,7 @@ def test_shared_player_card_helper_can_show_review_backup_line_without_changing_
 
 
 def test_v105_version_and_reload_guard():
-    assert 'APP_VERSION = "1.0.6"' in (ROOT / "config.py").read_text("utf-8")
+    assert 'APP_VERSION = "1.0.7"' in (ROOT / "config.py").read_text("utf-8")
     weekly = (ROOT / "weekly_ui.py").read_text("utf-8")
     app = (ROOT / "app.py").read_text("utf-8")
     assert "WEEKLY_UI_SCHEMA_VERSION = 7" in weekly

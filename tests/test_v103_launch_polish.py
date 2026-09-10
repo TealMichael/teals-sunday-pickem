@@ -4,7 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_v103_version_and_weekly_ui_reload_guard():
-    assert 'APP_VERSION = "1.0.6"' in (ROOT / "config.py").read_text("utf-8")
+    assert 'APP_VERSION = "1.0.7"' in (ROOT / "config.py").read_text("utf-8")
     assert 'WEEKLY_UI_SCHEMA_VERSION = 7' in (ROOT / "weekly_ui.py").read_text("utf-8")
     assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 7' in (ROOT / "app.py").read_text("utf-8")
 

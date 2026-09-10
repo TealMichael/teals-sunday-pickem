@@ -6,14 +6,15 @@ ROOT = Path(__file__).parents[1]
 def test_gate6_files_and_version_present():
     assert (ROOT / "gate6.py").exists()
     assert (ROOT / "gate6_ui.py").exists()
-    assert 'APP_VERSION = "1.0.6"' in (ROOT / "config.py").read_text()
+    assert 'APP_VERSION = "1.0.7"' in (ROOT / "config.py").read_text()
 
 
 def test_commissioner_has_launch_readiness_destination():
     text = (ROOT / "gate5_ui.py").read_text()
-    assert '"Launch", "Week", "Players", "Corrections", "Diagnostics"' in text
+    assert 'commissioner_tools = ["Week", "Players", "Corrections", "Clock", "Diagnostics"]' in text
     assert "render_launch_readiness" in text
-    assert "Commissioner • Gate 6" in text
+    assert "Commissioner • Gate 6" not in text
+    assert "Launch readiness & full-week checks" in text
 
 
 def test_player_runtime_errors_are_friendly_not_raw_tracebacks():

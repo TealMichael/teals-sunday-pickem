@@ -39,6 +39,17 @@ def _week(store: SupabaseStore, season: int, week_number: int):
     return ensure_week_shell_from_scoreboard(store, season=season, nfl_week=week_number)
 
 
+def _refresh_clock_best_effort(store: SupabaseStore, week=None) -> None:
+    try:
+        from clock_broadcast import refresh_clock_snapshot
+        target = week or store.get_real_week()
+        if target:
+            target = store.get_week(str(target["id"])) or target
+            refresh_clock_snapshot(store, target)
+    except Exception:
+        pass
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Teal's Sunday Pick'em Gate 3 NFL refresh")
     parser.add_argument("--mode", choices=["auto", "diagnostic", "preseason_replay", "schedule", "injury", "publish", "live", "final"], default="auto")
@@ -49,7 +60,9 @@ def main() -> int:
 
     store = _store()
     if args.mode == "auto":
-        print(run_auto(store))
+        result = run_auto(store)
+        _refresh_clock_best_effort(store)
+        print(result)
         return 0
     if args.mode == "preseason_replay":
         print(run_preseason_replay(store))
@@ -63,18 +76,23 @@ def main() -> int:
             base = _week(store, args.season, 1)
         week = store.get_week_by_season_week(int(base["season"]), int(base["nfl_week"])) or base
 
+    result = None
     if args.mode == "diagnostic":
-        print(gate3_diagnostic(store, season=int(week["season"]), nfl_week=int(week["nfl_week"])))
+        result = gate3_diagnostic(store, season=int(week["season"]), nfl_week=int(week["nfl_week"]))
     elif args.mode == "schedule":
-        print(sync_schedule(store, week))
+        result = sync_schedule(store, week)
     elif args.mode == "injury":
-        print(refresh_injuries(store, week))
+        result = refresh_injuries(store, week)
     elif args.mode == "publish":
-        print(publish_week_pool(store, week, force=args.force))
+        result = publish_week_pool(store, week, force=args.force)
     elif args.mode == "live":
-        print(refresh_live_scores(store, week))
+        result = refresh_live_scores(store, week)
     elif args.mode == "final":
-        print(reconcile_final(store, week))
+        result = reconcile_final(store, week)
+
+    if args.mode in {"schedule", "injury", "publish", "live", "final"}:
+        _refresh_clock_best_effort(store, week)
+    print(result)
     return 0
 
 

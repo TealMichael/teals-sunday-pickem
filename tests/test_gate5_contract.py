@@ -6,7 +6,7 @@ ROOT = Path(__file__).parents[1]
 def test_gate5_files_present_and_versioned():
     assert (ROOT / "gate5.py").exists()
     assert (ROOT / "gate5_ui.py").exists()
-    assert "APP_VERSION = \"1.0.6\"" in (ROOT / "config.py").read_text()
+    assert "APP_VERSION = \"1.0.7\"" in (ROOT / "config.py").read_text()
 
 
 def test_app_routes_commissioner_to_gate5_dashboard():

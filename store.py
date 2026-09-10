@@ -39,6 +39,7 @@ class SupabaseStore:
         from supabase.client import ClientOptions
 
         self._public_cache: dict[tuple, tuple[float, Any]] = {}
+        self.url = str(url).rstrip("/")
         self.client = create_client(
             url,
             service_key,
@@ -879,6 +880,117 @@ class SupabaseStore:
             return True
         except Exception:
             return False
+
+
+    # -------------------------
+    # v1.0.7 Sunday AWTRIX clock broadcast
+    # -------------------------
+    def clock_schema_available(self) -> bool:
+        try:
+            self._table("clock_control").select("singleton").limit(1).execute()
+            return True
+        except Exception:
+            return False
+
+    def get_clock_week_settings(self, week_id: str) -> dict[str, Any]:
+        defaults = {
+            "week_id": str(week_id),
+            "welcome_enabled": False,
+            "welcome_text": "",
+            "party_enabled": False,
+            "party_text": "",
+            "custom_enabled": False,
+            "custom_text": "",
+            "updated_at": None,
+        }
+        try:
+            rows = (
+                self._table("clock_week_settings")
+                .select("week_id,welcome_enabled,welcome_text,party_enabled,party_text,custom_enabled,custom_text,updated_at")
+                .eq("week_id", str(week_id))
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            if rows:
+                defaults.update(rows[0])
+        except Exception:
+            pass
+        return defaults
+
+    def save_clock_week_settings(self, week_id: str, *, welcome_enabled: bool, welcome_text: str, party_enabled: bool, party_text: str, custom_enabled: bool, custom_text: str) -> dict[str, Any]:
+        payload = {
+            "week_id": str(week_id),
+            "welcome_enabled": bool(welcome_enabled),
+            "welcome_text": str(welcome_text or "").strip()[:240],
+            "party_enabled": bool(party_enabled),
+            "party_text": str(party_text or "").strip()[:240],
+            "custom_enabled": bool(custom_enabled),
+            "custom_text": str(custom_text or "").strip()[:240],
+            "updated_at": _iso(datetime.now(UTC)),
+        }
+        res = self._table("clock_week_settings").upsert(payload, on_conflict="week_id").execute()
+        return (res.data or [payload])[0]
+
+    def get_clock_token_status(self) -> dict[str, Any] | None:
+        try:
+            rows = (
+                self._table("clock_tokens")
+                .select("id,token_hint,created_at,revoked_at,last_seen_at,last_ack_at,last_event_id")
+                .is_("revoked_at", "null")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            return rows[0] if rows else None
+        except Exception:
+            return None
+
+    def replace_clock_token_hash(self, token_hash: str, token_hint: str) -> dict[str, Any]:
+        stamp = _iso(datetime.now(UTC))
+        try:
+            self._table("clock_tokens").update({"revoked_at": stamp}).is_("revoked_at", "null").execute()
+        except Exception:
+            pass
+        payload = {"token_hash": str(token_hash), "token_hint": str(token_hint), "created_at": stamp}
+        res = self._table("clock_tokens").insert(payload).execute()
+        return (res.data or [payload])[0]
+
+    def trigger_clock_test(self, week_id: str, nonce: str, *, seconds: int = 90) -> None:
+        now = datetime.now(UTC)
+        payload = {
+            "singleton": True,
+            "test_week_id": str(week_id),
+            "test_nonce": str(nonce),
+            "test_until": _iso(now + timedelta(seconds=max(30, min(int(seconds), 300)))),
+            "updated_at": _iso(now),
+        }
+        self._table("clock_control").upsert(payload, on_conflict="singleton").execute()
+
+    def upsert_clock_snapshot(self, week_id: str, payload: dict[str, Any]) -> None:
+        self._table("clock_snapshots").upsert({
+            "week_id": str(week_id),
+            "payload": payload,
+            "updated_at": _iso(datetime.now(UTC)),
+        }, on_conflict="week_id").execute()
+
+    def get_clock_snapshot(self, week_id: str) -> dict[str, Any] | None:
+        try:
+            rows = (
+                self._table("clock_snapshots")
+                .select("week_id,payload,updated_at")
+                .eq("week_id", str(week_id))
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            return rows[0] if rows else None
+        except Exception:
+            return None
 
     def ensure_real_week_shell(self, *, season: int, nfl_week: int, label: str, opens_at: str, locks_at: str) -> dict[str, Any]:
         payload = {

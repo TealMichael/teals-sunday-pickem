@@ -115,7 +115,7 @@ def test_lease_schema_is_server_only_and_runtime_has_recovery_hooks():
 
 
 def test_v106_version_and_github_remains_primary_scheduler():
-    assert 'APP_VERSION = "1.0.6"' in (ROOT / "config.py").read_text("utf-8")
+    assert 'APP_VERSION = "1.0.7"' in (ROOT / "config.py").read_text("utf-8")
     workflow = (ROOT / ".github/workflows/nfl-refresh.yml").read_text("utf-8")
     assert 'cron: "7,22,37,52 11-23 * * 0"' in workflow
     assert 'cron: "7,17,27,37,47,57 12 * * 2"' in workflow

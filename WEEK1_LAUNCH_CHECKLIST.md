@@ -48,3 +48,11 @@
 - Confirm History row
 - Confirm Trophy/Profile totals
 - Confirm champion football celebration
+
+## Optional Sunday Clock — v1.0.7
+- Run `db/006_sunday_clock.sql` once.
+- Generate the scoped token under Commissioner → Clock.
+- Install `PickemSunday.ax` separately on AWTRIX; do not replace school clock scripts.
+- Press Test Clock before Sunday.
+- Confirm pre-lock test/normal output does not expose anyone's picks.
+- Clock setup is optional and must never block the player app or live scoring.

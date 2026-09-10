@@ -1,0 +1,20 @@
+TAG
+v1.0.7
+
+RELEASE TITLE
+v1.0.7 — Sunday Clock Broadcast + Commissioner Cleanup
+
+COMMIT MESSAGE
+v1.0.7 — Sunday Clock Broadcast + Commissioner Cleanup
+
+GITHUB RELEASE NOTES
+Adds a separate Sunday-only AWTRIX broadcast layer plus a cleaner Commissioner workspace. Commissioner now has Week / Players / Corrections / Clock / Diagnostics, with launch checks, database/run history, live-game rehearsal, and legacy Gate tools consolidated under Diagnostics. The new Clock tab supports three optional week-specific messages, full live weekly standings, all currently live NFL scores, Player Updates limited to the week's 25-player Pick'em pool, Week 2+ season standings, Pick'em Pulse, and a safe Test Clock sequence. Manual messages never carry into a new week automatically, so if the Commissioner does nothing the clock runs automatic app-owned content only. Pre-lock output keeps picks private. The clock uses a public Supabase key plus a separate scoped/revocable token stored only as a SHA-256 hash; no service-role key is exposed. The proven NFL parser/scoring/matching code and both GitHub workflows are unchanged.
+
+ONE-TIME SUPABASE STEP
+Run db/006_sunday_clock.sql once in Supabase SQL Editor after deployment.
+
+ONE-TIME AWTRIX STEP
+Install awtrix/PickemSunday.ax as a separate headless script. Configure its Supabase URL, Supabase publishable/anon key, and the scoped Clock Token generated under Commissioner → Clock. Do not edit or replace the existing school Class Schedule or Fact Challenge scripts.
+
+HIDDEN FILES
+None changed in this release. No .github workflow or .streamlit file needs manual handling.

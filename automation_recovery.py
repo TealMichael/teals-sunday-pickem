@@ -172,6 +172,11 @@ def maybe_recover_critical_automation(store, week: dict[str, Any], *, now: datet
         )
         store.clear_week_cache(week_id)
         refreshed = store.get_week(week_id) or week
+        try:
+            from clock_broadcast import refresh_clock_snapshot
+            refresh_clock_snapshot(store, refreshed)
+        except Exception:
+            pass
         return refreshed, {"action": action, "triggered": True, "success": True, "result": result}
     except Exception as exc:
         if audit_id:

@@ -16,6 +16,15 @@ class CommissionerError(RuntimeError):
     pass
 
 
+def _refresh_clock_best_effort(store, week: dict[str, Any]) -> None:
+    try:
+        from clock_broadcast import refresh_clock_snapshot
+        refreshed = store.get_week(str(week["id"])) or week
+        refresh_clock_snapshot(store, refreshed)
+    except Exception:
+        pass
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -104,6 +113,7 @@ def refresh_nfl_now(store, week: dict[str, Any]) -> dict[str, Any]:
             "after_lock": _locked(week),
         },
     )
+    _refresh_clock_best_effort(store, week)
     return result
 
 
@@ -118,6 +128,7 @@ def generate_pool_again(store, week: dict[str, Any]) -> dict[str, Any]:
         week_id=str(week["id"]),
         message="Commissioner manually regenerated and published the weekly pool.",
     )
+    _refresh_clock_best_effort(store, week)
     return result
 
 
@@ -157,6 +168,7 @@ def replace_pool_player(
         message=f"Replaced {result.get('outgoing_name')} with {result.get('replacement_name')} in {result.get('position')}.",
         metadata=result,
     )
+    _refresh_clock_best_effort(store, week)
     return result
 
 
@@ -187,6 +199,7 @@ def set_score_override(
         message=f"Manual score override applied to {row.get('player_name') or 'pool player'}: {float(score):.2f}.",
         metadata={"pool_player_id": str(pool_player_id), "score": float(score), "note": note},
     )
+    _refresh_clock_best_effort(store, week)
     return row
 
 
@@ -202,6 +215,7 @@ def clear_score_override(store, week: dict[str, Any], *, pool_player_id: str) ->
         message=f"Cleared manual score override for {row.get('player_name') or 'pool player'}.",
         metadata={"pool_player_id": str(pool_player_id)},
     )
+    _refresh_clock_best_effort(store, week)
     return row
 
 
@@ -215,4 +229,5 @@ def finalize_week_now(store, week: dict[str, Any]) -> dict[str, Any]:
         message="Commissioner manually requested final reconciliation.",
         metadata=result,
     )
+    _refresh_clock_best_effort(store, week)
     return result

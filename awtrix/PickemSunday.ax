@@ -1,0 +1,85 @@
+# @name    Pickem Sunday
+# @desc    Sunday-only Teal's Pick'em broadcast via scoped Supabase RPC
+# @author  Teal's Sunday Pick'em
+# @version 1.0
+# @headless true
+# @config  sb_url text "Supabase URL" default="https://YOUR-PROJECT.supabase.co" maxlen=160
+# @config  sb_key text "Publishable key" default="PASTE_PUBLIC_KEY" maxlen=256
+# @config  token text "Clock token" default="PASTE_CLOCK_TOKEN" maxlen=128
+# @config  poll number "Sunday poll" default=15 min=10 max=60 unit=sec
+
+import json
+
+class PickemSunday
+  var ticks, in_flight, last_event
+
+  def init()
+    self.ticks = 1
+    self.in_flight = false
+    self.last_event = store.get("last_event", "")
+  end
+
+  def headers()
+    var key = store.get("sb_key")
+    return {
+      "apikey": key,
+      "Authorization": "Bearer " + key,
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "Accept-Profile": "pickem",
+      "Content-Profile": "pickem"
+    }
+  end
+
+  def ack(event_id)
+    var url = store.get("sb_url") + "/rest/v1/rpc/clock_ack"
+    var body = json.dump({"p_token": store.get("token"), "p_event_id": event_id})
+    http.post(url, body, def (b, st) end, {"headers": self.headers()})
+  end
+
+  def on_feed(body, status)
+    self.in_flight = false
+    if status != 200 || body == nil return end
+    var data = json.load(body)
+    if !isinstance(data, map) return end
+    if data.find("ok") != true || data.find("active") != true return end
+    var event_id = data.find("event_id")
+    var line = data.find("text")
+    if event_id == nil || line == nil || line == "" return end
+    if event_id == self.last_event return end
+
+    var accepted = notify({"text": line, "repeat": 1, "stack": true, "wakeup": true})
+    if accepted
+      self.last_event = event_id
+      store.set("last_event", event_id)
+      self.ack(event_id)
+    end
+  end
+
+  def fetch()
+    if self.in_flight return end
+    self.in_flight = true
+    var url = store.get("sb_url") + "/rest/v1/rpc/clock_feed"
+    var body = json.dump({"p_token": store.get("token")})
+    http.post(url, body, / b, st -> self.on_feed(b, st), {"headers": self.headers()})
+  end
+
+  def loop()
+    if self.ticks <= 0
+      self.fetch()
+      # Sunday stays lively. Thu-Sat check once a minute for pregame testing;
+      # Mon-Wed back off heavily so the school-day clock is effectively untouched.
+      var dow = weekday()
+      if dow == 0
+        self.ticks = store.get("poll")
+      elif dow >= 4
+        self.ticks = 60
+      else
+        self.ticks = 900
+      end
+    end
+    self.ticks -= 1
+  end
+end
+
+return PickemSunday()

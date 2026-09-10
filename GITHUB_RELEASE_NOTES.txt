@@ -1,5 +1,3 @@
-v1.0.5 — Tap-to-Edit Lineup Review
+v1.0.7 — Sunday Clock Broadcast + Commissioner Cleanup
 
-Review My Five is now much cleaner on mobile: each of the five player cards is itself tappable and opens that position for editing. The current choice remains highlighted in the picker and Return to Review comes back to the lineup review. The old bank of Change QB/RB/WR/TE/K buttons is gone, while SAVE MY LINEUP stays immediately below the five cards. Questionable emergency-backup context remains visible, and OUT starters can be tapped directly for replacement.
-
-No scoring, NFL data, Supabase persistence, auth, lock, Commissioner, SQL, or workflow behavior changed.
+Adds a separate Sunday-only AWTRIX broadcast layer with optional week-specific Welcome, Party, and Custom messages; full live weekly standings; all live NFL game scores; 25-player-pool-only Player Updates; Week 2+ season standings; Pick'em Pulse; and a safe Test Clock sequence. Commissioner mode is cleaned to Week / Players / Corrections / Clock / Diagnostics, with accumulated launch/recovery/test tools consolidated under Diagnostics. Pre-lock clock output preserves pick secrecy. The physical clock uses a publishable Supabase key plus a scoped/revocable token whose plaintext is never stored server-side. The proven live NFL scoring engine and GitHub workflows are unchanged.

@@ -1,0 +1,15 @@
+Teal's Sunday Pick'em — v1.0.7 Verification
+
+pytest -q: 186 passed
+Full Week Rehearsal: 9/9 passed
+python -m compileall -q .: PASS
+python release_guard.py: PASS
+
+Protected byte comparison vs v1.0.6:
+- nfl_sync.py unchanged
+- nfl_scoring.py unchanged
+- live_dress_rehearsal.py unchanged
+- weekly.py unchanged
+- weekly_ui.py unchanged
+- .github/workflows/nfl-refresh.yml unchanged
+- .github/workflows/quality-gate.yml unchanged
