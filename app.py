@@ -28,7 +28,7 @@ import gate5_ui as _gate5_ui
 # normal per-rerun reload.
 _weekly_params = inspect.signature(_weekly_ui.render_player_game).parameters
 if (
-    getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 5
+    getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 6
     or "on_sign_out" not in _weekly_params
     or "allow_demo_week" not in _weekly_params
 ):

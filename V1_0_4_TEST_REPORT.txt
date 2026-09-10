@@ -1,0 +1,23 @@
+Teal's Sunday Pick'em v1.0.4 — Public UX Polish
+Date: September 10, 2026
+
+Automated pytest: 167/167 PASS
+Full Week Rehearsal: 9/9 PASS
+Python compileall: PASS
+release_guard: PASS
+
+Protected runtime areas unchanged from the latest v1.0.3 baseline:
+- nfl_scoring.py
+- nfl_sync.py
+- nfl_sources.py
+- nfl_rankings.py
+- store.py
+- auth.py
+- security.py
+- weekly.py
+- gate4.py / gate4_results.py
+- gate5.py / gate5_ui.py
+- gate6.py / gate6_ui.py
+- live_dress_rehearsal.py
+- all SQL migrations
+- both GitHub Actions workflows

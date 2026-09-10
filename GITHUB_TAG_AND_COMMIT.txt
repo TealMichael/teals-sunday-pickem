@@ -1,0 +1,8 @@
+VERSION / TAG
+v1.0.4
+
+RELEASE TITLE
+v1.0.4 — Public UX Polish
+
+SUGGESTED COMMIT MESSAGE
+v1.0.4 — Public UX Polish

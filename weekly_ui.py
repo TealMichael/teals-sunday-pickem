@@ -43,7 +43,7 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 5
+WEEKLY_UI_SCHEMA_VERSION = 6
 
 
 def _compact_duration(seconds: int) -> str:
@@ -320,16 +320,33 @@ def _load_lineup(
 def _onboarding(store, player: dict) -> bool:
     if player.get("onboarding_completed_at"):
         return False
-    st.markdown("### How to play")
+
+    st.markdown("### 🏈 How Teal's Sunday Pick'em works")
+    st.caption("Five picks. One Sunday. Most fantasy points wins the week.")
+
     with st.container(border=True):
-        st.markdown("**1 · Pick one at each position.**")
-        st.caption("QB · RB · WR · TE · K")
-    with st.container(border=True):
-        st.markdown("**2 · Change your five until Sunday at 1.**")
+        st.markdown("**1 · Pick your five.**")
+        st.caption("QB · RB · WR · TE · K — five weekly options at each position.")
         st.caption("Tap a player, then tap Next to save each position.")
+
     with st.container(border=True):
-        st.markdown("**3 · Beat your friends.**")
-        st.caption("Weekly finishes will feed the season standings.")
+        st.markdown("**2 · Know the scoring.**")
+        st.markdown(
+            "**Passing:** 1 pt / 25 yds · 4 / TD · −2 / INT  \n"
+            "**Rushing & receiving:** 1 pt / 10 yds · 6 / TD · +0.5 / reception  \n"
+            "**Kicker:** 3 / made FG · 1 / made XP"
+        )
+        st.caption("Fractional points count. Fumble lost −2 · two-point conversion +2 · return TD +6 · missed kicks 0.")
+
+    with st.container(border=True):
+        st.markdown("**3 · Questionable player? Set a backup.**")
+        st.caption("Pick a healthy emergency backup from the same position. It only activates if your starter is ruled OUT/inactive and does not play.")
+
+    with st.container(border=True):
+        st.markdown("**4 · Lock Sunday at 1:00 PM ET.**")
+        st.caption("After lock, follow the live standings. Weekly finishes also earn points toward the season championship.")
+
+    st.caption("You can always find the full rules later in Profile → How to Play & Scoring.")
     if st.button("Let's Play", type="primary", use_container_width=True):
         updated = store.complete_onboarding(str(player["id"]))
         st.session_state.player = updated or {**player, "onboarding_completed_at": datetime.now(UTC).isoformat()}
@@ -682,16 +699,6 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
     st.markdown("### Review My Five")
     st.markdown(f'<div class="card">{_summary_rows(picks, pool_by_id)}</div>', unsafe_allow_html=True)
 
-    by_pos = picks_by_position(picks)
-    cols = st.columns(5)
-    for idx, pos in enumerate(POSITIONS):
-        with cols[idx]:
-            if st.button(f"Change\n{pos}", key=f"change::{pos}", use_container_width=True):
-                st.session_state.builder_return_mode = "review"
-                st.session_state.builder_position = pos
-                st.session_state.builder_mode = "pick"
-                st.rerun()
-
     if chosen < total:
         st.warning(f"Finish all five positions first. You have {chosen} of {total}.")
         if st.button("Continue Building", type="primary", use_container_width=True):
@@ -717,6 +724,10 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
             st.rerun()
         return
 
+    # The primary action belongs immediately under the five-player review.
+    # Change-position controls are intentionally secondary so phone users do
+    # not have to scroll past five edit buttons just to confirm the lineup.
+    st.markdown("**Everything look right?**")
     if st.button("SAVE MY LINEUP", type="primary", use_container_width=True):
         try:
             updated_lineup = store.confirm_lineup(
@@ -732,6 +743,18 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
             st.rerun()
         except Exception as exc:
             st.error(str(exc))
+
+    st.divider()
+    st.markdown("**Need to make a change?**")
+    by_pos = picks_by_position(picks)
+    cols = st.columns(5)
+    for idx, pos in enumerate(POSITIONS):
+        with cols[idx]:
+            if st.button(f"Change\n{pos}", key=f"change::{pos}", use_container_width=True):
+                st.session_state.builder_return_mode = "review"
+                st.session_state.builder_position = pos
+                st.session_state.builder_mode = "pick"
+                st.rerun()
 
 
 def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:

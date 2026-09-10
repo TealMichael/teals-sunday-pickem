@@ -1,0 +1,15 @@
+TAG
+v1.0.4
+
+RELEASE TITLE
+v1.0.4 — Public UX Polish
+
+COMMIT MESSAGE
+v1.0.4 — Public UX Polish
+
+GITHUB RELEASE NOTES
+Improves two player-facing moments before Week 1. New-player How to Play now explains the five-position lineup, core half-PPR scoring, emergency backups, and the Sunday 1:00 PM ET lock, with full rules always available under Profile → How to Play & Scoring.
+
+On Review My Five, SAVE MY LINEUP now appears immediately below the lineup summary, with Change-position controls moved underneath as secondary actions so phone users do not have to scroll past them just to save.
+
+No scoring, NFL live-data, pool ranking, lineup persistence, Supabase schema, auth, lock, Commissioner, or GitHub Actions changes.

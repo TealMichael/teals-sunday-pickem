@@ -454,7 +454,7 @@ def render_history(store, season: int) -> None:
 
 
 def _how_to_play() -> None:
-    with st.expander("How to Play"):
+    with st.expander("How to Play & Scoring"):
         st.markdown(
             """
 **Pick five:** one QB, RB, WR, TE, and K from the shared weekly choices. Duplicate picks are allowed.

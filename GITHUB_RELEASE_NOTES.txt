@@ -1,7 +1,7 @@
-v1.0.2 — Sunday Confidence + Weekly Recap
+v1.0.4 — Public UX Polish
 
-Adds a one-glance Sunday status card with lineup readiness, Questionable/OUT alerts, lock timing, and NFL-data freshness.
+Improves the two player-facing moments we identified before Week 1: first-time How to Play now explains the core half-PPR scoring, emergency-backup rule, and Sunday lock; and SAVE MY LINEUP now sits immediately under the five-player review instead of below the Change-position controls.
 
-When Monday reconciliation marks a week FINAL, Sunday now becomes a richer weekly recap with champion/co-champions, most popular pick, boldest solo pick, closest finish, Same Brain, biggest season mover, and a copyable group-chat recap.
+Full rules remain available under Profile → How to Play & Scoring.
 
-No SQL, secrets, Supabase settings, scoring rules, lock rules, or GitHub Actions changes.
+No scoring, NFL live-data, pool ranking, Supabase schema, auth, lock, Commissioner, or GitHub Actions changes.

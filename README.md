@@ -1,6 +1,6 @@
 # Teal's Sunday Pick'em
 
-Current build: **v1.0.3 — Pick Confirmation + Publish Reliability**
+Current build: **v1.0.4 — Public UX Polish**
 
 ## Release status
 - Gate 1 — player identity, PIN auth, remembered devices ✅
@@ -14,6 +14,6 @@ Current build: **v1.0.3 — Pick Confirmation + Publish Reliability**
 ## v1.0 live cadence
 The backend uses one shared GitHub worker for all players. Sunday injury checks run every 15 minutes beginning in the 11 AM ET window. After the universal 1:00 PM ET lock, the same cadence powers live score refreshes through the late-Sunday/SNF window. Weekday injury checks remain intentionally sparse.
 
-v1.0.3 keeps the v1.0.2 Sunday confidence/weekly recap experience and adds two launch-polish changes: deliberate Select → highlight → Next lineup navigation, plus a redundant Tuesday-noon publication retry window. Scoring, player rankings, lock rules, emergency-backup activation, database schema, and authentication are unchanged.
+v1.0.4 keeps the proven v1.0.3 live-scoring and lineup behavior intact while polishing two player-facing moments: first-time onboarding now explains the core scoring rules, and the Review My Five screen places SAVE MY LINEUP before secondary edit controls. Full rules remain available under Profile → How to Play & Scoring.
 
-No SQL migration, Supabase setting, or new secret is required for v1.0.3.
+No SQL migration, Supabase setting, workflow change, or new secret is required for v1.0.4.
