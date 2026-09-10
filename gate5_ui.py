@@ -94,6 +94,17 @@ def _render_week_overview(store, week: dict[str, Any]) -> None:
         st.success("Everyone has a complete saved lineup.")
 
     st.markdown("#### NFL Data")
+    lease_ready = store.refresh_lease_available()
+    if lease_ready:
+        st.success("Automation fallback armed: GitHub remains primary; active players can safely recover a late critical refresh.")
+    else:
+        st.warning("Automation fallback lease is not installed yet. Run db/005_automation_hardening.sql in Supabase; GitHub scheduling still works in the meantime.")
+    latest_recovery = store.latest_data_run("app_recovery", week_id=str(week["id"]))
+    if latest_recovery:
+        status = "PASS" if latest_recovery.get("success") is True else ("FAIL" if latest_recovery.get("success") is False else "RUNNING")
+        action = str((latest_recovery.get("metadata") or {}).get("action") or "refresh")
+        st.caption(f"Last app fallback: {action} • {status} • {_ago(latest_recovery.get('completed_at') or latest_recovery.get('started_at'))}")
+
     r1, r2 = st.columns([2, 1])
     with r1:
         st.caption("Refreshes schedule/player status now. After lock it also runs the production live-score path.")

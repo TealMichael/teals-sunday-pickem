@@ -36,6 +36,7 @@ required = [
     ROOT / "db/002_gate2_weekly_game.sql",
     ROOT / "db/003_gate3_nfl_data.sql",
     ROOT / "db/004_gate4_live_social.sql",
+    ROOT / "db/005_automation_hardening.sql",
     ROOT / "gate4.py",
     ROOT / "gate4_ui.py",
     ROOT / "gate4_results.py",

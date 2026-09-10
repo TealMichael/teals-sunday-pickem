@@ -1,0 +1,28 @@
+Teal's Sunday Pick'em v1.0.6 — Automation Hardening
+
+Verification
+- pytest: 179/179 PASS
+- Full Week Rehearsal: 9/9 PASS
+- Python compileall: PASS
+- release_guard: PASS
+
+Protected live-scoring/provider files byte-for-byte unchanged from v1.0.5
+- nfl_sync.py
+- nfl_sources.py
+- nfl_scoring.py
+- nfl_rankings.py
+- live_dress_rehearsal.py
+- auth.py
+- security.py
+- .github/workflows/nfl-refresh.yml
+- .github/workflows/quality-gate.yml
+
+Critical recovery behavior
+- GitHub Actions remains primary.
+- Tuesday publication fallback: after 10-minute grace if still unpublished.
+- Sunday pre-lock injury fallback: after 15-minute cadence + 2-minute grace.
+- Sunday live-score fallback: after 15-minute cadence + 2-minute grace.
+- Monday final fallback: after 9 AM target + 20-minute grace.
+- Failed attempts throttled for 5 minutes.
+- Supabase lease prevents duplicate concurrent fallback work.
+- Fresh live page loads use the already-loaded week freshness stamp and do not add run-history queries.

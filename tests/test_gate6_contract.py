@@ -6,7 +6,7 @@ ROOT = Path(__file__).parents[1]
 def test_gate6_files_and_version_present():
     assert (ROOT / "gate6.py").exists()
     assert (ROOT / "gate6_ui.py").exists()
-    assert 'APP_VERSION = "1.0.5"' in (ROOT / "config.py").read_text()
+    assert 'APP_VERSION = "1.0.6"' in (ROOT / "config.py").read_text()
 
 
 def test_commissioner_has_launch_readiness_destination():

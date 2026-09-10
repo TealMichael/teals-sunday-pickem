@@ -1,0 +1,14 @@
+TAG
+v1.0.6
+
+RELEASE TITLE
+v1.0.6 — Automation Hardening
+
+COMMIT MESSAGE
+v1.0.6 — Automation Hardening
+
+GITHUB RELEASE NOTES
+Hardens Sunday Pick'em against delayed GitHub scheduled jobs without replacing the existing scheduler. GitHub Actions remains primary, while a server-side fallback can recover overdue Tuesday publication, near-lock injury refreshes, Sunday live scoring, and Monday finalization when an active player opens the Sunday tab. A short Supabase lease prevents duplicate concurrent refreshes, and failed recovery attempts are throttled/non-fatal. Commissioner Week now shows whether the fallback lease is armed and the latest recovery event. No scoring formulas, live stat parsing, player matching, lineup persistence, or pool-ranking logic changed.
+
+ONE-TIME SUPABASE STEP
+Run db/005_automation_hardening.sql once in the Supabase SQL Editor before relying on the fallback. The app remains safe if deployed first: GitHub scheduling continues normally until the lease table exists.

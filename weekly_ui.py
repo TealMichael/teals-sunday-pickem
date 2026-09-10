@@ -14,6 +14,7 @@ if getattr(_weekly, "WEEKLY_LOGIC_SCHEMA_VERSION", 0) < 2:
     _weekly = importlib.reload(_weekly)
 
 from config import APP_VERSION
+from automation_recovery import maybe_recover_critical_automation
 from gate4_ui import (
     maybe_render_final_celebration,
     render_gate4_demo,
@@ -902,6 +903,13 @@ def render_player_game(
         if tab == "👤 Profile":
             render_profile(store, player, int(week.get("season") or 2026), on_sign_out)
             return
+
+        # GitHub Actions remains the primary scheduler. On the Sunday tab only,
+        # an active player can recover a launch-critical job if GitHub is late.
+        # The Supabase lease keeps concurrent sessions from duplicating provider
+        # work, and any recovery failure is deliberately invisible/non-fatal.
+        week, _automation_recovery = maybe_recover_critical_automation(store, week)
+        phase = week_phase(week)
 
     _week_header(week)
 

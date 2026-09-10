@@ -836,6 +836,50 @@ class SupabaseStore:
         rows = query.order("started_at", desc=True).limit(1).execute().data or []
         return rows[0] if rows else None
 
+    def latest_data_run(self, run_type: str, *, week_id: str | None = None) -> dict[str, Any] | None:
+        query = (
+            self._table("data_runs")
+            .select("id,week_id,run_type,provider,started_at,completed_at,success,message,metadata")
+            .eq("run_type", run_type)
+        )
+        if week_id:
+            query = query.eq("week_id", str(week_id))
+        rows = query.order("started_at", desc=True).limit(1).execute().data or []
+        return rows[0] if rows else None
+
+    def claim_refresh_lease(self, lease_key: str, *, owner: str, ttl_seconds: int = 180) -> bool:
+        """Atomically-ish claim a short server-only refresh lease.
+
+        Expired rows are removed first; the primary key then guarantees only
+        one concurrent insert can win. Duplicate-key or missing-table errors
+        return False so automation recovery can never break the player app.
+        """
+        now = datetime.now(UTC)
+        try:
+            self._table("refresh_leases").delete().eq("lease_key", str(lease_key)).lt("expires_at", _iso(now)).execute()
+            res = self._table("refresh_leases").insert({
+                "lease_key": str(lease_key),
+                "owner": str(owner),
+                "claimed_at": _iso(now),
+                "expires_at": _iso(now + timedelta(seconds=max(30, int(ttl_seconds)))),
+            }).execute()
+            return bool(res.data)
+        except Exception:
+            return False
+
+    def release_refresh_lease(self, lease_key: str, *, owner: str) -> None:
+        try:
+            self._table("refresh_leases").delete().eq("lease_key", str(lease_key)).eq("owner", str(owner)).execute()
+        except Exception:
+            pass
+
+    def refresh_lease_available(self) -> bool:
+        try:
+            self._table("refresh_leases").select("lease_key").limit(1).execute()
+            return True
+        except Exception:
+            return False
+
     def ensure_real_week_shell(self, *, season: int, nfl_week: int, label: str, opens_at: str, locks_at: str) -> dict[str, Any]:
         payload = {
             "season": int(season),
