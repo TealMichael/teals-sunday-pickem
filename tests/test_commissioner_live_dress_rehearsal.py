@@ -350,3 +350,58 @@ def test_commissioner_ui_has_read_only_why_unmatched_identity_diagnostic():
     assert "it does not change production matching or any Week 1 data" in text
     assert "Why exact key missed" in text
     assert "Best cached candidate" in text
+
+
+class PositionScopedCacheStore:
+    """Simulate a Supabase table whose unfiltered read is capped at 1,000 rows."""
+    def __init__(self):
+        self.calls = []
+
+    def get_nfl_players(self, position=None):
+        self.calls.append(position)
+        if position is None:
+            return [
+                {
+                    "sleeper_player_id": f"filler-{i}",
+                    "full_name": f"Filler {i}",
+                    "canonical_key": f"filler{i}",
+                    "position": "WR",
+                    "team_abbr": "ZZ",
+                }
+                for i in range(1000)
+            ]
+        if position == "QB":
+            return [{
+                "sleeper_player_id": "qb-real",
+                "full_name": "Test Quarterback",
+                "canonical_key": "testquarterback",
+                "position": "QB",
+                "team_abbr": "NE",
+            }]
+        if position == "K":
+            return [{
+                "sleeper_player_id": "k-real",
+                "full_name": "Test Kicker",
+                "canonical_key": "testkicker",
+                "position": "K",
+                "team_abbr": "NE",
+            }]
+        return []
+
+
+def test_live_identity_diagnostic_avoids_unfiltered_1000_row_cache_cap():
+    store = PositionScopedCacheStore()
+    result = run_live_game_rehearsal(
+        store,
+        season=2026,
+        nfl_week=1,
+        provider_event_id="401999999",
+        nflverse=FakeNFLverse(),
+        espn=FakeESPN(),
+    )
+
+    assert result["matched_rows"] == 2
+    assert result["match_rate"] == 1.0
+    assert result["cached_player_count"] == 2
+    assert None not in store.calls
+    assert set(store.calls) == {"QB", "RB", "WR", "TE", "K"}

@@ -108,6 +108,36 @@ def _format_formula(breakdown: dict[str, dict[str, Any]], total: float) -> tuple
     return " + ".join(stat_parts), " ".join(point_parts) + f" = {display_score(total)} pts"
 
 
+
+
+def _load_cached_fantasy_players(store) -> list[dict[str, Any]]:
+    """Load the full QB/RB/WR/TE/K cache without hitting Supabase's 1,000-row select cap.
+
+    Supabase/PostgREST can cap an unpaged select at 1,000 rows.  The live
+    diagnostic only needs the five fantasy positions, and each position is
+    comfortably below that cap, so position-scoped reads give us the complete
+    identity set without touching production scoring behavior.  Fake/test
+    stores that expose only the legacy zero-argument method fall back cleanly.
+    """
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for position in POSITIONS:
+        try:
+            batch = list(store.get_nfl_players(position) or [])
+        except TypeError:
+            rows = list(store.get_nfl_players() or [])
+            break
+        for row in batch:
+            identity = str(
+                row.get("sleeper_player_id")
+                or f"{normalize_team(row.get('team_abbr'))}:{row.get('canonical_key') or normalize_name(row.get('full_name'))}:{row.get('position')}"
+            )
+            if identity in seen:
+                continue
+            seen.add(identity)
+            rows.append(row)
+    return rows
+
 def run_live_game_rehearsal(
     store,
     *,
@@ -141,7 +171,7 @@ def run_live_game_rehearsal(
     parsed = espn.player_stats(summary)
     espn_state = _summary_game_state(summary)
 
-    cached_players = store.get_nfl_players()
+    cached_players = _load_cached_fantasy_players(store)
     cached_index: dict[tuple[str, str], dict[str, Any]] = {}
     cached_by_name: dict[str, list[dict[str, Any]]] = {}
     cached_by_team: dict[str, list[dict[str, Any]]] = {}
