@@ -1,0 +1,15 @@
+TAG
+v1.0.5
+
+RELEASE TITLE
+v1.0.5 — Tap-to-Edit Lineup Review
+
+COMMIT MESSAGE
+v1.0.5 — Tap-to-Edit Lineup Review
+
+GITHUB RELEASE NOTES
+Cleans up Review My Five on mobile. The five lineup cards are now the edit controls: tap QB, RB, WR, TE, or K to jump directly back to that position, with the current choice already highlighted. After choosing a replacement, Return to Review brings the player straight back to the lineup review.
+
+The separate “Need to make a change?” section and five Change-position buttons have been removed. SAVE MY LINEUP remains directly below the five cards, and Questionable-player emergency backup information stays visible on the review card. OUT-player cards remain tappable so they can be replaced immediately.
+
+This is a UI/navigation hotfix only. No scoring, NFL live-data, pool ranking, Supabase persistence, auth, lock rules, Commissioner tools, database schema, or GitHub Actions changes.

@@ -43,7 +43,7 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 6
+WEEKLY_UI_SCHEMA_VERSION = 7
 
 
 def _compact_duration(seconds: int) -> str:
@@ -389,6 +389,50 @@ def _summary_rows(picks: list[dict], pool_by_id: dict[str, dict], *, show_backup
     return "".join(rows)
 
 
+
+
+def _begin_review_edit(position: str) -> None:
+    """Open one position from Review My Five without an extra rerun."""
+    st.session_state.builder_return_mode = "review"
+    st.session_state.builder_position = position
+    st.session_state.builder_mode = "pick"
+
+
+def _render_review_editable_lineup(picks: list[dict], pool_by_id: dict[str, dict]) -> None:
+    """Render the five review cards as direct edit targets."""
+    st.caption("Tap any player to change your pick.")
+    by_pos = picks_by_position(picks)
+    for position in POSITIONS:
+        pick = by_pos.get(position)
+        starter = pool_by_id.get(str(pick.get("pool_player_id"))) if pick else None
+        if not starter:
+            st.button(
+                f"**{position} · Not picked yet**\nTap to choose a player",
+                key=f"pickbtn_review_edit_missing_{position}",
+                type="secondary",
+                use_container_width=True,
+                on_click=_begin_review_edit,
+                args=(position,),
+            )
+            continue
+
+        review_row = dict(starter)
+        review_row["player_name"] = f"{position} · {_display_name(starter)}"
+        extra_line = ""
+        if safe_status(starter.get("availability_status")) == "QUESTIONABLE" and pick and pick.get("emergency_pool_player_id"):
+            backup = pool_by_id.get(str(pick.get("emergency_pool_player_id")))
+            if backup:
+                extra_line = f"↳ Emergency: {_display_name(backup)}"
+        _render_player_card_button(
+            review_row,
+            key=f"review_edit_{position}",
+            on_click=_begin_review_edit,
+            args=(position,),
+            extra_line=extra_line,
+            allow_out_click=True,
+        )
+
+
 def _advance_builder(position: str) -> None:
     nxt = next_position(position)
     if nxt:
@@ -495,6 +539,8 @@ def _render_player_card_button(
     disabled: bool = False,
     on_click=None,
     args: tuple = (),
+    extra_line: str = "",
+    allow_out_click: bool = False,
 ) -> bool:
     """Render one real full-size button as the player card.
 
@@ -512,12 +558,13 @@ def _render_player_card_button(
     meta = _markdown_escape(_player_meta(row))
     check = "✓ " if selected else ""
     badge = " :yellow-badge[⚠ QUESTIONABLE]" if status == "QUESTIONABLE" else (" :red-badge[OUT]" if status == "OUT" else "")
-    label = f"{check}**{name}**{badge}\n{meta}"
+    extra = f"\n{_markdown_escape(extra_line)}" if extra_line else ""
+    label = f"{check}**{name}**{badge}\n{meta}{extra}"
 
     return st.button(
         label,
         key=widget_key,
-        disabled=disabled or status == "OUT",
+        disabled=disabled or (status == "OUT" and not allow_out_click),
         type="secondary",
         width="stretch",
         wrap=True,
@@ -697,7 +744,7 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
     unavailable = unavailable_starter_positions(picks, pool_by_id)
 
     st.markdown("### Review My Five")
-    st.markdown(f'<div class="card">{_summary_rows(picks, pool_by_id)}</div>', unsafe_allow_html=True)
+    _render_review_editable_lineup(picks, pool_by_id)
 
     if chosen < total:
         st.warning(f"Finish all five positions first. You have {chosen} of {total}.")
@@ -724,9 +771,9 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
             st.rerun()
         return
 
-    # The primary action belongs immediately under the five-player review.
-    # Change-position controls are intentionally secondary so phone users do
-    # not have to scroll past five edit buttons just to confirm the lineup.
+    # The five player rows themselves are now the edit controls, so the primary
+    # save action can stay immediately below the lineup without a second bank
+    # of Change QB/RB/WR/TE/K buttons.
     st.markdown("**Everything look right?**")
     if st.button("SAVE MY LINEUP", type="primary", use_container_width=True):
         try:
@@ -744,17 +791,6 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
         except Exception as exc:
             st.error(str(exc))
 
-    st.divider()
-    st.markdown("**Need to make a change?**")
-    by_pos = picks_by_position(picks)
-    cols = st.columns(5)
-    for idx, pos in enumerate(POSITIONS):
-        with cols[idx]:
-            if st.button(f"Change\n{pos}", key=f"change::{pos}", use_container_width=True):
-                st.session_state.builder_return_mode = "review"
-                st.session_state.builder_position = pos
-                st.session_state.builder_mode = "pick"
-                st.rerun()
 
 
 def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:

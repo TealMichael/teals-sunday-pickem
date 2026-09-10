@@ -1,8 +1,3 @@
-VERSION / TAG
-v1.0.4
-
-RELEASE TITLE
-v1.0.4 — Public UX Polish
-
-SUGGESTED COMMIT MESSAGE
-v1.0.4 — Public UX Polish
+TAG: v1.0.5
+RELEASE TITLE: v1.0.5 — Tap-to-Edit Lineup Review
+COMMIT: v1.0.5 — Tap-to-Edit Lineup Review

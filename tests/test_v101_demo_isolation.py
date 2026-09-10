@@ -18,4 +18,4 @@ def test_gate2_demo_is_commissioner_only():
 
 def test_hotfix_version():
     config = (ROOT / "config.py").read_text()
-    assert 'APP_VERSION = "1.0.4"' in config
+    assert 'APP_VERSION = "1.0.5"' in config

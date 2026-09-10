@@ -4,11 +4,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_v104_version_and_weekly_ui_reload_guard():
-    assert 'APP_VERSION = "1.0.4"' in (ROOT / "config.py").read_text("utf-8")
+    assert 'APP_VERSION = "1.0.5"' in (ROOT / "config.py").read_text("utf-8")
     weekly = (ROOT / "weekly_ui.py").read_text("utf-8")
     app = (ROOT / "app.py").read_text("utf-8")
-    assert "WEEKLY_UI_SCHEMA_VERSION = 6" in weekly
-    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 6' in app
+    assert "WEEKLY_UI_SCHEMA_VERSION = 7" in weekly
+    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 7' in app
 
 
 def test_first_time_onboarding_explains_core_scoring_and_where_to_find_rules():
@@ -33,14 +33,14 @@ def test_profile_rules_are_labeled_as_scoring_reference():
     assert "Kicker: every made FG 3, made XP 1, misses 0" in text
 
 
-def test_valid_review_puts_save_before_change_controls():
+def test_valid_review_keeps_save_immediately_below_clickable_lineup():
     text = (ROOT / "weekly_ui.py").read_text("utf-8")
     start = text.index("def _review(")
     end = text.index("def _open_home(", start)
     review = text[start:end]
-    assert review.index('st.button("SAVE MY LINEUP"') < review.index('st.markdown("**Need to make a change?**")')
-    assert review.index('st.button("SAVE MY LINEUP"') < review.index('st.button(f"Change\\n{pos}"')
-    assert "The primary action belongs immediately under the five-player review" in review
+    assert review.index("_render_review_editable_lineup(picks, pool_by_id)") < review.index('st.button("SAVE MY LINEUP"')
+    assert "Need to make a change?" not in review
+    assert 'st.button(f"Change\\n{pos}"' not in review
 
 
 def test_public_ux_polish_does_not_change_scoring_or_nfl_refresh_contract():

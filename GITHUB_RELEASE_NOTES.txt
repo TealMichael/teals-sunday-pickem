@@ -1,7 +1,5 @@
-v1.0.4 — Public UX Polish
+v1.0.5 — Tap-to-Edit Lineup Review
 
-Improves the two player-facing moments we identified before Week 1: first-time How to Play now explains the core half-PPR scoring, emergency-backup rule, and Sunday lock; and SAVE MY LINEUP now sits immediately under the five-player review instead of below the Change-position controls.
+Review My Five is now much cleaner on mobile: each of the five player cards is itself tappable and opens that position for editing. The current choice remains highlighted in the picker and Return to Review comes back to the lineup review. The old bank of Change QB/RB/WR/TE/K buttons is gone, while SAVE MY LINEUP stays immediately below the five cards. Questionable emergency-backup context remains visible, and OUT starters can be tapped directly for replacement.
 
-Full rules remain available under Profile → How to Play & Scoring.
-
-No scoring, NFL live-data, pool ranking, Supabase schema, auth, lock, Commissioner, or GitHub Actions changes.
+No scoring, NFL data, Supabase persistence, auth, lock, Commissioner, SQL, or workflow behavior changed.
