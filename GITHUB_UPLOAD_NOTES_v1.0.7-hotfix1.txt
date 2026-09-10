@@ -1,0 +1,17 @@
+TAG: v1.0.7-hotfix1
+RELEASE TITLE: v1.0.7 Hotfix 1 — Sunday Clock Store Repair
+COMMIT: v1.0.7 hotfix — restore Sunday Clock store methods
+
+SUMMARY:
+Repairs an incomplete v1.0.7 deployment where Commissioner → Clock loaded the new UI but raised AttributeError because the matching store.py clock persistence methods were not present in production.
+
+CHANGES:
+- Restores the v1.0.7 Sunday Clock store methods.
+- No public player-flow changes.
+- No NFL scoring/parser changes.
+- No automation changes.
+- No SQL rerun required.
+- No hidden files.
+
+AFTER DEPLOY:
+Open Commissioner → Clock. The page should load normally and show the Sunday message editor / Physical Clock setup instead of the temporary-snag screen.
