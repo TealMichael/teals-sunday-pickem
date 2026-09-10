@@ -142,25 +142,55 @@ def run_live_game_rehearsal(
 
     cached_players = store.get_nfl_players()
     cached_index: dict[tuple[str, str], dict[str, Any]] = {}
+    cached_by_name: dict[str, list[dict[str, Any]]] = {}
     for row in cached_players:
         team = normalize_team(row.get("team_abbr"))
         key = str(row.get("canonical_key") or normalize_name(row.get("full_name")))
         if team and key:
             cached_index[(team, key)] = row
+        if key:
+            cached_by_name.setdefault(key, []).append(row)
 
+    def _broad_role(raw_stats: dict[str, Any]) -> str:
+        keys = set(raw_stats)
+        if keys & {"field_goals_made", "fg_made", "extra_points_made", "xp_made", "pat_made"}:
+            return "K"
+        if keys & {"passing_yards", "pass_yds", "passing_tds", "pass_td", "interceptions", "passing_interceptions"}:
+            return "QB"
+        if keys & {"receptions", "rec", "receiving_yards", "rec_yds", "receiving_tds", "rec_td"}:
+            return "REC"
+        if keys & {"rushing_yards", "rush_yds", "rushing_tds", "rush_td"}:
+            return "RUSH"
+        return "?"
+
+    # Score every ESPN row that contains a Pick'em-relevant stat.  Do not use
+    # ESPN/Sleeper position resolution as a gate: ESPN's live CDN often omits
+    # athlete.position, especially outside rushing tables.  Production Sunday
+    # scoring already knows each selected player's position from player_pool and
+    # matches ESPN by normalized team + name.  The dress rehearsal should expose
+    # passing/receiving/kicking data even when the arbitrary Wednesday player's
+    # position cannot be resolved from the cached roster.
     rows: list[dict[str, Any]] = []
     for entry in parsed:
         team = normalize_team(entry.get("team_abbr"))
         name = str(entry.get("player_name") or "").strip()
         key = normalize_name(name)
-        match = cached_index.get((team, key))
-        position = str(entry.get("position") or (match or {}).get("position") or "").upper()
+        raw_stats = dict(entry.get("stats") or {})
+        generic_scored = score_stat_line(raw_stats)
+        if not generic_scored.breakdown:
+            continue
+
+        exact_match = cached_index.get((team, key))
+        name_matches = cached_by_name.get(key) or []
+        name_only_match = name_matches[0] if not exact_match and len(name_matches) == 1 else None
+        position_source = exact_match or name_only_match or {}
+        position = str(position_source.get("position") or entry.get("position") or "").upper()
         if position == "PK":
             position = "K"
         if position not in POSITIONS:
-            continue
-        raw_stats = dict(entry.get("stats") or {})
-        scored = score_stat_line(raw_stats, position)
+            position = _broad_role(raw_stats)
+
+        scored = score_stat_line(raw_stats, position if position in POSITIONS else None)
         stat_formula, points_formula = _format_formula(scored.breakdown, scored.points)
         rows.append({
             "key": f"{team}:{key}",
@@ -168,8 +198,13 @@ def run_live_game_rehearsal(
             "player_name": name,
             "position": position,
             "espn_player_id": entry.get("espn_player_id"),
-            "matched_cached_player": bool(match),
-            "cached_player_name": (match or {}).get("full_name"),
+            "matched_cached_player": bool(exact_match),
+            "cached_player_name": (exact_match or name_only_match or {}).get("full_name"),
+            "identity_resolution": (
+                "exact team+name" if exact_match
+                else "name-only position hint" if name_only_match
+                else "ESPN/inferred role"
+            ),
             "raw_stats": raw_stats,
             "points": scored.points,
             "display_points": display_score(scored.points),
@@ -191,7 +226,20 @@ def run_live_game_rehearsal(
         samples[position] = chosen
 
     matched = sum(1 for row in rows if row.get("matched_cached_player"))
-    active_stat_rows = sum(1 for row in rows if row.get("breakdown"))
+    active_stat_rows = len(rows)
+
+    category_samples: dict[str, dict[str, Any]] = {}
+    category_keys = {
+        "Passing": {"passing_yards", "passing_tds", "interceptions"},
+        "Rushing": {"rushing_yards", "rushing_tds"},
+        "Receiving": {"receptions", "receiving_yards", "receiving_tds"},
+        "Kicking": {"field_goals_made", "extra_points_made"},
+    }
+    for label, component_keys in category_keys.items():
+        candidates = [row for row in rows if component_keys & set((row.get("breakdown") or {}).keys())]
+        if candidates:
+            category_samples[label] = max(candidates, key=lambda row: float(row.get("points") or 0.0))
+
     return {
         "fetched_at": _iso_now(),
         "season": int(season),
@@ -212,6 +260,7 @@ def run_live_game_rehearsal(
         "matched_rows": matched,
         "match_rate": (matched / len(rows)) if rows else 0.0,
         "samples": samples,
+        "category_samples": category_samples,
         "rows": rows,
         "read_only": True,
     }

@@ -414,10 +414,10 @@ def _render_live_dress_rehearsal(store, week: dict[str, Any]) -> None:
         c1.metric("Game", live_status)
         c2.metric("Parsed rows", int(result.get("parsed_rows") or 0))
         c3.metric("Active scoring rows", active_rows)
-        c4.metric("Sleeper matches", f"{rate:.0f}%" if fantasy_rows else "—")
+        c4.metric("Exact production-key matches", f"{rate:.0f}%" if active_rows else "—")
 
-        if live_status in {"LIVE", "FINAL"} and fantasy_rows and rate < 85.0:
-            st.warning("Cross-provider player matching is below 85%. Inspect the unmatched rows before trusting Sunday live scoring.")
+        if live_status in {"LIVE", "FINAL"} and active_rows and rate < 85.0:
+            st.warning("Some live scoring rows do not match cached players by the exact team+name key production uses. The rows are still shown so we can diagnose name/team differences before Sunday.")
 
         score_bits = []
         if result.get("away_team"):
@@ -454,7 +454,22 @@ def _render_live_dress_rehearsal(store, week: dict[str, Any]) -> None:
                     f"`{row.get('points_formula')}` • {match_mark}"
                 )
 
-        with st.expander("All parsed fantasy-position rows", expanded=False):
+        category_samples = result.get("category_samples") or {}
+        if category_samples:
+            st.markdown("##### Stat-category proof")
+            st.caption("This section ignores missing ESPN position labels so we can prove each live stat category is arriving and scoring.")
+            for category in ("Passing", "Rushing", "Receiving", "Kicking"):
+                row = category_samples.get(category)
+                if not row:
+                    continue
+                match_mark = "✓ exact production key" if row.get("matched_cached_player") else f"⚠ {row.get('identity_resolution') or 'identity unresolved'}"
+                st.markdown(
+                    f"**{category} — {row.get('player_name')} ({row.get('team_abbr')}) — {row.get('display_points')} pts**  \n"
+                    f"{row.get('stat_formula')}  \n"
+                    f"`{row.get('points_formula')}` • {match_mark}"
+                )
+
+        with st.expander("All parsed live scoring rows", expanded=False):
             table_rows = []
             for row in result.get("rows") or []:
                 table_rows.append({
@@ -462,13 +477,14 @@ def _render_live_dress_rehearsal(store, week: dict[str, Any]) -> None:
                     "Player": row.get("player_name"),
                     "Team": row.get("team_abbr"),
                     "Pts": row.get("display_points"),
-                    "Matched": "Yes" if row.get("matched_cached_player") else "No",
+                    "Exact key": "Yes" if row.get("matched_cached_player") else "No",
+                    "Identity": row.get("identity_resolution"),
                     "Scoring stats": row.get("stat_formula"),
                 })
             if table_rows:
                 st.dataframe(table_rows, use_container_width=True, hide_index=True)
             else:
-                st.caption("No QB/RB/WR/TE/K rows have appeared in the box score yet.")
+                st.caption("No Pick’em-relevant scoring rows have appeared in the box score yet.")
 
         st.caption(
             "Wednesday success target: the game moves to LIVE, parsed rows appear, identity matching stays healthy, "

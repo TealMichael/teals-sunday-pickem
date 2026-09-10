@@ -199,3 +199,59 @@ def test_commissioner_ui_labels_live_test_as_read_only_and_passes_real_week_cont
     assert "Commissioner-only and read-only" in text
     assert "It does not write Week 1 scores, lineups, standings, or NFL data." in text
     assert "_render_diagnostics(store, week)" in text
+
+
+def test_live_rehearsal_does_not_drop_scoring_rows_when_espn_position_is_missing_and_identity_is_unmatched():
+    class ESPNWithPositionlessReceiving(FakeESPN):
+        def summary(self, event_id):
+            payload = super().summary(event_id)
+            payload["boxscore"]["players"][0]["statistics"].append({
+                "name": "receiving",
+                "labels": ["REC", "YDS", "TD"],
+                "athletes": [{
+                    "athlete": {"id": "3", "displayName": "Live Receiver"},
+                    "stats": ["2", "21", "0"],
+                }],
+            })
+            return payload
+
+    result = run_live_game_rehearsal(
+        ReadOnlyStore(),
+        season=2026,
+        nfl_week=1,
+        provider_event_id="401999999",
+        nflverse=FakeNFLverse(),
+        espn=ESPNWithPositionlessReceiving(),
+    )
+
+    receiver = next(row for row in result["rows"] if row["player_name"] == "Live Receiver")
+    assert receiver["position"] == "REC"
+    assert receiver["matched_cached_player"] is False
+    assert receiver["points"] == 3.1
+    assert "2 receptions" in receiver["stat_formula"]
+    assert "21 receiving yds" in receiver["stat_formula"]
+    assert result["category_samples"]["Receiving"]["player_name"] == "Live Receiver"
+
+
+def test_live_rehearsal_prefers_cached_position_over_missing_espn_position_for_exact_production_match():
+    class ESPNPositionlessQB(FakeESPN):
+        def summary(self, event_id):
+            payload = super().summary(event_id)
+            for category in payload["boxscore"]["players"][0]["statistics"]:
+                for athlete_row in category.get("athletes") or []:
+                    if (athlete_row.get("athlete") or {}).get("displayName") == "Test Quarterback":
+                        athlete_row["athlete"].pop("position", None)
+            return payload
+
+    result = run_live_game_rehearsal(
+        ReadOnlyStore(),
+        season=2026,
+        nfl_week=1,
+        provider_event_id="401999999",
+        nflverse=FakeNFLverse(),
+        espn=ESPNPositionlessQB(),
+    )
+    qb = next(row for row in result["rows"] if row["player_name"] == "Test Quarterback")
+    assert qb["position"] == "QB"
+    assert qb["matched_cached_player"] is True
+    assert "247 passing yds" in qb["stat_formula"]
