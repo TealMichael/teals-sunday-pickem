@@ -1,0 +1,12 @@
+v1.0.3 Live Identity Diagnostic Hotfix — Verification
+
+pytest: 161/161 PASS
+Full Week Rehearsal: 9/9 PASS
+compileall: PASS
+release_guard: PASS
+
+Runtime scope:
+- live_dress_rehearsal.py
+- gate5_ui.py
+
+Production scoring, nfl_sync.py, store.py, public player UI, auth, SQL migrations, and GitHub workflows remain unchanged from the live-test position-hotfix baseline.

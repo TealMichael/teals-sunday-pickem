@@ -440,6 +440,56 @@ def _render_live_dress_rehearsal(store, week: dict[str, Any]) -> None:
             else:
                 st.caption("No player stat changes since the previous snapshot.")
 
+        unmatched = result.get("unmatched_diagnostics") or []
+        if unmatched:
+            with st.expander(f"Why unmatched? • {len(unmatched)} live scoring row(s)", expanded=True):
+                st.caption(
+                    "Read-only identity diagnosis. This compares ESPN live names/teams with the cached Sleeper roster; "
+                    "it does not change production matching or any Week 1 data."
+                )
+                cache_bits = [f"{int(result.get('cached_player_count') or 0)} cached fantasy players"]
+                if result.get("cache_latest_synced_at"):
+                    cache_bits.append(f"cache last synced {_ago(result.get('cache_latest_synced_at'))}")
+                st.caption(" • ".join(cache_bits))
+                st.info(
+                    "A miss here only becomes a Sunday scoring risk if one of the actual Sunday pool players has the same identity mismatch. "
+                    "Wednesday players are being used to diagnose the matching rule, not to change the Week 1 pool."
+                )
+
+                diag_rows = []
+                for item in unmatched:
+                    candidate = item.get("top_candidate") or {}
+                    candidate_name = str(candidate.get("full_name") or "—")
+                    candidate_team = str(candidate.get("team_abbr") or "—")
+                    candidate_pos = str(candidate.get("position") or "—")
+                    similarity = candidate.get("similarity")
+                    candidate_text = f"{candidate_name} • {candidate_team} • {candidate_pos}" if candidate_name != "—" else "—"
+                    if similarity is not None and candidate_name != "—":
+                        candidate_text += f" • {float(similarity) * 100:.0f}% name match"
+                    diag_rows.append({
+                        "ESPN player": item.get("player_name"),
+                        "ESPN team": item.get("team_abbr"),
+                        "Role": item.get("position"),
+                        "ESPN ID": item.get("espn_player_id") or "—",
+                        "Why exact key missed": item.get("reason"),
+                        "Best cached candidate": candidate_text,
+                        "Scoring stats": item.get("stat_formula"),
+                    })
+                st.dataframe(diag_rows, use_container_width=True, hide_index=True)
+
+                with st.expander("Candidate details", expanded=False):
+                    for item in unmatched:
+                        candidates = item.get("candidates") or []
+                        st.markdown(f"**{item.get('player_name')} ({item.get('team_abbr')})** — {item.get('reason')}")
+                        if not candidates:
+                            st.caption("No plausible cached candidate found.")
+                            continue
+                        for candidate in candidates:
+                            st.caption(
+                                f"{candidate.get('full_name')} • {candidate.get('team_abbr') or '—'} • {candidate.get('position') or '—'} "
+                                f"• Sleeper {candidate.get('sleeper_player_id') or '—'} • {float(candidate.get('similarity') or 0) * 100:.0f}% name match"
+                            )
+
         samples = result.get("samples") or {}
         if samples:
             st.markdown("##### Live scoring samples")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from typing import Any
 
 from nfl_scoring import display_score, score_stat_line
@@ -143,11 +144,13 @@ def run_live_game_rehearsal(
     cached_players = store.get_nfl_players()
     cached_index: dict[tuple[str, str], dict[str, Any]] = {}
     cached_by_name: dict[str, list[dict[str, Any]]] = {}
+    cached_by_team: dict[str, list[dict[str, Any]]] = {}
     for row in cached_players:
         team = normalize_team(row.get("team_abbr"))
         key = str(row.get("canonical_key") or normalize_name(row.get("full_name")))
         if team and key:
             cached_index[(team, key)] = row
+            cached_by_team.setdefault(team, []).append(row)
         if key:
             cached_by_name.setdefault(key, []).append(row)
 
@@ -197,6 +200,7 @@ def run_live_game_rehearsal(
             "team_abbr": team,
             "player_name": name,
             "position": position,
+            "espn_position": str(entry.get("position") or "").upper() or None,
             "espn_player_id": entry.get("espn_player_id"),
             "matched_cached_player": bool(exact_match),
             "cached_player_name": (exact_match or name_only_match or {}).get("full_name"),
@@ -212,6 +216,80 @@ def run_live_game_rehearsal(
             "stat_formula": stat_formula,
             "points_formula": points_formula,
         })
+
+    def _candidate_summary(candidate: dict[str, Any], similarity: float) -> dict[str, Any]:
+        return {
+            "full_name": candidate.get("full_name"),
+            "team_abbr": normalize_team(candidate.get("team_abbr")),
+            "position": candidate.get("position"),
+            "sleeper_player_id": candidate.get("sleeper_player_id"),
+            "last_synced_at": candidate.get("last_synced_at"),
+            "similarity": round(float(similarity), 3),
+        }
+
+    # Explain exact production-key misses without changing production matching.
+    # This is intentionally diagnostic-only: it helps us distinguish stale team
+    # assignments, name variants, and players absent from the cached Sleeper roster.
+    unmatched_diagnostics: list[dict[str, Any]] = []
+    for row in rows:
+        if row.get("matched_cached_player"):
+            continue
+        team = normalize_team(row.get("team_abbr"))
+        key = normalize_name(row.get("player_name"))
+        exact_name_elsewhere = list(cached_by_name.get(key) or [])
+
+        candidates: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for candidate in exact_name_elsewhere:
+            cid = str(candidate.get("sleeper_player_id") or f"{candidate.get('team_abbr')}:{candidate.get('full_name')}")
+            if cid in seen_ids:
+                continue
+            seen_ids.add(cid)
+            candidates.append(_candidate_summary(candidate, 1.0))
+
+        fuzzy_same_team: list[tuple[float, dict[str, Any]]] = []
+        for candidate in cached_by_team.get(team, []):
+            candidate_key = str(candidate.get("canonical_key") or normalize_name(candidate.get("full_name")))
+            if not candidate_key or candidate_key == key:
+                continue
+            similarity = SequenceMatcher(None, key, candidate_key).ratio()
+            if similarity >= 0.58:
+                fuzzy_same_team.append((similarity, candidate))
+        fuzzy_same_team.sort(key=lambda item: item[0], reverse=True)
+        for similarity, candidate in fuzzy_same_team[:3]:
+            cid = str(candidate.get("sleeper_player_id") or f"{candidate.get('team_abbr')}:{candidate.get('full_name')}")
+            if cid in seen_ids:
+                continue
+            seen_ids.add(cid)
+            candidates.append(_candidate_summary(candidate, similarity))
+
+        if not team:
+            reason = "ESPN row has no team abbreviation."
+        elif exact_name_elsewhere:
+            candidate_teams = sorted({normalize_team(c.get("team_abbr")) or "—" for c in exact_name_elsewhere})
+            reason = "Same normalized name exists in cache, but under team " + ", ".join(candidate_teams) + "."
+        elif fuzzy_same_team and fuzzy_same_team[0][0] >= 0.82:
+            top = fuzzy_same_team[0][1]
+            reason = f"Likely name variation on {team}: {top.get('full_name')}."
+        else:
+            reason = "No exact cached Sleeper player for this team+name key."
+
+        top_candidate = candidates[0] if candidates else None
+        unmatched_diagnostics.append({
+            "player_name": row.get("player_name"),
+            "team_abbr": team,
+            "position": row.get("position"),
+            "espn_position": row.get("espn_position"),
+            "espn_player_id": row.get("espn_player_id"),
+            "stat_formula": row.get("stat_formula"),
+            "reason": reason,
+            "candidate_count": len(candidates),
+            "top_candidate": top_candidate,
+            "candidates": candidates,
+        })
+
+    cache_sync_values = [str(row.get("last_synced_at")) for row in cached_players if row.get("last_synced_at")]
+    cache_latest_synced_at = max(cache_sync_values) if cache_sync_values else None
 
     # Prefer a player with actual live stats for each position. Before kickoff,
     # fall back to the first parsed player so the parser/matching path can still
@@ -262,6 +340,9 @@ def run_live_game_rehearsal(
         "samples": samples,
         "category_samples": category_samples,
         "rows": rows,
+        "unmatched_diagnostics": unmatched_diagnostics,
+        "cached_player_count": len(cached_players),
+        "cache_latest_synced_at": cache_latest_synced_at,
         "read_only": True,
     }
 

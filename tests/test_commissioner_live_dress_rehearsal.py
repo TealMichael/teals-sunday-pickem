@@ -255,3 +255,98 @@ def test_live_rehearsal_prefers_cached_position_over_missing_espn_position_for_e
     assert qb["position"] == "QB"
     assert qb["matched_cached_player"] is True
     assert "247 passing yds" in qb["stat_formula"]
+
+
+def test_live_rehearsal_explains_exact_key_miss_when_cached_team_differs():
+    class StoreWithStaleTeam(ReadOnlyStore):
+        def get_nfl_players(self):
+            rows = super().get_nfl_players()
+            rows.append({
+                "full_name": "Live Receiver",
+                "canonical_key": "livereceiver",
+                "position": "WR",
+                "team_abbr": "OLD",
+                "sleeper_player_id": "stale-1",
+                "last_synced_at": "2026-09-09T12:00:00+00:00",
+            })
+            return rows
+
+    class ESPNWithReceiver(FakeESPN):
+        def summary(self, event_id):
+            payload = super().summary(event_id)
+            payload["boxscore"]["players"][0]["statistics"].append({
+                "name": "receiving",
+                "labels": ["REC", "YDS", "TD"],
+                "athletes": [{
+                    "athlete": {"id": "3", "displayName": "Live Receiver"},
+                    "stats": ["2", "21", "0"],
+                }],
+            })
+            return payload
+
+    result = run_live_game_rehearsal(
+        StoreWithStaleTeam(),
+        season=2026,
+        nfl_week=1,
+        provider_event_id="401999999",
+        nflverse=FakeNFLverse(),
+        espn=ESPNWithReceiver(),
+    )
+    diag = next(row for row in result["unmatched_diagnostics"] if row["player_name"] == "Live Receiver")
+    assert "team OLD" in diag["reason"]
+    assert diag["top_candidate"]["full_name"] == "Live Receiver"
+    assert diag["top_candidate"]["similarity"] == 1.0
+    assert result["cached_player_count"] == 3
+    assert result["cache_latest_synced_at"] == "2026-09-09T12:00:00+00:00"
+
+
+def test_live_rehearsal_surfaces_close_same_team_name_candidate_without_mutating_match_rule():
+    class StoreWithNameVariant(ReadOnlyStore):
+        def get_nfl_players(self):
+            rows = super().get_nfl_players()
+            rows.append({
+                "full_name": "Jaxon Smith Njigba",
+                "canonical_key": "jaxonsmithnjigba",
+                "position": "WR",
+                "team_abbr": "SEA",
+                "sleeper_player_id": "variant-1",
+            })
+            return rows
+
+    class ESPNWithVariant(FakeESPN):
+        def summary(self, event_id):
+            payload = super().summary(event_id)
+            payload["boxscore"]["players"].append({
+                "team": {"abbreviation": "SEA"},
+                "statistics": [{
+                    "name": "receiving",
+                    "labels": ["REC", "YDS", "TD"],
+                    "athletes": [{
+                        "athlete": {"id": "9", "displayName": "Jaxon Smith-Njigba Jr"},
+                        "stats": ["3", "31", "0"],
+                    }],
+                }],
+            })
+            return payload
+
+    result = run_live_game_rehearsal(
+        StoreWithNameVariant(),
+        season=2026,
+        nfl_week=1,
+        provider_event_id="401999999",
+        nflverse=FakeNFLverse(),
+        espn=ESPNWithVariant(),
+    )
+    # normalize_name already removes Jr and punctuation, so this should become
+    # an exact production key rather than a fuzzy fallback.
+    row = next(row for row in result["rows"] if row["player_name"] == "Jaxon Smith-Njigba Jr")
+    assert row["matched_cached_player"] is True
+
+
+def test_commissioner_ui_has_read_only_why_unmatched_identity_diagnostic():
+    text = open("gate5_ui.py", encoding="utf-8").read()
+    assert "Why unmatched?" in text
+    assert "Read-only identity diagnosis" in text
+    assert "it does not change production matching or any Week 1 data" in text
+    assert "Why exact key missed" in text
+    assert "Best cached candidate" in text
