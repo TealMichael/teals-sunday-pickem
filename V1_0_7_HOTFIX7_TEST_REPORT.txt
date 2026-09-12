@@ -1,0 +1,29 @@
+Teal's Sunday Pick'em v1.0.7-hotfix7 — Validation
+
+FULL PYTEST SUITE
+230 passed
+
+PYTHON COMPILE
+PASS
+
+RELEASE GUARD
+PASS
+
+NEW REGRESSION COVERAGE
+- Caleb live watch includes today, season, remaining yards, and 17-game pace
+- Non-live watch omits Today and retains season pace
+- Weekly nflverse baseline is cached rather than redownloaded every clock refresh
+- Weekly standings remain every 15 minutes
+- NFL LIVE scores remain every 15 minutes
+- Caleb is once/hour normally and every 30 minutes when Bears are live
+- Pick'em player update is preserved during the Bears live window
+- NFL team abbreviations use per-team readable accents while scores/time stay white
+- Player Update and Pick'em Pulse use the player's team color without painting the whole line
+- Weekly/season standings mix white copy with limited teal/blue/gold accents
+- Caleb mixes Bears orange, readable Bears blue, white stats, and conditional pace color
+- SQL prefers rich fragments but retains plain-text fallback
+- Pregame privacy remains intact
+- AWTRIX passes fragment arrays through while keeping 15-second Sunday polling and scoped public RPC path
+- Test Clock demonstrates mixed-color team and Caleb examples
+- Caleb feature does not enter fantasy scoring or lineup engines
+- Hotfix 7 has a distinct warm-deploy build generation

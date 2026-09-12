@@ -1,7 +1,7 @@
 # @name    Pickem Sunday
 # @desc    Sunday-only Teal's Pick'em broadcast via scoped Supabase RPC
 # @author  Teal's Sunday Pick'em
-# @version 1.0.7-hotfix2
+# @version 1.0.7-hotfix7
 # @headless true
 # @config  sb_url text "Supabase URL" default="" maxlen=160
 # @config  sb_key text "Publishable key" default="" maxlen=256
@@ -43,10 +43,19 @@ class PickemSunday
 
     var event_id = data.find("event_id")
     var line = data.find("text")
+    var fragments = data.find("fragments")
     if event_id == nil || line == nil || line == "" return end
     if event_id == self.last_event return end
 
-    var accepted = notify({"text": str(line), "repeat": 1, "stack": true, "wakeup": true})
+    var color = data.find("color")
+    var accepted = false
+    if fragments != nil
+      accepted = notify({"text": fragments, "repeat": 1, "stack": true, "wakeup": true})
+    elif color != nil && color != ""
+      accepted = notify({"text": str(line), "color": str(color), "repeat": 1, "stack": true, "wakeup": true})
+    else
+      accepted = notify({"text": str(line), "repeat": 1, "stack": true, "wakeup": true})
+    end
     if accepted
       self.last_event = event_id
       store.set("last_event", event_id)

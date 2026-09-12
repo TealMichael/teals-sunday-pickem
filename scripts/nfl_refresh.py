@@ -45,7 +45,7 @@ def _refresh_clock_best_effort(store: SupabaseStore, week=None) -> None:
         target = week or store.get_real_week()
         if target:
             target = store.get_week(str(target["id"])) or target
-            refresh_clock_snapshot(store, target)
+            refresh_clock_snapshot(store, target, refresh_specials=True)
     except Exception:
         pass
 

@@ -1,0 +1,38 @@
+Teal's Sunday Pick'em — v1.0.7-hotfix7
+
+TAG
+v1.0.7-hotfix7
+
+RELEASE TITLE
+v1.0.7 Hotfix 7 — Caleb 4K Watch + Rich Sunday Ticker
+
+COMMIT
+v1.0.7 hotfix — add Caleb 4K watch and rich team-color ticker accents
+
+GITHUB UPLOAD
+Upload the contents of the GitHub patch ZIP at repository root, preserving folders.
+
+PRODUCTION FILES CHANGED
+- config.py
+- clock_broadcast.py
+- scripts/nfl_refresh.py
+- awtrix/PickemSunday.ax
+- db/009_clock_colors_caleb_4k.sql
+
+TEST FILES CHANGED / ADDED
+- tests/test_v107_hotfix6_sunday_stability.py
+- tests/test_v107_hotfix7_caleb_clock_colors.py
+
+AFTER QUALITY GATE IS GREEN
+1. Run db/009_clock_colors_caleb_4k.sql once in Supabase SQL Editor.
+2. Replace/reload the physical AWTRIX PickemSunday script with awtrix/PickemSunday.ax.
+3. In Commissioner -> Clock, run Test Clock.
+4. Confirm:
+   - most text is white and easy to read
+   - CHI and MIN use different team-color accents in the NFL test
+   - Pick'em standings use teal/gold accents
+   - Caleb uses Bears orange + blue + white rather than one solid color
+
+NO .github CHANGE
+NO .streamlit CHANGE
+DO NOT rerun older migrations.

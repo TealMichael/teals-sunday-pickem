@@ -269,7 +269,7 @@ def test_hotfix6_deployment_and_autorefresh_contracts():
     weekly_ui = (ROOT / "weekly_ui.py").read_text("utf-8")
     gate4_ui = (ROOT / "gate4_ui.py").read_text("utf-8")
 
-    assert 'APP_BUILD_VERSION = "1.0.7-hotfix6"' in config
+    assert 'APP_BUILD_VERSION = "1.0.7-hotfix' in config
     assert 'get_store(secret("SUPABASE_URL"), supabase_server_key(), APP_BUILD_VERSION)' in app
     assert 'WEEKLY_UI_SCHEMA_VERSION = 9' in weekly_ui
     assert 'GATE4_UI_SCHEMA_VERSION = 4' in gate4_ui
