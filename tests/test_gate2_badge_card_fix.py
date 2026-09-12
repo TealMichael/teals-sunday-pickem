@@ -31,7 +31,7 @@ def test_questionable_badge_is_inline_in_button_label():
 def test_player_card_css_styles_native_button_as_full_card():
     text = _ui()
     assert 'st-key-pickbtn_' in text
-    assert 'min-height:88px !important;' in text
+    assert 'min-height:68px !important;' in text
     assert 'width:100% !important;' in text
     assert 'opacity:0 !important;' not in text
     assert 'inset:0 !important;' not in text

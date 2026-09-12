@@ -45,7 +45,7 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 7
+WEEKLY_UI_SCHEMA_VERSION = 8
 
 
 def _compact_duration(seconds: int) -> str:
@@ -90,6 +90,16 @@ def _render_sunday_status_card(week: dict, picks: list[dict], pool_by_id: dict[s
     needs_backup = list(status["needs_backup"])
     questionable = list(status["questionable"])
 
+    # Keep an injury warning visible even when an OUT starter is safely covered
+    # by an emergency backup. "Ready" should mean the lineup is protected, not
+    # that the starter's injury disappeared from the Sunday Status card.
+    out_starters: list[str] = []
+    for pos, pick in picks_by_position(picks).items():
+        starter = pool_by_id.get(str(pick.get("pool_player_id")))
+        if starter and safe_status(starter.get("availability_status")) == "OUT":
+            out_starters.append(pos)
+    covered_out = [pos for pos in out_starters if pos not in unavailable]
+
     if unavailable:
         tone = "danger"
         icon = "🚫"
@@ -105,6 +115,11 @@ def _render_sunday_status_card(week: dict, picks: list[dict], pool_by_id: dict[s
         icon = "⚠️"
         title = "Lineup needs attention"
         subtitle = "All five picks are saved"
+    elif covered_out:
+        tone = "warn"
+        icon = "⚠️"
+        title = "Lineup ready — backup set"
+        subtitle = "All five picks are set"
     else:
         tone = "ok"
         icon = "✅"
@@ -113,7 +128,9 @@ def _render_sunday_status_card(week: dict, picks: list[dict], pool_by_id: dict[s
 
     injury_parts: list[str] = []
     if unavailable:
-        injury_parts.append(f"🚫 {len(unavailable)} starter{'s' if len(unavailable) != 1 else ''} OUT")
+        injury_parts.append(f"🚫 {len(unavailable)} starter{'s' if len(unavailable) != 1 else ''} OUT • backup needed")
+    if covered_out:
+        injury_parts.append(f"⚠️ {len(covered_out)} starter{'s' if len(covered_out) != 1 else ''} OUT • emergency backup{'s' if len(covered_out) != 1 else ''} ready")
     if questionable:
         if needs_backup:
             injury_parts.append(f"⚠️ {len(questionable)} Questionable • {len(needs_backup)} backup{'s' if len(needs_backup) != 1 else ''} needed")

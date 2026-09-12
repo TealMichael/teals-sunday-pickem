@@ -46,14 +46,14 @@ h4 { font-size:1.05rem !important; line-height:1.2 !important; margin-top:.9rem 
    This avoids fragile invisible overlays and makes the entire rectangle tappable. */
 div[class*="st-key-pickbtn_"] [data-testid="stButton"] {
   width:100% !important;
-  margin:.48rem 0 !important;
+  margin:.25rem 0 !important;
 }
 div[class*="st-key-pickbtn_"] [data-testid="stButton"] button,
 div[class*="st-key-pickbtn_"] [data-testid^="stBaseButton"] {
   width:100% !important;
-  min-height:88px !important;
+  min-height:68px !important;
   height:auto !important;
-  padding:.8rem 1rem !important;
+  padding:.5rem .8rem !important;
   border-radius:16px !important;
   border:1px solid #D6DEE3 !important;
   background:#FFFFFF !important;
@@ -78,7 +78,7 @@ div[class*="st-key-pickbtn_"] [data-testid^="stBaseButton"] p {
   margin:0 !important;
   white-space:pre-line !important;
   text-align:center !important;
-  line-height:1.55 !important;
+  line-height:1.3 !important;
   font-size:.95rem !important;
   color:var(--ink) !important;
 }

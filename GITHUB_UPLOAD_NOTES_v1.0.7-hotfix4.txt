@@ -1,0 +1,12 @@
+Teal's Sunday Pick'em v1.0.7-hotfix4
+
+Tag: v1.0.7-hotfix4
+Release title: v1.0.7 Hotfix 4 — Compact Picker + Injury Status Clarity
+Commit: v1.0.7 hotfix — compact player cards and preserve injury warnings
+
+Changed production files:
+- app.py
+- ui.py
+- weekly_ui.py
+
+No SQL. No hidden-file changes. No scoring/pool/clock changes.

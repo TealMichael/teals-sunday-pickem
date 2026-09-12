@@ -7,8 +7,8 @@ def test_v104_version_and_weekly_ui_reload_guard():
     assert 'APP_VERSION = "1.0.7"' in (ROOT / "config.py").read_text("utf-8")
     weekly = (ROOT / "weekly_ui.py").read_text("utf-8")
     app = (ROOT / "app.py").read_text("utf-8")
-    assert "WEEKLY_UI_SCHEMA_VERSION = 7" in weekly
-    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 7' in app
+    assert "WEEKLY_UI_SCHEMA_VERSION = 8" in weekly
+    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 8' in app
 
 
 def test_first_time_onboarding_explains_core_scoring_and_where_to_find_rules():

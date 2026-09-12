@@ -51,5 +51,5 @@ def test_v105_version_and_reload_guard():
     assert 'APP_VERSION = "1.0.7"' in (ROOT / "config.py").read_text("utf-8")
     weekly = (ROOT / "weekly_ui.py").read_text("utf-8")
     app = (ROOT / "app.py").read_text("utf-8")
-    assert "WEEKLY_UI_SCHEMA_VERSION = 7" in weekly
-    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 7' in app
+    assert "WEEKLY_UI_SCHEMA_VERSION = 8" in weekly
+    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 8' in app

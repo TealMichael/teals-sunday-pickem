@@ -1,0 +1,19 @@
+Teal's Sunday Pick'em v1.0.7-hotfix4
+
+Validation:
+- python compile: PASS (app.py, ui.py, weekly_ui.py, weekly.py)
+- pytest: 198 passed
+- release_guard.py: PASS
+
+Scope:
+- compact mobile player picker cards
+- Sunday Status injury-warning clarity for OUT starters with valid emergency backups
+
+Protected / unchanged:
+- pool immutability hotfix3 behavior
+- scoring formulas
+- live scoring parser
+- auth/session logic
+- Sunday lock time
+- NFL refresh cadence
+- AWTRIX clock integration
