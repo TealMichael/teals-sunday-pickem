@@ -47,10 +47,10 @@ def test_clock_migration_is_scoped_hashed_and_prelock_private():
 def test_awtrix_script_is_separate_headless_scoped_client():
     text = (ROOT / "awtrix/PickemSunday.ax").read_text("utf-8")
     assert "# @headless true" in text
-    assert "/rest/v1/rpc/clock_feed" in text
-    assert "/rest/v1/rpc/clock_ack" in text
-    assert '"Accept-Profile": "pickem"' in text
-    assert '"Content-Profile": "pickem"' in text
+    assert "/rest/v1/rpc/pickem_clock_feed" in text
+    assert "/rest/v1/rpc/pickem_clock_ack" in text
+    assert '"Accept-Profile": "pickem"' not in text
+    assert '"Content-Profile": "pickem"' not in text
     assert "sb_key" in text
     assert "token" in text
     assert "SUPABASE_SECRET_KEY" not in text
@@ -59,6 +59,16 @@ def test_awtrix_script_is_separate_headless_scoped_client():
     assert "FactTop10" not in text
     assert "self.ticks = 900" in text
     assert "elif dow >= 4" in text
+
+
+def test_awtrix_rpc_hotfix_keeps_pickem_schema_private():
+    sql = (ROOT / "db/007_awtrix_clock_rpc_hotfix.sql").read_text("utf-8")
+    assert "public.pickem_clock_feed" in sql
+    assert "public.pickem_clock_ack" in sql
+    assert "extensions" in sql
+    assert "grant execute on function public.pickem_clock_feed(text) to anon, authenticated" in sql
+    assert "grant execute on function public.pickem_clock_ack(text, text) to anon, authenticated" in sql
+    assert "grant usage on schema pickem to anon" not in sql
 
 
 def test_clock_token_generation_only_returns_hash_for_storage():
