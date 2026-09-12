@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timedelta, time as dtime, timezone
+import time
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -23,6 +24,51 @@ class Gate3Error(RuntimeError):
 
 def _iso(dt: datetime) -> str:
     return dt.astimezone(UTC).isoformat()
+
+
+_TRANSIENT_NETWORK_MARKERS = (
+    "connection reset",
+    "connection aborted",
+    "connection refused",
+    "remote disconnected",
+    "server disconnected",
+    "read timed out",
+    "connect timeout",
+    "read timeout",
+    "timed out",
+    "temporary failure",
+    "temporarily unavailable",
+    "bad gateway",
+    "service unavailable",
+    "gateway timeout",
+    "errno 104",
+    "errno 54",
+)
+
+
+def _is_transient_network_failure(exc: BaseException) -> bool:
+    """Recognize short-lived transport failures worth retrying once in-cycle.
+
+    Provider GETs already have their own HTTP retry adapter. This second layer
+    protects the *whole* injury transaction from transient PostgREST/Supabase
+    transport resets too, which otherwise leave Saturday data stale until the
+    next three-hour GitHub cycle. Logic/database errors are intentionally not
+    retried.
+    """
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, (ConnectionError, TimeoutError)):
+            return True
+        name = type(current).__name__.casefold()
+        text = str(current).casefold()
+        if any(token in name for token in ("connecterror", "readerror", "timeout", "remotedisconnected")):
+            return True
+        if any(marker in text for marker in _TRANSIENT_NETWORK_MARKERS):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def sync_schedule(
@@ -199,7 +245,7 @@ def _replacement_cutoff(week: dict[str, Any]) -> datetime:
     return local.astimezone(UTC)
 
 
-def refresh_injuries(store, week: dict[str, Any]) -> dict[str, Any]:
+def _refresh_injuries_once(store, week: dict[str, Any]) -> dict[str, Any]:
     run_id = store.start_data_run("injury_refresh", week_id=str(week["id"]), provider="Sleeper+nflverse")
     try:
         now = datetime.now(UTC)
@@ -235,6 +281,26 @@ def refresh_injuries(store, week: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:
         store.finish_data_run(run_id, success=False, message=str(exc))
         raise
+
+
+def refresh_injuries(store, week: dict[str, Any]) -> dict[str, Any]:
+    """Refresh schedule/injury data, retrying only transient transport failures.
+
+    A GitHub Saturday cycle is intentionally spaced several hours apart. One
+    brief Supabase/provider connection reset should not therefore make the data
+    stale for an entire interval. Retry the same idempotent refresh up to two
+    additional times with a short backoff; deterministic logic/database errors
+    still fail immediately so real bugs stay visible in Diagnostics.
+    """
+    attempts = 3
+    for attempt in range(attempts):
+        try:
+            return _refresh_injuries_once(store, week)
+        except Exception as exc:
+            if attempt >= attempts - 1 or not _is_transient_network_failure(exc):
+                raise
+            time.sleep(0.75 * (2 ** attempt))
+    raise RuntimeError("Unreachable injury refresh retry state.")
 
 
 def _game_by_team(games: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
