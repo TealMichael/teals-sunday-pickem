@@ -202,7 +202,7 @@ def _pool_option(row: dict[str, Any]) -> str:
 
 def _render_corrections(store, week: dict[str, Any]) -> None:
     st.markdown("#### Emergency Player Pool Override")
-    st.caption("Use only when the published five are clearly wrong. Any affected starter pick is removed so that player must choose again.")
+    st.caption("Use only when the published five are clearly wrong. Existing starter picks are preserved; the replacement becomes available for future edits and new lineups.")
     pool = store.get_full_week_pool(str(week["id"]))
     if not week.get("published_at"):
         st.info("The weekly player pool has not been published yet.")
@@ -238,11 +238,11 @@ def _render_corrections(store, week: dict[str, Any]) -> None:
             affected = int(impact.get("affected_lineups") or 0)
             names = impact.get("affected_nicknames") or []
             if affected:
-                st.warning(f"{affected} lineup{'s' if affected != 1 else ''} affected: " + ", ".join(names))
+                st.warning(f"{affected} existing lineup{'s' if affected != 1 else ''} will keep the saved player: " + ", ".join(names))
             else:
                 st.info("No current lineup uses this player.")
         reason = st.text_input("Reason for override", placeholder="Example: wrong player in Tuesday pool", key="g5_pool_reason")
-        confirm = st.checkbox("I understand affected players will need to choose again.", key="g5_pool_confirm")
+        confirm = st.checkbox("I understand existing picks will be preserved while the replacement becomes the new visible option.", key="g5_pool_confirm")
         if st.button(
             "Replace Player",
             type="primary",

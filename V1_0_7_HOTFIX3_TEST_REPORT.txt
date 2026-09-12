@@ -1,0 +1,26 @@
+Teal's Sunday Pick'em v1.0.7-hotfix3 — focused regression report
+
+PASS — Python compile for all production .py files.
+PASS — release_guard.py.
+PASS — 45 focused regression tests covering weekly lineup logic, pool immutability,
+       Commissioner overrides, Gate 3 scheduler/scoring, Gate 4 logic,
+       automation hardening, and Sunday clock source-of-truth.
+
+Key new regressions locked:
+- published pool retry is a no-op once published;
+- automatic OUT replacement cannot delete a saved starter pick;
+- schedule replacement cannot delete a saved starter pick;
+- Commissioner override cannot delete a saved starter pick;
+- hidden selected rows are identified/hydrated for display only;
+- OUT starter + valid emergency backup stays ready.
+
+Protected production areas were not modified for this urgent pool fix:
+- nfl_scoring.py
+- gate4.py / gate4_results.py scoring logic
+- .github/workflows/nfl-refresh.yml cadence
+- auth/security modules
+- database lock trigger
+
+The local container does not include Streamlit and cannot install packages from the network,
+so the repository-wide UI suite was not executed locally. GitHub Quality Gate should run the
+normal full dependency-backed suite after browser upload.

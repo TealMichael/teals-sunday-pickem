@@ -296,6 +296,30 @@ class SupabaseStore:
         self._cache_set(cache_key, rows, 20)
         return list(rows)
 
+    def get_pool_rows_by_ids(self, week_id: str, pool_player_ids: list[str]) -> list[dict[str, Any]]:
+        """Load specific pool rows even when they are no longer visible.
+
+        Published-pool replacements can hide an OUT/ineligible option while an
+        already-saved lineup legitimately still references that original row.
+        Player screens need those preserved rows for display/readiness without
+        reopening the whole hidden ranking to selection.
+        """
+        ids = sorted({str(value) for value in pool_player_ids if value})
+        if not ids:
+            return []
+        return list(
+            self._table("player_pool")
+            .select(
+                "id,week_id,position,slot_rank,player_name,team_abbr,opponent_abbr,kickoff_at,"
+                "is_visible,availability_status,schedule_eligible,schedule_note"
+            )
+            .eq("week_id", str(week_id))
+            .in_("id", ids)
+            .execute()
+            .data
+            or []
+        )
+
     def get_lineup(self, week_id: str, player_id: str) -> dict[str, Any] | None:
         res = (
             self._table("lineups")
@@ -578,6 +602,10 @@ class SupabaseStore:
     def publish_ranked_pool(self, week: dict[str, Any], ranked: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
         from weekly import HIDDEN_RANKING_SIZE
 
+        current_week = self.get_week(str(week["id"]))
+        if current_week and current_week.get("published_at"):
+            raise StoreError("Refusing to republish an already-published weekly pool.")
+
         for position in POSITIONS:
             rows = list(ranked.get(position) or [])
             if len(rows) != HIDDEN_RANKING_SIZE:
@@ -639,9 +667,12 @@ class SupabaseStore:
     def promote_replacements_for_out_players(self, week: dict[str, Any]) -> list[dict[str, Any]]:
         """Before the Saturday cutoff, keep exactly five visible healthy/Q choices.
 
-        A selected starter who is removed from the visible pool is deleted from
-        that lineup so the player is clearly incomplete and must choose again.
-        OUT emergency backups are simply cleared.
+        Existing starter picks are immutable: if a published option later goes
+        OUT, it may be hidden for *new* selections while any already-saved
+        starter remains attached to that original pool row. This prevents a
+        background refresh from silently turning a completed 5/5 lineup into
+        4/5. OUT emergency backups are still cleared because they can no longer
+        serve as a valid backup.
         """
         pool = self.get_full_week_pool(str(week["id"]))
         changes: list[dict[str, Any]] = []
@@ -653,7 +684,9 @@ class SupabaseStore:
                 if not replacement:
                     raise StoreError(f"No healthy hidden replacement remains for {position}.")
 
-                # Invalidate any lineups that used the removed starter.
+                # Preserve any already-saved starters. They continue pointing to
+                # the original (now hidden/OUT) row and can be voluntarily edited
+                # before lock. A valid stored emergency backup can still activate.
                 selected = (
                     self._table("lineup_picks")
                     .select("id,lineup_id")
@@ -662,10 +695,6 @@ class SupabaseStore:
                     .data
                     or []
                 )
-                if selected:
-                    lineup_ids = [str(row["lineup_id"]) for row in selected]
-                    self._table("lineup_picks").delete().eq("pool_player_id", str(out_row["id"])).execute()
-                    self._table("lineups").update({"confirmed_at": None, "updated_at": _iso(datetime.now(UTC))}).in_("id", lineup_ids).execute()
 
                 # A removed player can no longer remain as an emergency backup.
                 self._table("lineup_picks").update({"emergency_pool_player_id": None, "updated_at": _iso(datetime.now(UTC))}).eq(
@@ -678,6 +707,7 @@ class SupabaseStore:
                     "position": position,
                     "out": out_row.get("player_name"),
                     "replacement": replacement.get("player_name"),
+                    "preserved_starters": len(selected),
                 })
                 out_row["is_visible"] = False
                 replacement["is_visible"] = True
@@ -1066,10 +1096,9 @@ class SupabaseStore:
                     .data
                     or []
                 )
-                if selected:
-                    lineup_ids = [str(row["lineup_id"]) for row in selected]
-                    self._table("lineup_picks").delete().eq("pool_player_id", str(invalid["id"])).execute()
-                    self._table("lineups").update({"confirmed_at": None, "updated_at": stamp}).in_("id", lineup_ids).execute()
+                # Preserve starters selected before the schedule changed. The
+                # outgoing row becomes hidden for future choices, but completed
+                # lineups are never silently erased by a background refresh.
                 self._table("lineup_picks").update({"emergency_pool_player_id": None, "updated_at": stamp}).eq(
                     "emergency_pool_player_id", str(invalid["id"])
                 ).execute()
@@ -1077,7 +1106,13 @@ class SupabaseStore:
                 self._table("player_pool").update({"is_visible": True}).eq("id", str(replacement["id"])).execute()
                 invalid["is_visible"] = False
                 replacement["is_visible"] = True
-                changes.append({"position": position, "removed": invalid.get("player_name"), "replacement": replacement.get("player_name"), "reason": "schedule"})
+                changes.append({
+                    "position": position,
+                    "removed": invalid.get("player_name"),
+                    "replacement": replacement.get("player_name"),
+                    "reason": "schedule",
+                    "preserved_starters": len(selected),
+                })
         self.clear_week_cache(str(week["id"]))
         return changes
 
@@ -1220,10 +1255,9 @@ class SupabaseStore:
             .data
             or []
         )
-        if starter_rows:
-            lineup_ids = [str(row["lineup_id"]) for row in starter_rows]
-            self._table("lineup_picks").delete().eq("pool_player_id", str(outgoing_pool_id)).execute()
-            self._table("lineups").update({"confirmed_at": None, "updated_at": stamp}).in_("id", lineup_ids).execute()
+        # Commissioner overrides also preserve already-saved starters. The new
+        # replacement becomes the option for future edits/new lineups, while
+        # existing users keep exactly what they saved until they change it.
         self._table("lineup_picks").update({"emergency_pool_player_id": None, "updated_at": stamp}).eq(
             "emergency_pool_player_id", str(outgoing_pool_id)
         ).execute()
@@ -1246,6 +1280,7 @@ class SupabaseStore:
             "replacement_id": str(replacement_pool_id),
             "replacement_name": str(replacement.get("player_name") or "Player"),
             "reason": reason,
+            "preserved_starters": len(starter_rows),
             **impact,
         }
 

@@ -1,0 +1,27 @@
+Teal's Sunday Pick'em — v1.0.7-hotfix3
+
+Release title:
+v1.0.7 Hotfix 3 — Published Pool / Saved Lineup Protection
+
+Tag:
+v1.0.7-hotfix3
+
+Commit:
+v1.0.7 hotfix — preserve saved lineups when published pool changes
+
+Browser-upload files for the urgent GitHub patch:
+- nfl_sync.py
+- store.py
+- weekly.py
+- weekly_ui.py
+- gate5_ui.py
+- tests/test_weekly_logic.py
+- tests/test_v107_hotfix3_pool_immutability.py
+- V1_0_7_HOTFIX3_POOL_IMMUTABILITY.md
+- GITHUB_UPLOAD_NOTES_v1.0.7-hotfix3.txt
+
+No Supabase SQL is required for the pool/lineup fix. No hidden-folder upload is required for the urgent GitHub patch.
+
+The full source backup additionally includes the already-applied AWTRIX clock source-of-truth repair in:
+- awtrix/PickemSunday.ax
+- db/007_awtrix_clock_rpc_hotfix.sql

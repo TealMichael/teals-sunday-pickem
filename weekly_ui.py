@@ -37,6 +37,7 @@ from weekly import (
     position_pool,
     previous_position,
     required_backup_positions,
+    selected_pool_ids_missing_from_visible_pool,
     seconds_until,
     unavailable_starter_positions,
     safe_status,
@@ -297,6 +298,22 @@ def _merge_saved_pick(picks: list[dict], saved_pick: dict) -> list[dict]:
     return merged
 
 
+def _include_preserved_selected_rows(store, week: dict, pool: list[dict], picks: list[dict]) -> list[dict]:
+    """Add hidden rows referenced by saved picks for display only.
+
+    ``position_pool(..., visible_only=True)`` still excludes these rows from
+    the five choices shown to users. They are appended only so an already-saved
+    starter/backup remains renderable after an OUT/schedule/Commissioner
+    replacement hides it from future selection.
+    """
+    known = {str(row.get("id")) for row in pool if row.get("id")}
+    missing = selected_pool_ids_missing_from_visible_pool(pool, picks)
+    if not missing:
+        return pool
+    extras = store.get_pool_rows_by_ids(str(week["id"]), missing)
+    return [*pool, *[row for row in extras if str(row.get("id")) not in known]]
+
+
 def _load_lineup(
     store,
     week: dict,
@@ -311,11 +328,13 @@ def _load_lineup(
     if snapshot and age <= float(snapshot_ttl_seconds):
         lineup = snapshot.get("lineup")
         picks = list(snapshot.get("picks") or [])
-        return lineup, picks, pool, _player_lookup(pool)
+        resolved_pool = _include_preserved_selected_rows(store, week, pool, picks)
+        return lineup, picks, resolved_pool, _player_lookup(resolved_pool)
 
     lineup, picks = store.get_lineup_state(str(week["id"]), str(player["id"]))
     _stash_lineup_snapshot(week, player, lineup, picks)
-    return lineup, picks, pool, _player_lookup(pool)
+    resolved_pool = _include_preserved_selected_rows(store, week, pool, picks)
+    return lineup, picks, resolved_pool, _player_lookup(resolved_pool)
 
 
 def _onboarding(store, player: dict) -> bool:
@@ -614,6 +633,18 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
         and str(backup.get("id")) != str(starter.get("id"))
         and safe_status(backup.get("availability_status")) != "OUT"
     )
+
+    if starter and not bool(starter.get("is_visible", True)):
+        if safe_status(starter.get("availability_status")) == "OUT":
+            st.warning(
+                f"Your saved {position} pick, {_display_name(starter)}, is now OUT. "
+                "Your pick was preserved. Choose a replacement if you want to change it before lock."
+            )
+        else:
+            st.warning(
+                f"Your saved {position} pick, {_display_name(starter)}, is no longer in the active five. "
+                "Your pick was preserved. Choose a replacement if you want to change it before lock."
+            )
 
     if mode == "backup":
         if not starter or safe_status(starter.get("availability_status")) != "QUESTIONABLE":

@@ -143,6 +143,12 @@ def build_pool_preview(
 
 
 def publish_week_pool(store, week: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+    # Once a real weekly pool is published, the ranked pool is immutable.
+    # Injury/schedule handling may promote a hidden replacement through the
+    # dedicated replacement paths below, but a retry/manual publish must never
+    # re-rank slot 1-10 underneath saved lineups.
+    if week.get("published_at"):
+        return {"published": False, "message": "Player pool is already published and frozen for this week."}
     now = datetime.now(UTC)
     opens = parse_timestamp(week.get("opens_at"))
     if not force and opens and now < opens:
