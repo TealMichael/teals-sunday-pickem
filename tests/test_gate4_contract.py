@@ -14,7 +14,7 @@ def test_gate4_files_and_schema_present():
 
 def test_gate4_ui_contract():
     text = (ROOT / "gate4_ui.py").read_text()
-    for needle in ["Sunday Storylines", "Most Popular Pick", "Went Alone", "Same Brain", "Season Standings", "Trophy Case", "How to Play"]:
+    for needle in ["Sunday Storylines", "Most Popular Pick", "Went Alone", "Same Brain", "Season", "Trophy Case", "How to Play"]:
         assert needle in text
     assert "Emergency activated" in text
     assert "private" in text

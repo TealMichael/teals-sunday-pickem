@@ -70,3 +70,85 @@ def test_espn_boxscore_parser_combines_categories_for_same_player():
     assert rows[0]["stats"]["passing_yards"] == 250
     assert rows[0]["stats"]["rushing_yards"] == 40
     assert rows[0]["espn_player_id"] == "1"
+
+
+def test_nflverse_schedule_parser_handles_2026_week_and_eligibility():
+    from nfl_sources import NFLverseProvider
+
+    csv_text = """game_id,season,game_type,week,gameday,weekday,gametime,away_team,away_score,home_team,home_score,espn,away_moneyline,home_moneyline,spread_line,total_line\n2026_01_CHI_CAR,2026,REG,1,2026-09-13,Sunday,13:00,CHI,,CAR,,401000001,-110,-110,1.5,44.5\n2026_01_SF_LAR,2026,REG,1,2026-09-10,Thursday,20:35,SF,,LAR,,401000002,-110,-110,1.5,47.5\n2026_02_X_Y,2026,REG,2,2026-09-20,Sunday,13:00,X,,Y,,401000003,-110,-110,1.5,41.5\n"""
+
+    class Response:
+        text = csv_text
+        def raise_for_status(self):
+            return None
+
+    class Session:
+        def get(self, *args, **kwargs):
+            return Response()
+
+    games = NFLverseProvider(Session()).schedule_games(2026, 1, "week-id")
+    assert len(games) == 2
+    by_id = {g["provider_event_id"]: g for g in games}
+    assert by_id["401000001"]["is_eligible"] is True
+    assert by_id["401000002"]["is_eligible"] is False
+    assert by_id["401000001"]["kickoff_at"].startswith("2026-09-13T17:00:00")
+
+
+def test_espn_scoreboard_tries_dates_year_then_season_shape():
+    calls = []
+
+    class Response:
+        def __init__(self, ok): self.ok = ok
+        def raise_for_status(self):
+            if not self.ok:
+                raise RuntimeError("bad")
+        def json(self): return {"events": []}
+
+    class Session:
+        def get(self, url, params=None, timeout=None):
+            calls.append(dict(params or {}))
+            return Response(ok=len(calls) > 1)
+
+    ESPNProvider(Session()).scoreboard(2026, 1)
+    assert calls[0]["dates"] == "2026"
+    assert calls[1]["season"] == 2026
+
+
+def test_espn_summary_prefers_cdn_and_unwraps_gamepackage():
+    calls = []
+
+    class Response:
+        def raise_for_status(self): return None
+        def json(self):
+            return {"gamepackageJSON": {"boxscore": {"players": []}, "header": {"id": "401-test"}}}
+
+    class Session:
+        def get(self, url, params=None, timeout=None):
+            calls.append((url, dict(params or {})))
+            return Response()
+
+    payload = ESPNProvider(Session()).summary("401-test")
+    assert payload["header"]["id"] == "401-test"
+    assert calls[0][0].endswith("/core/nfl/boxscore")
+    assert calls[0][1] == {"xhr": 1, "gameId": "401-test"}
+
+
+def test_nflverse_schedule_parser_can_load_preseason_rows():
+    from nfl_sources import NFLverseProvider
+
+    csv_text = """game_id,season,game_type,week,gameday,weekday,gametime,away_team,away_score,home_team,home_score,espn,away_moneyline,home_moneyline,spread_line,total_line
+2026_03_CHI_TEN,2026,PRE,3,2026-08-29,Saturday,18:00,CHI,24,TEN,15,401999999,-110,-110,1.0,36.5
+"""
+
+    class Response:
+        text = csv_text
+        def raise_for_status(self): return None
+
+    class Session:
+        def get(self, *args, **kwargs): return Response()
+
+    games = NFLverseProvider(Session()).schedule_games(2026, 3, game_type="PRE")
+    assert len(games) == 1
+    assert games[0]["provider_event_id"] == "401999999"
+    assert games[0]["home_score"] == 15
+    assert games[0]["away_score"] == 24
