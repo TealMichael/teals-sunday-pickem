@@ -553,12 +553,22 @@ class SupabaseStore:
         if not games:
             return []
         stamp = _iso(datetime.now(UTC))
-        payload = []
+        # Postgres rejects one UPSERT statement when the same conflict key
+        # appears twice in its input (SQLSTATE 21000: ON CONFLICT cannot affect
+        # the same row twice). Provider feeds can occasionally repeat an event,
+        # so collapse the batch at the DB boundary before sending it.
+        by_event: dict[str, dict[str, Any]] = {}
         for game in games:
             row = dict(game)
             row["week_id"] = str(week_id)
             row["provider_updated_at"] = stamp
-            payload.append(row)
+            event_id = str(row.get("provider_event_id") or "").strip()
+            if not event_id:
+                continue
+            by_event[event_id] = row
+        payload = list(by_event.values())
+        if not payload:
+            return []
         res = self._table("nfl_games").upsert(payload, on_conflict="week_id,provider_event_id").execute()
         return list(res.data or [])
 
@@ -576,13 +586,21 @@ class SupabaseStore:
         if not players:
             return []
         stamp = _iso(datetime.now(UTC))
-        payload = []
+        # Sleeper can expose one player through more than one fantasy-position
+        # bucket. `sync_players()` intentionally keeps those position lists for
+        # ranking, but the cache table has one row per sleeper_player_id. Sending
+        # duplicate IDs in one UPSERT causes PostgreSQL SQLSTATE 21000 and used
+        # to abort the entire injury refresh. Keep the first deterministic row
+        # for the cache while leaving the ranking lists untouched.
+        by_player_id: dict[str, dict[str, Any]] = {}
         for player in players:
-            if not player.get("sleeper_player_id"):
+            player_id = str(player.get("sleeper_player_id") or "").strip()
+            if not player_id or player_id in by_player_id:
                 continue
             row = dict(player)
             row["last_synced_at"] = stamp
-            payload.append(row)
+            by_player_id[player_id] = row
+        payload = list(by_player_id.values())
         if not payload:
             return []
         res = self._table("nfl_players").upsert(payload, on_conflict="sleeper_player_id").execute()
