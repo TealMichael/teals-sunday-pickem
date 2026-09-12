@@ -1,0 +1,25 @@
+Teal's Sunday Pick'em v1.0.7-hotfix5
+
+Validation:
+- focused clock/pool/injury regression tests: 22 passed
+- full pytest suite: 202 passed
+- python compile: PASS
+- release_guard.py: PASS
+
+Scope:
+- post-lock AWTRIX NFL LIVE score airtime changes from twice/hour to four times/hour
+- NFL LIVE slots: :05, :20, :35, :50
+- weekly standings remain :00, :15, :30, :45
+- player updates remain :10, :40
+- Pulse (Week 1) / Season (Week 2+) moves to :25
+- optional Commissioner message becomes :55 only and rotates once/hour
+
+Protected / unchanged:
+- pre-lock privacy and readiness behavior
+- NFL data-refresh cadence
+- AWTRIX physical polling script
+- scoring formulas/live scoring parser
+- saved lineups and pool immutability protections
+- injury-status behavior
+- auth/session logic
+- Sunday 1:00 PM ET lock

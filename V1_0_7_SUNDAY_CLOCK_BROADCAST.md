@@ -26,19 +26,21 @@ v1.0.7 adds a separate Sunday-only AWTRIX broadcast layer and cleans up Commissi
 - The Pick'em AWTRIX script is separate from the existing Class Schedule and Fact Challenge scripts.
 
 ### Sunday rhythm
-The server exposes at most one new clock event per five-minute slot. Typical post-lock rotation:
+The server exposes at most one new clock event per five-minute slot. As of v1.0.7-hotfix5, post-lock NFL scores get a dedicated slot every 15 minutes:
 - :00 — weekly standings
 - :05 — live NFL scores
 - :10 — Pick'em-pool Player Update
 - :15 — weekly standings
-- :20 — season standings (Week 2+) or Pick'em Pulse (Week 1)
-- :25 — optional Commissioner message
+- :20 — live NFL scores
+- :25 — season standings (Week 2+) or Pick'em Pulse (Week 1)
 - :30 — weekly standings
 - :35 — live NFL scores
 - :40 — Pick'em-pool Player Update
 - :45 — weekly standings
-- :50 — season standings (Week 2+) or Pick'em Pulse
+- :50 — live NFL scores
 - :55 — optional Commissioner message
+
+That gives weekly Pick'em standings four times per hour and NFL LIVE scores four times per hour, alternating every five-to-ten minutes. The manual-message slot is now once per hour and cycles through enabled Commissioner messages one message per hour.
 
 Missing categories fall back to automatic Pick'em content rather than leaving the clock blank.
 

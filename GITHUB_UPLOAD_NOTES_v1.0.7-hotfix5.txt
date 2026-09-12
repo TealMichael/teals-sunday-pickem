@@ -1,0 +1,16 @@
+Teal's Sunday Pick'em v1.0.7-hotfix5
+
+Tag: v1.0.7-hotfix5
+Release title: v1.0.7 Hotfix 5 — Sunday Clock NFL Score Cadence
+Commit: v1.0.7 hotfix — show NFL live scores every 15 minutes on Sunday clock
+
+Changed source files:
+- db/008_clock_nfl_score_cadence.sql
+- tests/test_v107_hotfix5_clock_score_cadence.py
+- V1_0_7_SUNDAY_CLOCK_BROADCAST.md
+- V1_0_7_HOTFIX5_CLOCK_SCORE_CADENCE.md
+
+One Supabase SQL step is required after deploy:
+- run db/008_clock_nfl_score_cadence.sql once
+
+No AWTRIX script change. No hidden-file change. No NFL refresh-cadence change.
