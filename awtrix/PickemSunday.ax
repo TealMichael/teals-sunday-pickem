@@ -1,7 +1,7 @@
 # @name    Pickem Sunday
 # @desc    Sunday-only Teal's Pick'em broadcast via scoped Supabase RPC
 # @author  Teal's Sunday Pick'em
-# @version 1.0.7-hotfix7
+# @version 1.0.7-hotfix7.1
 # @headless true
 # @config  sb_url text "Supabase URL" default="" maxlen=160
 # @config  sb_key text "Publishable key" default="" maxlen=256
@@ -33,6 +33,35 @@ class PickemSunday
     http.post(url, body, def (b, st) end, {"headers": self.headers()})
   end
 
+  def normalize_fragments(fragments)
+    if fragments == nil || !isinstance(fragments, list) return nil end
+    var out = []
+    var i = 0
+    while i < size(fragments)
+      var part = fragments[i]
+      if isinstance(part, map)
+        var text = part.find("text")
+        if text == nil
+          text = part.find("t")
+        end
+        var color = part.find("color")
+        if color == nil
+          color = part.find("c")
+        end
+        if text != nil && str(text) != ""
+          if color != nil && str(color) != ""
+            out.push({"text": str(text), "color": str(color)})
+          else
+            out.push({"text": str(text)})
+          end
+        end
+      end
+      i += 1
+    end
+    if size(out) == 0 return nil end
+    return out
+  end
+
   def on_feed(body, status)
     self.in_flight = false
     if status < 200 || status >= 300 || body == nil return end
@@ -49,12 +78,16 @@ class PickemSunday
 
     var color = data.find("color")
     var accepted = false
-    if fragments != nil
-      accepted = notify({"text": fragments, "repeat": 1, "stack": true, "wakeup": true})
-    elif color != nil && color != ""
-      accepted = notify({"text": str(line), "color": str(color), "repeat": 1, "stack": true, "wakeup": true})
-    else
-      accepted = notify({"text": str(line), "repeat": 1, "stack": true, "wakeup": true})
+    var rich = self.normalize_fragments(fragments)
+    if rich != nil
+      accepted = notify({"text": rich, "repeat": 1, "stack": true, "wakeup": true})
+    end
+    if !accepted
+      if color != nil && color != ""
+        accepted = notify({"text": str(line), "textColor": str(color), "repeat": 1, "stack": true, "wakeup": true})
+      else
+        accepted = notify({"text": str(line), "repeat": 1, "stack": true, "wakeup": true})
+      end
     end
     if accepted
       self.last_event = event_id

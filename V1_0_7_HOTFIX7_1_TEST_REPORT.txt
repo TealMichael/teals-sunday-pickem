@@ -1,0 +1,20 @@
+Teal's Sunday Pick'em v1.0.7-hotfix7.1 — Test Report
+
+FULL SUITE
+234 passed
+
+PYTHON COMPILE
+PASS
+
+RELEASE GUARD
+PASS
+
+RENDER REPAIR COVERAGE
+- AWTRIX NG text/color fragment schema
+- backward compatibility with legacy t/c fragments
+- readable plain-text fallback if rich notification is rejected
+- correct textColor fallback key
+- no unsupported emoji in physical Caleb ticker copy
+- 15-second polling contract preserved
+- public wrapper RPC path preserved
+- scoring/lineup engines untouched

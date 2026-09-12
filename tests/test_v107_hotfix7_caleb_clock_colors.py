@@ -70,11 +70,11 @@ class FakeESPN:
 
 
 def _joined(fragments):
-    return "".join(part["t"] for part in fragments)
+    return "".join(part["text"] for part in fragments)
 
 
 def _colors(fragments):
-    return [part["c"] for part in fragments]
+    return [part["color"] for part in fragments]
 
 
 def test_caleb_watch_live_includes_today_season_remaining_and_17_game_pace():
@@ -95,12 +95,12 @@ def test_caleb_watch_live_includes_today_season_remaining_and_17_game_pace():
     assert watch["remaining"] == 3223
     assert watch["games_played"] == 3
     assert watch["pace"] == 4403
-    assert "🐻 CALEB 4K WATCH 🐻" in watch["text"]
+    assert "CALEB 4K WATCH" in watch["text"]
     assert "TODAY: 287 YDS" in watch["text"]
     assert "SEASON: 777 YDS" in watch["text"]
     assert "3,223 TO 4K" in watch["text"]
     assert "PACE: 4,403" in watch["text"]
-    assert "BEARS FANS, DON'T JINX IT" in watch["text"]
+    assert "BEAR DOWN? DON'T JINX IT" in watch["text"]
     assert watch["fragments"] == _caleb_watch_rich(
         today_yards=287,
         season_yards=777,
@@ -163,12 +163,12 @@ def test_nfl_live_ticker_colors_each_team_name_and_keeps_scores_white():
         }
     ])
     assert _joined(rich) == "NFL LIVE • CHI 21 • MIN 17 • Q3 4:22"
-    chi = next(part for part in rich if part["t"] == "CHI")
-    minny = next(part for part in rich if part["t"] == "MIN")
-    assert chi["c"] == _team_color("CHI") == BEARS_ORANGE
-    assert minny["c"] == _team_color("MIN")
-    assert any(part["c"] == WHITE and "21" in part["t"] for part in rich)
-    assert any(part["c"] == WHITE and "17" in part["t"] for part in rich)
+    chi = next(part for part in rich if part["text"] == "CHI")
+    minny = next(part for part in rich if part["text"] == "MIN")
+    assert chi["color"] == _team_color("CHI") == BEARS_ORANGE
+    assert minny["color"] == _team_color("MIN")
+    assert any(part["color"] == WHITE and "21" in part["text"] for part in rich)
+    assert any(part["color"] == WHITE and "17" in part["text"] for part in rich)
 
 
 def test_caleb_rich_message_mixes_bears_white_blue_and_pace_color():
@@ -180,8 +180,8 @@ def test_caleb_rich_message_mixes_bears_white_blue_and_pace_color():
         is_live=True,
     )
     assert _joined(rich) == (
-        "🐻 CALEB 4K WATCH 🐻 • TODAY: 287 YDS • SEASON: 2,941 YDS • "
-        "1,059 TO 4K • PACE: 4,165 👀 • BEARS FANS, DON'T JINX IT"
+        "CALEB 4K WATCH • TODAY: 287 YDS • SEASON: 2,941 YDS • "
+        "1,059 TO 4K • PACE: 4,165 • BEAR DOWN? DON'T JINX IT"
     )
     colors = _colors(rich)
     assert BEARS_ORANGE in colors
@@ -224,19 +224,19 @@ def test_player_and_pulse_use_player_team_color_while_copy_stays_readable():
     ]
     stats = [{"pool_player_id": "p1", "raw_stats": {"rushing_yards": 92, "rushing_tds": 1}}]
     player = _player_updates_rich(pool, stats)[0]
-    assert any(part["t"] == "Jahmyr Gibbs" and part["c"] == _team_color("DET") for part in player)
+    assert any(part["text"] == "Jahmyr Gibbs" and part["color"] == _team_color("DET") for part in player)
     assert WHITE in _colors(player)
 
     pulse = _pulse_rich(
         {"most_popular": {"player_name": "Jahmyr Gibbs", "count": 8, "total": 10}, "went_alone": [], "same_brain": []},
         pool,
     )[0]
-    assert any(part["t"] == "Jahmyr Gibbs" and part["c"] == _team_color("DET") for part in pulse)
+    assert any(part["text"] == "Jahmyr Gibbs" and part["color"] == _team_color("DET") for part in pulse)
     assert WHITE in _colors(pulse)
 
 
 def test_hotfix7_clock_rotation_keeps_core_cadence_and_adds_caleb_slots():
-    sql = (ROOT / "db/009_clock_colors_caleb_4k.sql").read_text("utf-8")
+    sql = (ROOT / "db/010_clock_rich_fragment_render_fix.sql").read_text("utf-8")
 
     for slot in (0, 3, 6, 9):
         assert f"when {slot} then v_category := 'weekly'" in sql
@@ -250,7 +250,7 @@ def test_hotfix7_clock_rotation_keeps_core_cadence_and_adds_caleb_slots():
 
 
 def test_sql_prefers_rich_fragments_and_keeps_pregame_privacy():
-    sql = (ROOT / "db/009_clock_colors_caleb_4k.sql").read_text("utf-8")
+    sql = (ROOT / "db/010_clock_rich_fragment_render_fix.sql").read_text("utf-8")
 
     for key in (
         "readiness_rich",
@@ -263,8 +263,8 @@ def test_sql_prefers_rich_fragments_and_keeps_pregame_privacy():
     ):
         assert key in sql
     assert "'fragments', v_fragments" in sql
-    assert "'c', 'F56600'" in sql
-    assert "'c', 'FFFFFF'" in sql
+    assert "'color', 'F56600'" in sql
+    assert "'color', 'FFFFFF'" in sql
     assert "FROM THE COMMISH • " in sql
 
     prelock = sql.split("if now() < v_week.locks_at then", 1)[1].split("-- Post-lock broadcast rhythm", 1)[0]
@@ -275,9 +275,11 @@ def test_sql_prefers_rich_fragments_and_keeps_pregame_privacy():
 
 def test_awtrix_passes_fragment_array_without_changing_poll_or_security_contract():
     text = (ROOT / "awtrix/PickemSunday.ax").read_text("utf-8")
-    assert "# @version 1.0.7-hotfix7" in text
+    assert "# @version 1.0.7-hotfix7.1" in text
     assert 'var fragments = data.find("fragments")' in text
-    assert 'notify({"text": fragments' in text
+    assert 'var rich = self.normalize_fragments(fragments)' in text
+    assert 'notify({"text": rich' in text
+    assert '"textColor": str(color)' in text
     assert 'default=15 min=10 max=60 unit=sec' in text
     assert "self.ticks = 15" in text
     assert "/rest/v1/rpc/pickem_clock_feed" in text
@@ -285,19 +287,19 @@ def test_awtrix_passes_fragment_array_without_changing_poll_or_security_contract
 
 
 def test_test_clock_demonstrates_team_fragments_caleb_theme_and_worker_refreshes_specials():
-    sql = (ROOT / "db/009_clock_colors_caleb_4k.sql").read_text("utf-8")
+    sql = (ROOT / "db/010_clock_rich_fragment_render_fix.sql").read_text("utf-8")
     worker = (ROOT / "scripts/nfl_refresh.py").read_text("utf-8")
     assert "NFL LIVE TEST • CHI 21 • MIN 17" in sql
-    assert "🐻 CALEB 4K WATCH 🐻" in sql
-    assert "'c', 'F56600'" in sql
-    assert "'c', '5B7CFA'" in sql
+    assert "CALEB 4K WATCH" in sql
+    assert "'color', 'F56600'" in sql
+    assert "'color', '5B7CFA'" in sql
     assert "refresh_clock_snapshot(store, target, refresh_specials=True)" in worker
 
 
 def test_hotfix7_has_distinct_warm_deploy_generation():
     config = (ROOT / "config.py").read_text("utf-8")
     assert 'APP_VERSION = "1.0.7"' in config
-    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7"' in config
+    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.1"' in config
 
 
 def test_hotfix7_does_not_enter_scoring_or_lineup_engines():

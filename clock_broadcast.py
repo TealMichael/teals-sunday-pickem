@@ -48,7 +48,7 @@ def _team_color(team: Any) -> str:
 
 
 def _fragment(text: Any, color: str = WHITE) -> dict[str, str]:
-    return {"t": str(text or ""), "c": str(color or WHITE).lstrip("#").upper()}
+    return {"text": str(text or ""), "color": str(color or WHITE).lstrip("#").upper()}
 
 
 def _rich(parts: list[tuple[Any, str]], limit: int = CLOCK_MESSAGE_MAX) -> list[dict[str, str]]:
@@ -64,15 +64,15 @@ def _rich(parts: list[tuple[Any, str]], limit: int = CLOCK_MESSAGE_MAX) -> list[
         piece = value[:remaining]
         remaining -= len(piece)
         normalized_color = str(color or WHITE).lstrip("#").upper()
-        if out and out[-1]["c"] == normalized_color:
-            out[-1]["t"] += piece
+        if out and out[-1]["color"] == normalized_color:
+            out[-1]["text"] += piece
         else:
             out.append(_fragment(piece, normalized_color))
     return out
 
 
 def _plain_from_rich(parts: list[dict[str, str]], limit: int = CLOCK_MESSAGE_MAX) -> str:
-    return _clean("".join(str(part.get("t") or "") for part in parts), limit)
+    return _clean("".join(str(part.get("text") or "") for part in parts), limit)
 
 
 def new_clock_token() -> tuple[str, str, str]:
@@ -324,7 +324,7 @@ def _caleb_watch_rich(
     pace: int | None,
     is_live: bool,
 ) -> list[dict[str, str]]:
-    parts: list[tuple[Any, str]] = [("🐻 CALEB 4K WATCH 🐻 • ", BEARS_ORANGE)]
+    parts: list[tuple[Any, str]] = [("CALEB 4K WATCH • ", BEARS_ORANGE)]
     if is_live and today_yards is not None:
         parts.extend([
             ("TODAY: ", WHITE),
@@ -342,7 +342,7 @@ def _caleb_watch_rich(
     if season_yards >= 4000:
         parts.extend([
             ("CALEB WILLIAMS: 4,000+ • ", GOLD),
-            ("CHICAGO FINALLY HAS A 4K PASSER 😱", BEARS_ORANGE),
+            ("CHICAGO FINALLY HAS A 4K PASSER", BEARS_ORANGE),
         ])
     elif pace is None:
         parts.extend([
@@ -352,8 +352,8 @@ def _caleb_watch_rich(
     elif pace >= 4000:
         parts.extend([
             ("PACE: ", WHITE),
-            (f"{pace:,} 👀", GREEN),
-            (" • BEARS FANS, DON'T JINX IT", BEARS_ORANGE),
+            (f"{pace:,}", GREEN),
+            (" • BEAR DOWN? DON'T JINX IT", BEARS_ORANGE),
         ])
     else:
         parts.extend([

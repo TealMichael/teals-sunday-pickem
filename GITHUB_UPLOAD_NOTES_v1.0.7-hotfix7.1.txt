@@ -1,0 +1,26 @@
+Teal's Sunday Pick'em — v1.0.7-hotfix7.1
+
+PURPOSE
+Repair the physical AWTRIX rich-color ticker rendering after Test Clock showed a blank/black notification.
+
+UPLOAD TO GITHUB
+Unzip the GitHub patch and upload at repository root, preserving folders.
+
+AFTER QUALITY GATE IS GREEN
+1. Run db/010_clock_rich_fragment_render_fix.sql once in Supabase SQL Editor.
+2. Replace/reload the Sunday AWTRIX script with awtrix/PickemSunday.ax.
+3. Commissioner → Clock → Test Clock.
+4. Confirm readable text appears and CHI/MIN/Caleb segments use mixed colors.
+
+NO OTHER SQL SHOULD BE RERUN.
+NO SCORING OR LINEUP CODE CHANGED.
+NO .github OR .streamlit CHANGES.
+
+Tag:
+v1.0.7-hotfix7.1
+
+Release title:
+v1.0.7 Hotfix 7.1 — Rich Ticker Render Repair
+
+Commit:
+v1.0.7 hotfix — repair AWTRIX NG rich fragment rendering
