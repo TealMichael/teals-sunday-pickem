@@ -131,14 +131,14 @@ def test_v102_ui_contract_final_recap_and_sunday_status_are_scoped():
     gate4_ui = (ROOT / "gate4_ui.py").read_text("utf-8")
     ui = (ROOT / "ui.py").read_text("utf-8")
 
-    assert "WEEKLY_UI_SCHEMA_VERSION = 8" in weekly_ui
-    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 8' in app
-    assert "GATE4_UI_SCHEMA_VERSION = 3" in gate4_ui
-    assert 'getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 3' in app
-    assert "_render_sunday_status_card(week, picks, pool_by_id)" in weekly_ui
+    assert "WEEKLY_UI_SCHEMA_VERSION = 9" in weekly_ui
+    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 9' in app
+    assert "GATE4_UI_SCHEMA_VERSION = 4" in gate4_ui
+    assert 'getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 4' in app
+    assert "_render_live_prelock_status(store, week, player)" in weekly_ui
     assert "NFL data updated" in weekly_ui
     assert "if data_status == \"FINAL\":" in gate4_ui
-    assert "_weekly_recap(store, week, bundle, leaderboard)" in gate4_ui
+    assert "_weekly_recap(store, fresh_week, bundle, leaderboard)" in gate4_ui
     assert "Copy recap for group chat" in gate4_ui
     assert ".sunday-status" in ui
     assert ".recap-grid" in ui

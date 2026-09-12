@@ -6,7 +6,7 @@ from typing import Any, Iterable
 from weekly import POSITIONS
 
 SEASON_POINTS = {1: 12, 2: 9, 3: 7, 4: 6, 5: 5, 6: 4, 7: 3, 8: 2, 9: 1}
-GATE4_LOGIC_SCHEMA_VERSION = 2
+GATE4_LOGIC_SCHEMA_VERSION = 3
 
 
 def _score(row: dict[str, Any] | None) -> float:
@@ -42,7 +42,17 @@ def _effective_pick(pick: dict[str, Any], pool_by_id: dict[str, dict[str, Any]])
     # Emergency activation contract: the backup becomes public/active only when
     # the locked starter is officially OUT/inactive. A Questionable player who
     # plays remains the starter, even if the backup is stored privately.
-    if starter and str(starter.get("availability_status") or "").upper() == "OUT" and backup:
+    backup_valid = bool(
+        backup
+        and str(backup.get("availability_status") or "HEALTHY").upper() != "OUT"
+        and bool(backup.get("schedule_eligible", True))
+    )
+    if (
+        starter
+        and bool(starter.get("schedule_eligible", True))
+        and str(starter.get("availability_status") or "").upper() == "OUT"
+        and backup_valid
+    ):
         return backup, True
     return starter, False
 

@@ -10,7 +10,7 @@ ET = ZoneInfo(TIMEZONE_NAME)
 POSITIONS = ("QB", "RB", "WR", "TE", "K")
 VISIBLE_POOL_SIZE = 5
 HIDDEN_RANKING_SIZE = 10
-WEEKLY_LOGIC_SCHEMA_VERSION = 2
+WEEKLY_LOGIC_SCHEMA_VERSION = 3
 
 
 def parse_timestamp(value: str | datetime | None) -> datetime | None:
@@ -151,10 +151,22 @@ def lineup_readiness(picks: list[dict], pool_by_id: dict[str, dict]) -> dict:
 
 
 def unavailable_starter_positions(picks: list[dict], pool_by_id: dict[str, dict]) -> list[str]:
+    """Return saved starters that require a pre-lock replacement.
+
+    An OUT starter can be safely covered by a valid emergency backup. A player
+    whose game itself became ineligible (Monday flex, postponement outside the
+    Sunday window, etc.) cannot be rescued by an emergency backup under the
+    published rules and must be replaced before lock.
+    """
     unavailable: list[str] = []
     for pos, pick in picks_by_position(picks).items():
         starter = pool_by_id.get(str(pick.get("pool_player_id")))
-        if starter and str(starter.get("availability_status") or "HEALTHY").upper() == "OUT":
+        if not starter:
+            continue
+        if not bool(starter.get("schedule_eligible", True)):
+            unavailable.append(pos)
+            continue
+        if str(starter.get("availability_status") or "HEALTHY").upper() == "OUT":
             backup_id = pick.get("emergency_pool_player_id")
             backup = pool_by_id.get(str(backup_id)) if backup_id else None
             backup_valid = bool(
@@ -167,12 +179,23 @@ def unavailable_starter_positions(picks: list[dict], pool_by_id: dict[str, dict]
     return [pos for pos in POSITIONS if pos in unavailable]
 
 
+def schedule_ineligible_starter_positions(picks: list[dict], pool_by_id: dict[str, dict]) -> list[str]:
+    positions: list[str] = []
+    for pos, pick in picks_by_position(picks).items():
+        starter = pool_by_id.get(str(pick.get("pool_player_id")))
+        if starter and not bool(starter.get("schedule_eligible", True)):
+            positions.append(pos)
+    return [pos for pos in POSITIONS if pos in positions]
+
+
 def first_incomplete_position(picks: list[dict], pool_by_id: dict[str, dict]) -> str | None:
     by_pos = picks_by_position(picks)
     for pos in POSITIONS:
         if pos not in by_pos:
             return pos
         starter = pool_by_id.get(str(by_pos[pos].get("pool_player_id")))
+        if starter and not bool(starter.get("schedule_eligible", True)):
+            return pos
         if starter and str(starter.get("availability_status") or "HEALTHY").upper() == "OUT":
             backup_id = by_pos[pos].get("emergency_pool_player_id")
             backup = pool_by_id.get(str(backup_id)) if backup_id else None

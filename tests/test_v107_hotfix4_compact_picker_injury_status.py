@@ -23,8 +23,8 @@ def test_sunday_status_keeps_out_starter_warning_when_backup_is_valid():
 def test_weekly_ui_reload_guard_bumped_for_hot_deploy():
     weekly = (ROOT / "weekly_ui.py").read_text("utf-8")
     app = (ROOT / "app.py").read_text("utf-8")
-    assert "WEEKLY_UI_SCHEMA_VERSION = 8" in weekly
-    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 8' in app
+    assert "WEEKLY_UI_SCHEMA_VERSION = 9" in weekly
+    assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 9' in app
 
 
 def test_hotfix_does_not_touch_scoring_or_refresh_schedule():

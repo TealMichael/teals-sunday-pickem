@@ -14,6 +14,7 @@ from weekly import POSITIONS, parse_timestamp
 
 UTC = timezone.utc
 ET = ZoneInfo(TIMEZONE_NAME)
+NFL_SYNC_SCHEMA_VERSION = 2
 
 
 class Gate3Error(RuntimeError):
@@ -58,6 +59,28 @@ def sync_schedule(
     if not games:
         suffix = f" ({'; '.join(errors[:2])})" if errors else ""
         raise Gate3Error(f"No NFL schedule data was returned for this week{suffix}.")
+
+    if prefer_live and week_id:
+        # nflverse is excellent for durable schedule shape but its public file
+        # does not carry a live quarter/clock and can temporarily lag a true
+        # FINAL. Do not let a schedule/injury sync erase a more precise ESPN
+        # state captured by the previous scoring refresh.
+        existing = {
+            str(row.get("provider_event_id") or ""): row
+            for row in store.get_nfl_games(str(week_id))
+            if row.get("provider_event_id")
+        }
+        for game in games:
+            prior = existing.get(str(game.get("provider_event_id") or ""))
+            if not prior:
+                continue
+            prior_status = str(prior.get("game_status") or "").upper()
+            new_status = str(game.get("game_status") or "").upper()
+            preserve = prior_status == "FINAL" or (prior_status == "LIVE" and new_status == "LIVE")
+            if preserve:
+                for key in ("game_status", "period", "game_clock", "home_score", "away_score", "completed"):
+                    if key in prior:
+                        game[key] = prior.get(key)
     store.upsert_nfl_games(week_id, games)
     return games
 
@@ -179,17 +202,29 @@ def _replacement_cutoff(week: dict[str, Any]) -> datetime:
 def refresh_injuries(store, week: dict[str, Any]) -> dict[str, Any]:
     run_id = store.start_data_run("injury_refresh", week_id=str(week["id"]), provider="Sleeper+nflverse")
     try:
+        now = datetime.now(UTC)
+        lock = parse_timestamp(week.get("locks_at"))
         # Schedule is refreshed alongside injuries so a late flex/postponement
         # cannot leave an ineligible Monday/early-Sunday player selectable.
-        games = sync_schedule(store, week)
-        schedule_changes = store.reconcile_pool_schedule(week, games) if week.get("published_at") else []
+        games = sync_schedule(store, week, prefer_live=bool(lock and now >= lock))
+        # Pool membership and saved lineup references are frozen at the 1 PM
+        # lock. A post-lock schedule feed must never attempt a lineup-pick
+        # mutation (the DB correctly rejects those) or destabilize a locked
+        # lineup. Live scoring can still observe the updated game schedule.
+        before_lock = not lock or now < lock
+        schedule_changes = store.reconcile_pool_schedule(week, games) if week.get("published_at") and before_lock else []
         players_by_position = sync_players(store)
         all_players = [p for rows in players_by_position.values() for p in rows]
-        changed = store.sync_pool_injury_status(str(week["id"]), all_players) if week.get("published_at") else []
+        changed = store.sync_pool_injury_status(str(week["id"]), all_players, now=now) if week.get("published_at") else []
         replacements: list[dict[str, Any]] = []
-        if week.get("published_at") and datetime.now(UTC) <= _replacement_cutoff(week):
+        if week.get("published_at") and now <= _replacement_cutoff(week):
             replacements = store.promote_replacements_for_out_players(week)
-        store.update_week_data_state(str(week["id"]), last_data_refresh_at=_iso(datetime.now(UTC)))
+        # Before lock, this timestamp drives the Sunday Status freshness label.
+        # After lock, live scoring owns the shared freshness stamp. Otherwise a
+        # successful injury pull could make stale/failed live scores look fresh
+        # and suppress the app's scoring-recovery fallback.
+        if before_lock:
+            store.update_week_data_state(str(week["id"]), last_data_refresh_at=_iso(now))
         store.finish_data_run(
             run_id,
             success=True,
@@ -213,29 +248,94 @@ def _game_by_team(games: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 
 def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None = None) -> dict[str, Any]:
+    """Refresh live fantasy scores without ever regressing previously captured data.
+
+    nflverse remains the schedule backbone, while each ESPN box-score response
+    provides the authoritative live game state (score, quarter/clock, FINAL) for
+    the games we are already fetching. Provider failures are isolated per game:
+    one bad ESPN response cannot zero or block every other matchup.
+    """
     espn = espn or ESPNProvider()
     run_id = store.start_data_run("live_scores", week_id=str(week["id"]), provider="ESPN-CDN+nflverse")
     try:
-        games = sync_schedule(store, week, espn)
+        games = sync_schedule(store, week, espn, prefer_live=True)
         # Before lock, schedule changes can still remove a now-ineligible game.
         if datetime.now(UTC) < (parse_timestamp(week.get("locks_at")) or datetime.max.replace(tzinfo=UTC)):
             store.reconcile_pool_schedule(week, games)
         eligible = _eligible_games(games)
-        game_by_team = _game_by_team(eligible)
         pool = store.get_full_week_pool(str(week["id"]))
 
         # Fetch only games that have started/finalized and still need data. A
-        # finalized game already captured as FINAL is not re-downloaded every
-        # 30 minutes.
+        # finalized game whose pool players were already captured as FINAL is
+        # intentionally skipped -- and, critically, those players are also
+        # skipped later rather than being recalculated from an empty stat line.
         summary_cache: dict[str, list[dict[str, Any]]] = {}
+        successful_event_ids: set[str] = set()
+        summary_errors: list[dict[str, str]] = []
+        merged_games: list[dict[str, Any]] = []
+        games_by_event: dict[str, dict[str, Any]] = {
+            str(game.get("provider_event_id") or ""): dict(game) for game in eligible if game.get("provider_event_id")
+        }
+        attempted_summaries = 0
+
         for game in eligible:
-            status = str(game.get("game_status") or "SCHEDULED")
+            status = str(game.get("game_status") or "SCHEDULED").upper()
             if status not in {"LIVE", "FINAL"}:
                 continue
-            game_pool = [p for p in pool if normalize_team(p.get("team_abbr")) in {normalize_team(game.get("home_team")), normalize_team(game.get("away_team"))}]
-            if status == "FINAL" and game_pool and all(str(p.get("game_status") or "") == "FINAL" and p.get("score_updated_at") for p in game_pool):
+            game_pool = [
+                p for p in pool
+                if normalize_team(p.get("team_abbr"))
+                in {normalize_team(game.get("home_team")), normalize_team(game.get("away_team"))}
+            ]
+            if status == "FINAL":
+                # A final game with no pool players only matters to the NFL
+                # score ticker, whose final score is already stored on nfl_games.
+                # Do not keep redownloading its box score for the rest of Sunday.
+                if not game_pool:
+                    continue
+                if all(
+                    str(p.get("game_status") or "").upper() == "FINAL" and p.get("score_updated_at")
+                    for p in game_pool
+                ):
+                    continue
+
+            event_id = str(game.get("provider_event_id") or "")
+            if not event_id:
                 continue
-            summary_cache[str(game["provider_event_id"])] = espn.player_stats(espn.summary(str(game["provider_event_id"])))
+            attempted_summaries += 1
+            try:
+                summary = espn.summary(event_id)
+                entries = espn.player_stats(summary)
+                summary_cache[event_id] = entries
+                successful_event_ids.add(event_id)
+
+                # The ESPN summary is more timely than nflverse for LIVE/FINAL
+                # status and also supplies the quarter/clock used by the Sunday
+                # roster/status UI and physical clock.
+                merged = dict(game)
+                merged.update(ESPNProvider.summary_game_state(summary))
+                merged["week_id"] = str(week["id"])
+                games_by_event[event_id] = merged
+                merged_games.append(merged)
+            except Exception as exc:
+                # Preserve this game's last known scores and continue updating
+                # every other game. Never turn a transient provider miss into a
+                # whole-slate outage.
+                summary_errors.append({"event_id": event_id, "error_type": type(exc).__name__})
+
+        if attempted_summaries and not successful_event_ids:
+            raise Gate3Error("ESPN live summaries were unavailable for all started pool games; previous scores were preserved.")
+
+        if merged_games:
+            store.upsert_nfl_games(str(week["id"]), merged_games)
+
+        # Replace the in-memory nflverse rows with any more-accurate ESPN game
+        # states before deciding LIVE vs PROVISIONAL and before rendering clocks.
+        eligible = [
+            games_by_event.get(str(game.get("provider_event_id") or ""), game)
+            for game in eligible
+        ]
+        game_by_team = _game_by_team(eligible)
 
         normalized_summary: dict[tuple[str, str], dict[str, Any]] = {}
         for entries in summary_cache.values():
@@ -243,14 +343,26 @@ def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None =
                 normalized_summary[(normalize_team(entry.get("team_abbr")), normalize_name(entry.get("player_name")))] = entry
 
         score_rows: list[dict[str, Any]] = []
+        preserved_missing_players = 0
         for player in pool:
             game = game_by_team.get(normalize_team(player.get("team_abbr")))
             if not game:
                 continue
-            game_status = str(game.get("game_status") or "SCHEDULED")
+            game_status = str(game.get("game_status") or "SCHEDULED").upper()
             if game_status == "SCHEDULED":
                 continue
+            event_id = str(game.get("provider_event_id") or "")
+            # Skipped FINAL games and failed ESPN games keep their existing pool
+            # score exactly as-is. This prevents a later refresh from replacing
+            # a correct final score with 0.0 merely because no summary was loaded.
+            if event_id not in successful_event_ids:
+                continue
+
             entry = normalized_summary.get((normalize_team(player.get("team_abbr")), normalize_name(player.get("player_name"))))
+            if entry is None and player.get("score_updated_at"):
+                preserved_missing_players += 1
+                continue
+
             raw_stats = dict((entry or {}).get("stats") or {})
             result = score_stat_line(raw_stats, str(player.get("position") or ""))
             score_rows.append({
@@ -265,19 +377,45 @@ def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None =
 
         if score_rows:
             store.upsert_player_week_stats(str(week["id"]), score_rows)
-        all_complete = bool(eligible) and all(bool(g.get("completed")) or str(g.get("game_status")) == "FINAL" for g in eligible)
+
+        all_complete = bool(eligible) and all(
+            bool(g.get("completed")) or str(g.get("game_status") or "").upper() == "FINAL"
+            for g in eligible
+        )
         status = "PROVISIONAL" if all_complete else "LIVE"
         if score_rows:
             store.apply_pool_scores(week, score_rows, score_status=status)
         else:
+            # A successful refresh can legitimately have no rows to rewrite
+            # (for example, every early game is already final). Keep the shared
+            # freshness timestamp current without touching any player score.
             store.update_week_data_state(
                 str(week["id"]),
                 data_status=status,
                 last_data_refresh_at=_iso(datetime.now(UTC)),
-                data_message="No started pool games required a score refresh.",
+                data_message="Live NFL refresh completed; existing player scores were preserved.",
             )
-        store.finish_data_run(run_id, success=True, message=f"{status} refresh; {len(score_rows)} pool players scored.", metadata={"eligible_games": len(eligible), "summaries": len(summary_cache)})
-        return {"status": status, "players": len(score_rows), "games": eligible}
+
+        metadata = {
+            "eligible_games": len(eligible),
+            "summaries": len(summary_cache),
+            "summary_errors": summary_errors,
+            "preserved_missing_players": preserved_missing_players,
+        }
+        suffix = f"; {len(summary_errors)} game feed error(s) preserved" if summary_errors else ""
+        store.finish_data_run(
+            run_id,
+            success=True,
+            message=f"{status} refresh; {len(score_rows)} pool players updated{suffix}.",
+            metadata=metadata,
+        )
+        return {
+            "status": status,
+            "players": len(score_rows),
+            "games": eligible,
+            "summary_errors": summary_errors,
+            "preserved_missing_players": preserved_missing_players,
+        }
     except Exception as exc:
         store.finish_data_run(run_id, success=False, message=str(exc))
         raise
@@ -307,8 +445,25 @@ def reconcile_final(store, week: dict[str, Any], *, nflverse: NFLverseProvider |
         index = _nflverse_row_index(rows)
         pool = store.get_full_week_pool(str(week["id"]))
         score_rows: list[dict[str, Any]] = []
+        preserved_missing = 0
         for player in pool:
-            raw = index.get((normalize_team(player.get("team_abbr")), normalize_name(player.get("player_name"))), {})
+            raw = index.get((normalize_team(player.get("team_abbr")), normalize_name(player.get("player_name"))))
+            if raw is None and player.get("score_updated_at"):
+                # Monday provider rows can occasionally lag or fail name/team
+                # resolution for one player. Never replace a verified Sunday
+                # ESPN score with 0 solely because the final feed omitted a row.
+                preserved_missing += 1
+                score_rows.append({
+                    "pool_player_id": str(player["id"]),
+                    "source": "espn-live-preserved-final",
+                    "source_player_id": player.get("espn_player_id"),
+                    "raw_stats": {},
+                    "points": float(player.get("score_total") or 0),
+                    "breakdown": player.get("score_breakdown") or {},
+                    "game_status": "FINAL",
+                })
+                continue
+            raw = raw or {}
             result = score_stat_line(raw, str(player.get("position") or ""))
             score_rows.append({
                 "pool_player_id": str(player["id"]),
@@ -330,8 +485,18 @@ def reconcile_final(store, week: dict[str, Any], *, nflverse: NFLverseProvider |
             data_message="Monday nflverse reconciliation complete.",
         ) or dict(week, data_status="FINAL", finalized_at=stamp)
         archive = archive_week_results(store, finalized_week)
-        store.finish_data_run(run_id, success=True, message=f"Finalized {len(score_rows)} pool players and archived {len(archive.get('rows') or [])} weekly results.")
-        return {"finalized": True, "players": len(score_rows), "results": len(archive.get("rows") or [])}
+        store.finish_data_run(
+            run_id,
+            success=True,
+            message=f"Finalized {len(score_rows)} pool players and archived {len(archive.get('rows') or [])} weekly results; preserved {preserved_missing} missing final provider row(s).",
+            metadata={"preserved_missing_final_rows": preserved_missing},
+        )
+        return {
+            "finalized": True,
+            "players": len(score_rows),
+            "results": len(archive.get("rows") or []),
+            "preserved_missing_final_rows": preserved_missing,
+        }
     except Exception as exc:
         store.finish_data_run(run_id, success=False, message=str(exc))
         raise
@@ -421,8 +586,17 @@ def injury_interval_minutes(now_et: datetime) -> int:
 def _run_due(last_run: dict[str, Any] | None, minutes: int, now: datetime) -> bool:
     if not last_run:
         return True
-    completed = parse_timestamp(last_run.get("completed_at") or last_run.get("started_at"))
-    return not completed or (now - completed) >= timedelta(minutes=minutes)
+    # Scheduled cadence is measured start-to-start, not completion-to-start.
+    # GitHub dispatch/start times still wobble by seconds, so allow a small
+    # tolerance rather than requiring a mathematically exact 15:00 interval.
+    # Without this, a 1:07:45 start followed by 1:22:20 is only 14:35 apart
+    # and would incorrectly skip to 1:37, making Sunday scores look ~30 min old.
+    anchor = parse_timestamp(last_run.get("started_at") or last_run.get("completed_at"))
+    if not anchor:
+        return True
+    tolerance = timedelta(seconds=min(90, max(0, int(minutes) * 6)))
+    due_after = max(timedelta(0), timedelta(minutes=minutes) - tolerance)
+    return (now - anchor) >= due_after
 
 
 def run_auto(store, *, now: datetime | None = None) -> dict[str, Any]:

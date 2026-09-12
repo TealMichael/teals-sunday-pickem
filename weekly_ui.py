@@ -10,7 +10,7 @@ import streamlit as st
 
 import weekly as _weekly
 
-if getattr(_weekly, "WEEKLY_LOGIC_SCHEMA_VERSION", 0) < 2:
+if getattr(_weekly, "WEEKLY_LOGIC_SCHEMA_VERSION", 0) < 3:
     _weekly = importlib.reload(_weekly)
 
 from config import APP_VERSION
@@ -37,6 +37,7 @@ from weekly import (
     position_pool,
     previous_position,
     required_backup_positions,
+    schedule_ineligible_starter_positions,
     selected_pool_ids_missing_from_visible_pool,
     seconds_until,
     unavailable_starter_positions,
@@ -45,7 +46,7 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 8
+WEEKLY_UI_SCHEMA_VERSION = 9
 
 
 def _compact_duration(seconds: int) -> str:
@@ -89,6 +90,7 @@ def _render_sunday_status_card(week: dict, picks: list[dict], pool_by_id: dict[s
     unavailable = list(status["unavailable"])
     needs_backup = list(status["needs_backup"])
     questionable = list(status["questionable"])
+    schedule_unavailable = schedule_ineligible_starter_positions(picks, pool_by_id)
 
     # Keep an injury warning visible even when an OUT starter is safely covered
     # by an emergency backup. "Ready" should mean the lineup is protected, not
@@ -127,8 +129,13 @@ def _render_sunday_status_card(week: dict, picks: list[dict], pool_by_id: dict[s
         subtitle = "All five picks are set"
 
     injury_parts: list[str] = []
-    if unavailable:
-        injury_parts.append(f"🚫 {len(unavailable)} starter{'s' if len(unavailable) != 1 else ''} OUT • backup needed")
+    out_unavailable = [pos for pos in unavailable if pos not in schedule_unavailable]
+    if schedule_unavailable:
+        injury_parts.append(
+            f"🚫 {len(schedule_unavailable)} starter{'s' if len(schedule_unavailable) != 1 else ''} moved outside the eligible Sunday slate • replacement needed"
+        )
+    if out_unavailable:
+        injury_parts.append(f"🚫 {len(out_unavailable)} starter{'s' if len(out_unavailable) != 1 else ''} OUT • backup needed")
     if covered_out:
         injury_parts.append(f"⚠️ {len(covered_out)} starter{'s' if len(covered_out) != 1 else ''} OUT • emergency backup{'s' if len(covered_out) != 1 else ''} ready")
     if questionable:
@@ -158,6 +165,37 @@ def _render_sunday_status_card(week: dict, picks: list[dict], pool_by_id: dict[s
     )
     if stale_near_lock:
         st.caption("NFL status data is older than expected this close to lock. Your saved lineup is safe; check again after the next refresh.")
+
+
+@st.fragment(run_every="60s")
+def _render_live_prelock_status(store, week: dict, player: dict) -> None:
+    """Keep the Sunday confidence card fresh while a phone sits open.
+
+    This fragment never edits a lineup. It rereads the current week/pool/lineup
+    and can invoke the already-leased automation fallback if the final injury
+    refresh is late. A lock transition gets a full app rerun so the builder
+    cannot remain visually open after 1 PM ET.
+    """
+    fresh_week = store.get_week(str(week["id"])) or week
+    fresh_week, _recovery = maybe_recover_critical_automation(store, fresh_week)
+    if week_phase(fresh_week) == "locked":
+        st.rerun()
+    fresh_pool = store.get_week_pool(str(fresh_week["id"]), visible_only=True)
+    _lineup, picks, resolved_pool, pool_by_id = _load_lineup(
+        store,
+        fresh_week,
+        player,
+        fresh_pool,
+        snapshot_ttl_seconds=0,
+    )
+    _render_sunday_status_card(fresh_week, picks, pool_by_id)
+
+
+@st.fragment(run_every="15s")
+def _lock_transition_guard(locks_at: str | datetime | None) -> None:
+    """Move an idle pre-lock builder/review screen to live mode promptly."""
+    if seconds_until(locks_at) <= 0:
+        st.rerun()
 
 
 def _countdown(target_iso: str, label: str) -> None:
@@ -804,8 +842,8 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
             st.rerun()
         return
     if unavailable:
-        st.warning("Replace the OUT player at: " + ", ".join(unavailable))
-        if st.button("Replace OUT player", type="primary", use_container_width=True):
+        st.warning("Replace the unavailable player at: " + ", ".join(unavailable))
+        if st.button("Replace unavailable player", type="primary", use_container_width=True):
             st.session_state.builder_return_mode = "review"
             st.session_state.builder_position = unavailable[0]
             st.session_state.builder_mode = "pick"
@@ -855,7 +893,7 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
             st.success("Lineup saved. You can make changes until Sunday at 1:00 PM ET.")
 
     if not bool(week.get("is_demo")):
-        _render_sunday_status_card(week, picks, pool_by_id)
+        _render_live_prelock_status(store, week, player)
 
     if chosen == total and not needs and not unavailable:
         st.markdown("### ✅ YOUR FIVE ARE READY")
@@ -874,7 +912,7 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
         )
         if bool(week.get("is_demo")):
             st.markdown('<div class="status-test"><strong>TEST WEEK • LOCK OPEN</strong><br>Build and edit freely while testing.</div>', unsafe_allow_html=True)
-        label = "Replace OUT Player" if unavailable else ("Fix Injury Backup" if needs else ("Continue Building" if chosen else "Build My Five"))
+        label = "Replace Unavailable Player" if unavailable else ("Fix Injury Backup" if needs else ("Continue Building" if chosen else "Build My Five"))
         if st.button(label, type="primary", use_container_width=True):
             if needs or unavailable:
                 st.session_state.builder_return_mode = "home"
@@ -983,6 +1021,9 @@ def render_player_game(
         maybe_render_final_celebration(store, week, player)
         render_live_sunday(store, week, player, show_storylines=True)
         return
+
+    if phase == "open" and not bool(week.get("is_demo")):
+        _lock_transition_guard(week.get("locks_at"))
 
     pool = store.get_week_pool(str(week["id"]), visible_only=True)
 

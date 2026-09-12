@@ -8,6 +8,7 @@ import streamlit as st
 
 from auth import login_player, register_player, restore_from_cookie, revoke_cookie_session
 from config import (
+    APP_BUILD_VERSION,
     APP_NAME,
     APP_VERSION,
     COOKIE_NAME,
@@ -15,8 +16,34 @@ from config import (
     REMEMBER_STORAGE_KEY,
 )
 from security import safe_secret_match
-from store import SupabaseStore
 from ui import hero, inject_css, page_config
+
+# A Streamlit Cloud worker may survive a multi-file deploy with old imported
+# modules still resident. Reload the Sunday-critical dependency chain in order
+# before binding UI helpers. This is separate from the resource-cache build key:
+# the build key prevents stale *instances*; these guards prevent stale *classes
+# and functions* from being reused by the warm Python process.
+import weekly as _weekly_core
+if getattr(_weekly_core, "WEEKLY_LOGIC_SCHEMA_VERSION", 0) < 3:
+    _weekly_core = importlib.reload(_weekly_core)
+
+import store as _store
+if getattr(_store, "STORE_SCHEMA_VERSION", 0) < 2:
+    _store = importlib.reload(_store)
+SupabaseStore = _store.SupabaseStore
+
+import nfl_sources as _nfl_sources
+if getattr(_nfl_sources, "NFL_SOURCES_SCHEMA_VERSION", 0) < 2:
+    _nfl_sources = importlib.reload(_nfl_sources)
+
+import nfl_sync as _nfl_sync
+if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 2:
+    _nfl_sync = importlib.reload(_nfl_sync)
+
+import automation_recovery as _automation_recovery
+if getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 2:
+    _automation_recovery = importlib.reload(_automation_recovery)
+
 import weekly_ui as _weekly_ui
 import gate4_ui as _gate4_ui
 import gate5_ui as _gate5_ui
@@ -28,7 +55,7 @@ import gate5_ui as _gate5_ui
 # normal per-rerun reload.
 _weekly_params = inspect.signature(_weekly_ui.render_player_game).parameters
 if (
-    getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 8
+    getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 9
     or "on_sign_out" not in _weekly_params
     or "allow_demo_week" not in _weekly_params
 ):
@@ -38,7 +65,7 @@ render_player_game = _weekly_ui.render_player_game
 # Gate 4 navigation changed structurally in v0.4.4/v0.4.5. Streamlit Cloud can
 # occasionally keep an older helper module resident across a multi-file deploy,
 # so reload any pre-simplification Gate 4 module before binding the demo renderer.
-if getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 3:
+if getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 4:
     _gate4_ui = importlib.reload(_gate4_ui)
 render_gate4_demo = _gate4_ui.render_gate4_demo
 
@@ -124,7 +151,7 @@ if missing:
         st.write("Use `.streamlit/secrets.toml.example` as the template. Never commit the real secrets file.")
     st.stop()
 
-store = get_store(secret("SUPABASE_URL"), supabase_server_key(), APP_VERSION)
+store = get_store(secret("SUPABASE_URL"), supabase_server_key(), APP_BUILD_VERSION)
 
 
 def _record_ui_incident(scope: str, exc: Exception) -> None:
@@ -144,13 +171,13 @@ def _record_ui_incident(scope: str, exc: Exception) -> None:
             "ui_error",
             week_id=str(week["id"]) if week else None,
             provider="streamlit",
-            metadata={"scope": scope, "error_type": type(exc).__name__, "build": APP_VERSION},
+            metadata={"scope": scope, "error_type": type(exc).__name__, "build": APP_BUILD_VERSION},
         )
         store.finish_data_run(
             run_id,
             success=False,
             message=f"{scope} UI error ({type(exc).__name__})",
-            metadata={"scope": scope, "error_type": type(exc).__name__, "build": APP_VERSION},
+            metadata={"scope": scope, "error_type": type(exc).__name__, "build": APP_BUILD_VERSION},
         )
     except Exception:
         pass

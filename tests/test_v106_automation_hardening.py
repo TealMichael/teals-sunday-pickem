@@ -119,3 +119,10 @@ def test_v106_version_and_github_remains_primary_scheduler():
     workflow = (ROOT / ".github/workflows/nfl-refresh.yml").read_text("utf-8")
     assert 'cron: "7,22,37,52 11-23 * * 0"' in workflow
     assert 'cron: "7,17,27,37,47,57 12 * * 2"' in workflow
+
+
+def test_first_live_fallback_waits_for_scheduled_107_run_before_rescuing():
+    lock = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)
+    week = base_week(lock)
+    assert recovery_action_due(FakeStore(), week, now=lock + timedelta(minutes=5)) is None
+    assert recovery_action_due(FakeStore(), week, now=lock + timedelta(minutes=10)) == "live"

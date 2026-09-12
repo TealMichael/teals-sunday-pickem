@@ -3,6 +3,11 @@ from __future__ import annotations
 APP_NAME = "Teal's Sunday Pick'em"
 APP_TAGLINE = "Pick five. Own Sunday."
 APP_VERSION = "1.0.7"
+# Internal deploy/cache key. Keep the public-facing version stable while making
+# every hotfix a distinct Streamlit resource-cache generation. Without this,
+# a warm Streamlit Cloud process can reuse a SupabaseStore instance created by
+# an older class definition across a multi-file deploy.
+APP_BUILD_VERSION = "1.0.7-hotfix6"
 TIMEZONE_NAME = "America/New_York"
 
 PLAYER_PIN_LENGTH = 4

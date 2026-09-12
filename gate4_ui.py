@@ -9,8 +9,9 @@ from typing import Any, Callable
 import streamlit as st
 
 import gate4 as _gate4
+from automation_recovery import maybe_recover_critical_automation
 
-if getattr(_gate4, "GATE4_LOGIC_SCHEMA_VERSION", 0) < 2:
+if getattr(_gate4, "GATE4_LOGIC_SCHEMA_VERSION", 0) < 3:
     _gate4 = importlib.reload(_gate4)
 
 from config import APP_VERSION, NFL_SEASON
@@ -26,7 +27,7 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp
 
-GATE4_UI_SCHEMA_VERSION = 3
+GATE4_UI_SCHEMA_VERSION = 4
 
 
 def _ordinal(rank: int) -> str:
@@ -355,10 +356,25 @@ def _leaderboard_rows(leaderboard: list[dict[str, Any]], current_player_id: str,
             _render_roster_detail(row, current_player_id)
 
 
+@st.fragment(run_every="60s")
 def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, show_storylines: bool = True) -> None:
-    bundle = store.get_week_public_bundle(str(week["id"]))
+    """Render live Sunday as a self-refreshing view.
+
+    Backend jobs own NFL polling; this fragment only rereads Supabase once per
+    minute so a phone left open on the standings does not silently freeze. If a
+    scheduled GitHub refresh is late, the existing leased recovery path may do
+    one best-effort rescue without every browser duplicating provider traffic.
+    """
+    fresh_week = store.get_week(str(week["id"])) or week
+    fresh_week, _recovery = maybe_recover_critical_automation(store, fresh_week)
+    # FINAL is a structural page transition because the full app owns the
+    # one-time champion celebration. Promote a newly-final week to a full rerun.
+    if str(fresh_week.get("data_status") or "").upper() == "FINAL" and str(week.get("data_status") or "").upper() != "FINAL":
+        st.rerun()
+
+    bundle = store.get_week_public_bundle(str(fresh_week["id"]))
     leaderboard = build_weekly_leaderboard(bundle)
-    data_status = str(week.get("data_status") or "LIVE").upper()
+    data_status = str(fresh_week.get("data_status") or "LIVE").upper()
     title = "Final Results" if data_status == "FINAL" else ("Provisional Results" if data_status == "PROVISIONAL" else "Live Sunday")
     st.markdown(f"### {title}")
     if data_status == "PROVISIONAL":
@@ -369,7 +385,7 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
         st.caption("Scores refresh automatically during Sunday games.")
     season: list[dict[str, Any]] = []
     if data_status == "FINAL":
-        season, _ = _weekly_recap(store, week, bundle, leaderboard)
+        season, _ = _weekly_recap(store, fresh_week, bundle, leaderboard)
     elif show_storylines:
         _storylines(bundle, leaderboard)
     st.markdown("### Standings")
@@ -383,7 +399,7 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
                 f'<div class="card-tight"><div class="eyebrow">Season Leader</div><strong>{escape(str(leader.get("emoji") or "🏆"))} {escape(str(leader.get("nickname") or "Leader"))} — {int(leader.get("season_points") or 0)} pts</strong><div class="small">{escape(own_text)}</div></div>',
                 unsafe_allow_html=True,
             )
-    _last_updated(week)
+    _last_updated(fresh_week)
 
 
 def _render_season_rows(standings: list[dict[str, Any]], current_player_id: str | None = None) -> None:

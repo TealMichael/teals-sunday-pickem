@@ -15,6 +15,7 @@ from config import GATE3_HTTP_TIMEOUT_SECONDS, NFL_SEASON_TYPE, TIMEZONE_NAME
 
 UTC = timezone.utc
 ET = ZoneInfo(TIMEZONE_NAME)
+NFL_SOURCES_SCHEMA_VERSION = 2
 
 TEAM_ALIASES = {
     "JAC": "JAX",
@@ -158,6 +159,68 @@ class ESPNProvider:
         raise SourceError(f"ESPN live box score {event_id} is temporarily unavailable ({detail}).")
 
     @staticmethod
+    def summary_game_state(payload: dict[str, Any]) -> dict[str, Any]:
+        """Normalize the game-state portion of one ESPN summary response.
+
+        nflverse is the durable schedule source, but its public schedule file
+        does not provide a trustworthy live period/clock and can lag the true
+        FINAL transition. The ESPN summary we already fetch for player scoring
+        is therefore the most accurate no-extra-request source for live status.
+
+        Return only fields that were actually resolvable so callers can merge
+        them over the nflverse schedule row without erasing kickoff/eligibility
+        metadata when a CDN response is partial.
+        """
+        header = (payload or {}).get("header") or {}
+        competition = (header.get("competitions") or [{}])[0] or {}
+        status = competition.get("status") or header.get("status") or {}
+        type_info = status.get("type") or {}
+        state = str(type_info.get("state") or "").lower()
+        completed = bool(type_info.get("completed"))
+        status_name = str(type_info.get("name") or "").upper()
+
+        result: dict[str, Any] = {}
+        if completed or state == "post":
+            result["game_status"] = "FINAL"
+            result["completed"] = True
+        elif state == "in":
+            result["game_status"] = "LIVE"
+            result["completed"] = False
+        elif "POSTPON" in status_name:
+            result["game_status"] = "POSTPONED"
+            result["completed"] = False
+        elif "CANCEL" in status_name:
+            result["game_status"] = "CANCELED"
+            result["completed"] = False
+        elif state == "pre":
+            result["game_status"] = "SCHEDULED"
+            result["completed"] = False
+
+        if status.get("period") is not None:
+            result["period"] = status.get("period")
+        if status.get("displayClock") is not None:
+            result["game_clock"] = status.get("displayClock")
+
+        for competitor in competition.get("competitors") or []:
+            side = str(competitor.get("homeAway") or "").lower()
+            try:
+                score = int(float(competitor.get("score"))) if competitor.get("score") not in (None, "") else None
+            except (TypeError, ValueError):
+                score = None
+            team = normalize_team((competitor.get("team") or {}).get("abbreviation"))
+            if side == "home":
+                if team:
+                    result["home_team"] = team
+                if score is not None:
+                    result["home_score"] = score
+            elif side == "away":
+                if team:
+                    result["away_team"] = team
+                if score is not None:
+                    result["away_score"] = score
+        return result
+
+    @staticmethod
     def normalize_games(payload: dict[str, Any], week_id: str | None = None) -> list[dict[str, Any]]:
         games: list[dict[str, Any]] = []
         for event in payload.get("events") or []:
@@ -246,18 +309,25 @@ class SleeperProvider:
 
     def __init__(self, session: requests.Session | None = None):
         self.session = session or _session()
+        self._players_payload_cache: dict[str, Any] | list[dict[str, Any]] | None = None
 
     def active_players(self, position: str) -> list[dict[str, Any]]:
-        try:
-            response = self.session.get(
-                self.BASE_URL,
-                params={"position": position, "active": "true"},
-                timeout=GATE3_HTTP_TIMEOUT_SECONDS,
-            )
-            response.raise_for_status()
-            payload = response.json()
-        except Exception as exc:
-            raise SourceError(f"Sleeper {position} player data is temporarily unavailable.") from exc
+        # Sleeper's NFL player endpoint is a league-wide payload. `sync_players`
+        # asks for five fantasy positions in one refresh, so downloading the
+        # same large JSON five times wastes bandwidth and increases the chance
+        # a Sunday injury cycle times out. Cache it for this provider instance
+        # and filter the same response by position locally.
+        if self._players_payload_cache is None:
+            try:
+                response = self.session.get(
+                    self.BASE_URL,
+                    timeout=GATE3_HTTP_TIMEOUT_SECONDS,
+                )
+                response.raise_for_status()
+                self._players_payload_cache = response.json()
+            except Exception as exc:
+                raise SourceError(f"Sleeper {position} player data is temporarily unavailable.") from exc
+        payload = self._players_payload_cache
 
         if isinstance(payload, dict):
             items: Iterable[tuple[str, dict[str, Any]]] = payload.items()

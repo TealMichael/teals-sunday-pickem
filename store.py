@@ -11,6 +11,7 @@ from weekly import POSITIONS, parse_timestamp, safe_status
 
 UTC = timezone.utc
 PICKEM_SCHEMA = "pickem"
+STORE_SCHEMA_VERSION = 2
 
 
 class StoreError(RuntimeError):
@@ -31,6 +32,12 @@ class PicksLocked(StoreError):
 
 def _iso(dt: datetime) -> str:
     return dt.astimezone(UTC).isoformat()
+
+
+def injury_status_mutable_for_pool_row(row: dict[str, Any], now: datetime) -> bool:
+    """Return whether pregame injury status may still change for this row."""
+    kickoff = parse_timestamp(row.get("kickoff_at"))
+    return not kickoff or now.astimezone(UTC) < kickoff
 
 
 class SupabaseStore:
@@ -636,12 +643,29 @@ class SupabaseStore:
         self.clear_week_cache(str(week["id"]))
         return list(res.data or [])
 
-    def sync_pool_injury_status(self, week_id: str, cached_players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def sync_pool_injury_status(
+        self,
+        week_id: str,
+        cached_players: list[dict[str, Any]],
+        *,
+        now: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        """Refresh Sleeper injury labels only until each player's kickoff.
+
+        Emergency backups are a pregame inactive/OUT safeguard. Once a game
+        kicks off, an in-game injury must never retroactively turn a starter
+        into an emergency-backup activation. Freezing the published row at its
+        own kickoff preserves the player-facing rule: if the starter plays,
+        the starter counts.
+        """
         by_id = {str(p.get("sleeper_player_id")): p for p in cached_players if p.get("sleeper_player_id")}
         pool = self.get_full_week_pool(str(week_id))
-        stamp = _iso(datetime.now(UTC))
+        now = (now or datetime.now(UTC)).astimezone(UTC)
+        stamp = _iso(now)
         updated: list[dict[str, Any]] = []
         for row in pool:
+            if not injury_status_mutable_for_pool_row(row, now):
+                continue
             player = by_id.get(str(row.get("sleeper_player_id") or row.get("nfl_player_id") or ""))
             if not player:
                 continue

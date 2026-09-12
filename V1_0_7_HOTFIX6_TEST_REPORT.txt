@@ -1,0 +1,26 @@
+Teal's Sunday Pick'em v1.0.7-hotfix6 — Test Report
+
+FULL SUITE
+217 passed
+
+PYTHON COMPILE
+PASS
+
+RELEASE GUARD
+PASS
+
+NEW SUNDAY-STABILITY REGRESSIONS INCLUDE
+- final game skip never zeroes an existing score
+- one bad game does not block another live game
+- missing player in a successful summary preserves previous score
+- live summary updates game clock and FINAL state
+- all-started-game provider failure preserves existing scores
+- schedule-ineligible starter requires replacement
+- emergency backup must be eligible and not OUT
+- deploy/autorefresh contracts
+- injury status freezes at each player's kickoff
+- post-lock injury refresh cannot fake live-score freshness
+- Sleeper player payload downloads once per refresh
+- ESPN live schedule state is preferred where appropriate
+- 15-minute GitHub cadence uses start time and tolerates jitter
+- first live fallback waits for the scheduled 1:07 run window

@@ -1,0 +1,46 @@
+Teal's Sunday Pick'em — v1.0.7-hotfix6
+
+UPLOAD
+Unzip the GitHub patch and upload its contents at repository root, preserving folders.
+
+PRODUCTION FILES CHANGED
+- app.py
+- automation_recovery.py
+- config.py
+- gate4.py
+- gate4_ui.py
+- nfl_sources.py
+- nfl_sync.py
+- store.py
+- weekly.py
+- weekly_ui.py
+
+TEST FILES CHANGED / ADDED
+- tests/test_gate2_runtime_cache.py
+- tests/test_gate3_scheduler.py
+- tests/test_v102_sunday_recap.py
+- tests/test_v103_launch_polish.py
+- tests/test_v104_public_ux_polish.py
+- tests/test_v105_tap_to_edit_review.py
+- tests/test_v106_automation_hardening.py
+- tests/test_v107_hotfix4_compact_picker_injury_status.py
+- tests/test_v107_hotfix6_sunday_stability.py
+
+NO SQL REQUIRED
+NO AWTRIX CHANGE REQUIRED
+NO HIDDEN FILE CHANGE REQUIRED
+
+After upload:
+1. Wait for GitHub Quality Gate to turn green.
+2. Let Streamlit redeploy.
+3. Do a simple smoke check: player home loads, Commissioner Week loads, existing lineup counts remain intact.
+4. Stop feature work unless a real defect appears.
+
+Tag:
+v1.0.7-hotfix6
+
+Release title:
+v1.0.7 Hotfix 6 — Sunday Stability Audit
+
+Commit:
+v1.0.7 hotfix — harden Sunday live scoring and refresh UX

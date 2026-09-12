@@ -9,6 +9,7 @@ from nfl_sync import ensure_week_shell_from_scoreboard, publish_week_pool, recon
 from weekly import parse_timestamp
 
 UTC = timezone.utc
+AUTOMATION_RECOVERY_SCHEMA_VERSION = 2
 
 # GitHub Actions remains the primary scheduler. These thresholds only activate
 # the Streamlit-server fallback after the scheduled job has had a small grace
@@ -16,9 +17,14 @@ UTC = timezone.utc
 # windows rather than turning ordinary page loads into provider polling.
 PUBLISH_RECOVERY_GRACE_MINUTES = 10
 CRITICAL_REFRESH_GRACE_MINUTES = 2
+# The scheduled Sunday worker intentionally runs at :07/:22/:37/:52 to avoid
+# GitHub's top-of-hour congestion. Do not make the first person opening the app
+# at exactly 1:00 PM synchronously fetch the entire live slate; give the 1:07
+# primary job time to run, then rescue it from an active session if still absent.
+INITIAL_LIVE_RECOVERY_DELAY_MINUTES = 10
 FAILED_ATTEMPT_COOLDOWN_MINUTES = 5
 FINAL_RECOVERY_GRACE_MINUTES = 20
-LEASE_TTL_SECONDS = 180
+LEASE_TTL_SECONDS = 420
 
 
 def _age_minutes(value: str | datetime | None, now: datetime) -> float | None:
@@ -91,6 +97,8 @@ def recovery_action_due(store, week: dict[str, Any], *, now: datetime | None = N
     # after the universal 1 PM ET lock, including long SNF/overtime games.
     data_status = str(week.get("data_status") or "").upper()
     if lock <= now <= lock + timedelta(hours=12) and data_status != "FINAL":
+        if data_status not in {"LIVE", "PROVISIONAL"} and now < lock + timedelta(minutes=INITIAL_LIVE_RECOVERY_DELAY_MINUTES):
+            return None
         due_after = LIVE_SCORE_REFRESH_MINUTES + CRITICAL_REFRESH_GRACE_MINUTES
         shared_age = _age_minutes(week.get("last_data_refresh_at"), now)
         # Before the first LIVE write, a recent pre-lock injury refresh must not
