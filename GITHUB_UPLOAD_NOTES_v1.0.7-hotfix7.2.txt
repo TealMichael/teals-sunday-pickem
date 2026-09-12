@@ -1,0 +1,34 @@
+Teal's Sunday Pick'em — v1.0.7-hotfix7.2
+
+RELEASE
+v1.0.7 Hotfix 7.2 — Final Sunday Freeze Hardening
+
+COMMIT
+v1.0.7 hotfix — harden preserved lineups and schedule eligibility
+
+WHY THIS EXISTS
+This is a narrow final-freeze repair discovered during the Sep 12 pre-Sunday audit.
+It is not feature work.
+
+CHANGES
+- Aligns the DB pick trigger with Hotfix 3 preserved-starter behavior so an invalid
+  emergency backup can be cleared without deleting/rejecting a preserved hidden starter.
+- Rejects newly selected starters/backups whose games are no longer Sunday-eligible.
+- Prevents injury replacement from promoting a schedule-ineligible hidden player.
+- Makes a schedule-ineligible backup count as needing attention for a Questionable starter.
+
+UNCHANGED / PROTECTED
+- scoring and kicker rules
+- 1:00 PM ET lock
+- live scoring/provider code
+- GitHub scheduler/recovery cadence
+- AWTRIX / Clock Hotfix 7.1 code
+- auth/PIN behavior
+- Streamlit theme/config
+
+INSTALL
+1. Upload the contents of this ZIP at repository root.
+2. Wait for the GitHub Quality Gate to pass.
+3. Run db/011_preserved_lineup_selection_guard.sql ONCE in Supabase SQL Editor.
+4. No AWTRIX reinstall is required.
+5. Freeze code for Week 1 unless a concrete production defect appears.

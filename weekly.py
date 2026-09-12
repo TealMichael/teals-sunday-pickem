@@ -109,7 +109,11 @@ def required_backup_positions(picks: list[dict], pool_by_id: dict[str, dict]) ->
             continue
         backup_id = pick.get("emergency_pool_player_id")
         backup = pool_by_id.get(str(backup_id)) if backup_id else None
-        if not backup or str(backup.get("availability_status") or "HEALTHY").upper() == "OUT":
+        if (
+            not backup
+            or str(backup.get("availability_status") or "HEALTHY").upper() == "OUT"
+            or not bool(backup.get("schedule_eligible", True))
+        ):
             needs.append(pos)
     return [pos for pos in POSITIONS if pos in needs]
 

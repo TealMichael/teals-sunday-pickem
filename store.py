@@ -293,7 +293,7 @@ class SupabaseStore:
             return list(cached)
         query = (
             self._table("player_pool")
-            .select("id,week_id,position,slot_rank,player_name,team_abbr,opponent_abbr,kickoff_at,is_visible,availability_status")
+            .select("id,week_id,position,slot_rank,player_name,team_abbr,opponent_abbr,kickoff_at,is_visible,availability_status,schedule_eligible,schedule_note")
             .eq("week_id", week_id)
         )
         if visible_only:
@@ -422,6 +422,8 @@ class SupabaseStore:
             raise StoreError("That player is not available for this position.")
         if safe_status(starter.get("availability_status")) == "OUT":
             raise StoreError("That player is OUT. Choose someone else.")
+        if not bool(starter.get("schedule_eligible", True)):
+            raise StoreError("That player's game is no longer eligible for Sunday Pick'em.")
 
         emergency = None
         if emergency_pool_player_id:
@@ -432,6 +434,8 @@ class SupabaseStore:
                 raise StoreError("Your emergency backup must be a different player.")
             if safe_status(emergency.get("availability_status")) == "OUT":
                 raise StoreError("That emergency backup is OUT. Choose someone else.")
+            if not bool(emergency.get("schedule_eligible", True)):
+                raise StoreError("That emergency backup's game is no longer eligible for Sunday Pick'em.")
 
         if lineup_id:
             resolved_lineup_id = str(lineup_id)
@@ -704,7 +708,15 @@ class SupabaseStore:
             pos_rows = sorted([r for r in pool if r.get("position") == position], key=lambda r: int(r.get("slot_rank") or 999))
             visible_out = [r for r in pos_rows if r.get("is_visible") and r.get("availability_status") == "OUT"]
             for out_row in visible_out:
-                replacement = next((r for r in pos_rows if not r.get("is_visible") and r.get("availability_status") != "OUT"), None)
+                replacement = next(
+                    (
+                        r for r in pos_rows
+                        if not r.get("is_visible")
+                        and r.get("availability_status") != "OUT"
+                        and bool(r.get("schedule_eligible", True))
+                    ),
+                    None,
+                )
                 if not replacement:
                     raise StoreError(f"No healthy hidden replacement remains for {position}.")
 

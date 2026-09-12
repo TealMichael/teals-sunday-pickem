@@ -1,0 +1,15 @@
+Teal's Sunday Pick'em v1.0.7-hotfix7.2 — Final Freeze Validation
+
+Exact source tree:
+- pytest: 241 passed
+- Python compileall: PASS
+- release_guard.py: PASS
+- TODO/FIXME/HACK/XXX runtime scan: clear
+- localhost/127.0.0.1 scan: clear
+- protected-file hash comparison against Hotfix 7.1: unchanged for scoring,
+  live NFL sync/sources, automation recovery, auth/security, clock broadcaster,
+  AWTRIX script, GitHub workflows, Streamlit config, and app shell.
+
+Only Sunday-relevant defects found in the final audit were changed.
+The known end-of-season co-champion ranking/tiebreak mismatch is deliberately
+deferred because it cannot affect Week 1.
