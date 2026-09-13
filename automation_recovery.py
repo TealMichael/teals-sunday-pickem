@@ -9,7 +9,7 @@ from nfl_sync import ensure_week_shell_from_scoreboard, publish_week_pool, recon
 from weekly import parse_timestamp
 
 UTC = timezone.utc
-AUTOMATION_RECOVERY_SCHEMA_VERSION = 2
+AUTOMATION_RECOVERY_SCHEMA_VERSION = 3
 
 # GitHub Actions remains the primary scheduler. These thresholds only activate
 # the Streamlit-server fallback after the scheduled job has had a small grace
@@ -17,6 +17,8 @@ AUTOMATION_RECOVERY_SCHEMA_VERSION = 2
 # windows rather than turning ordinary page loads into provider polling.
 PUBLISH_RECOVERY_GRACE_MINUTES = 10
 CRITICAL_REFRESH_GRACE_MINUTES = 2
+SUNDAY_MORNING_REFRESH_MINUTES = 60
+SUNDAY_MORNING_RECOVERY_HOURS_BEFORE_LOCK = 5
 # The scheduled Sunday worker intentionally runs at :07/:22/:37/:52 to avoid
 # GitHub's top-of-hour congestion. Do not make the first person opening the app
 # at exactly 1:00 PM synchronously fetch the entire live slate; give the 1:07
@@ -77,11 +79,21 @@ def recovery_action_due(store, week: dict[str, Any], *, now: datetime | None = N
     if not lock or not week.get("published_at"):
         return None
 
-    # Sunday pre-lock: once inside the final two hours, injury/status data should
-    # never depend solely on a delayed GitHub cron. The scheduled 15-minute job
-    # gets a two-minute grace period before an active app session may recover it.
-    if lock - timedelta(hours=2) <= now < lock:
-        due_after = LIVE_SCORE_REFRESH_MINUTES + CRITICAL_REFRESH_GRACE_MINUTES
+    # Sunday pre-lock recovery has two safety tiers. Starting five hours before
+    # the universal 1 PM ET lock (8 AM ET), an active player may rescue injury
+    # data that is more than roughly one hourly cycle stale. Inside the final
+    # two hours, the existing 15-minute protection takes over. GitHub remains
+    # primary in both windows; the fallback only acts after the shared freshness
+    # stamp and run history are both beyond the cadence + grace threshold.
+    morning_start = lock - timedelta(hours=SUNDAY_MORNING_RECOVERY_HOURS_BEFORE_LOCK)
+    critical_start = lock - timedelta(hours=2)
+    if morning_start <= now < lock:
+        cadence_minutes = (
+            SUNDAY_MORNING_REFRESH_MINUTES
+            if now < critical_start
+            else LIVE_SCORE_REFRESH_MINUTES
+        )
+        due_after = cadence_minutes + CRITICAL_REFRESH_GRACE_MINUTES
         # Fast path: the week row is already loaded for the page. Avoid another
         # Supabase round trip on normal fresh page views. Only inspect run history
         # once the shared freshness stamp itself looks overdue.
