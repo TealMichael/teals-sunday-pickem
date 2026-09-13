@@ -9,7 +9,7 @@ from nfl_sync import ensure_week_shell_from_scoreboard, publish_week_pool, recon
 from weekly import parse_timestamp
 
 UTC = timezone.utc
-AUTOMATION_RECOVERY_SCHEMA_VERSION = 3
+AUTOMATION_RECOVERY_SCHEMA_VERSION = 4
 
 # GitHub Actions remains the primary scheduler. These thresholds only activate
 # the Streamlit-server fallback after the scheduled job has had a small grace
@@ -18,6 +18,7 @@ AUTOMATION_RECOVERY_SCHEMA_VERSION = 3
 PUBLISH_RECOVERY_GRACE_MINUTES = 10
 CRITICAL_REFRESH_GRACE_MINUTES = 2
 SUNDAY_MORNING_REFRESH_MINUTES = 60
+SUNDAY_CRITICAL_INJURY_REFRESH_MINUTES = 15
 SUNDAY_MORNING_RECOVERY_HOURS_BEFORE_LOCK = 5
 # The scheduled Sunday worker intentionally runs at :07/:22/:37/:52 to avoid
 # GitHub's top-of-hour congestion. Do not make the first person opening the app
@@ -91,7 +92,7 @@ def recovery_action_due(store, week: dict[str, Any], *, now: datetime | None = N
         cadence_minutes = (
             SUNDAY_MORNING_REFRESH_MINUTES
             if now < critical_start
-            else LIVE_SCORE_REFRESH_MINUTES
+            else SUNDAY_CRITICAL_INJURY_REFRESH_MINUTES
         )
         due_after = cadence_minutes + CRITICAL_REFRESH_GRACE_MINUTES
         # Fast path: the week row is already loaded for the page. Avoid another

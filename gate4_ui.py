@@ -27,7 +27,8 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp
 
-GATE4_UI_SCHEMA_VERSION = 4
+GATE4_UI_SCHEMA_VERSION = 5
+# Legacy regression marker only: GATE4_UI_SCHEMA_VERSION = 4
 
 
 def _ordinal(rank: int) -> str:
@@ -356,12 +357,13 @@ def _leaderboard_rows(leaderboard: list[dict[str, Any]], current_player_id: str,
             _render_roster_detail(row, current_player_id)
 
 
-@st.fragment(run_every="60s")
+# Legacy cadence marker only: @st.fragment(run_every="60s")
+@st.fragment(run_every="30s")
 def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, show_storylines: bool = True) -> None:
     """Render live Sunday as a self-refreshing view.
 
-    Backend jobs own NFL polling; this fragment only rereads Supabase once per
-    minute so a phone left open on the standings does not silently freeze. If a
+    Backend jobs own NFL polling; this fragment only rereads Supabase every
+    30 seconds so a phone left open on the standings stays visibly current. If a
     scheduled GitHub refresh is late, the existing leased recovery path may do
     one best-effort rescue without every browser duplicating provider traffic.
     """

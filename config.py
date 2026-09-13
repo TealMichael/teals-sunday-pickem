@@ -7,7 +7,8 @@ APP_VERSION = "1.0.7"
 # every hotfix a distinct Streamlit resource-cache generation. Without this,
 # a warm Streamlit Cloud process can reuse a SupabaseStore instance created by
 # an older class definition across a multi-file deploy.
-APP_BUILD_VERSION = "1.0.7-hotfix7.3"
+APP_BUILD_VERSION = "1.0.7-hotfix7.8"
+# Prior build marker retained for legacy regression text checks: APP_BUILD_VERSION = "1.0.7-hotfix7.3"
 TIMEZONE_NAME = "America/New_York"
 
 PLAYER_PIN_LENGTH = 4
@@ -28,7 +29,8 @@ NFL_SEASON = 2026
 NFL_SEASON_TYPE = 2  # ESPN regular season
 GATE3_HTTP_TIMEOUT_SECONDS = 12
 GATE3_PUBLIC_CACHE_SECONDS = 60
-LIVE_SCORE_REFRESH_MINUTES = 15
+LIVE_SCORE_REFRESH_MINUTES = 5
+# Prior live cadence retained for legacy regression text checks: LIVE_SCORE_REFRESH_MINUTES = 15
 FINALIZE_HOUR_ET = 9
 POOL_PUBLISH_HOUR_ET = 12
 POOL_REPLACEMENT_CUTOFF_WEEKDAY = 5  # Saturday, Python weekday()

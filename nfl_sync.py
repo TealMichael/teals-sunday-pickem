@@ -15,7 +15,7 @@ from weekly import POSITIONS, parse_timestamp
 
 UTC = timezone.utc
 ET = ZoneInfo(TIMEZONE_NAME)
-NFL_SYNC_SCHEMA_VERSION = 2
+NFL_SYNC_SCHEMA_VERSION = 3
 
 
 class Gate3Error(RuntimeError):
@@ -735,7 +735,7 @@ def run_auto(store, *, now: datetime | None = None) -> dict[str, Any]:
                     actions.append(f"injury_failed:{exc}")
 
         # Sunday 1 PM through roughly 1 AM Monday: live scoring is due every
-        # 15 minutes. The workflow itself runs on the same Sunday cadence, while
+        # five minutes. The workflow itself runs on the same Sunday cadence, while
         # this guard prevents an extra manual auto-cycle from over-fetching.
         scoring_lock = parse_timestamp(week.get("locks_at"))
         if scoring_lock and scoring_lock <= now <= scoring_lock + timedelta(hours=12) and week.get("published_at"):

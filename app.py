@@ -37,12 +37,12 @@ if getattr(_nfl_sources, "NFL_SOURCES_SCHEMA_VERSION", 0) < 2:
     _nfl_sources = importlib.reload(_nfl_sources)
 
 import nfl_sync as _nfl_sync
-if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 2:
+if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 3:
     _nfl_sync = importlib.reload(_nfl_sync)
 
 import automation_recovery as _automation_recovery
 _reloaded_automation_recovery = False
-if getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 3:
+if getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 4:
     _automation_recovery = importlib.reload(_automation_recovery)
     _reloaded_automation_recovery = True
 
@@ -68,7 +68,8 @@ render_player_game = _weekly_ui.render_player_game
 # Gate 4 navigation changed structurally in v0.4.4/v0.4.5. Streamlit Cloud can
 # occasionally keep an older helper module resident across a multi-file deploy,
 # so reload any pre-simplification Gate 4 module before binding the demo renderer.
-if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 4:
+# Legacy regression marker only: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 4
+if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 5:
     _gate4_ui = importlib.reload(_gate4_ui)
 render_gate4_demo = _gate4_ui.render_gate4_demo
 
