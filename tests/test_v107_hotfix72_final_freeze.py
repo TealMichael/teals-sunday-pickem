@@ -45,7 +45,7 @@ def test_database_guard_allows_only_backup_clear_for_preserved_hidden_starter():
 def test_final_freeze_does_not_touch_protected_sunday_surfaces():
     config = (ROOT / "config.py").read_text("utf-8")
     assert 'APP_VERSION = "1.0.7"' in config
-    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.2"' in config
+    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.3"' in config
     # Hotfix 7.2 deliberately leaves scoring, clock client, and workflows at
     # their already-tested contracts.
     scoring = (ROOT / "nfl_scoring.py").read_text("utf-8")

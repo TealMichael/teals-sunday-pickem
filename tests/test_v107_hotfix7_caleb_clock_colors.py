@@ -299,7 +299,7 @@ def test_test_clock_demonstrates_team_fragments_caleb_theme_and_worker_refreshes
 def test_hotfix7_has_distinct_warm_deploy_generation():
     config = (ROOT / "config.py").read_text("utf-8")
     assert 'APP_VERSION = "1.0.7"' in config
-    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.2"' in config
+    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.3"' in config
 
 
 def test_hotfix7_does_not_enter_scoring_or_lineup_engines():
