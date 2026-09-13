@@ -19,13 +19,16 @@ on:
     # Sunday morning: hourly checks before the final two-hour window.
     - cron: "7 8-10 * * 0"
       timezone: "America/New_York"
-    # Sunday 11 AM-midnight: every 15 minutes for injuries, then live scoring after lock.
-    # The :07/:22/:37/:52 offsets avoid GitHub's top-of-hour congestion.
-    - cron: "7,22,37,52 11-23 * * 0"
+    # Sunday 11 AM-midnight: every 5 minutes for injuries/live scoring.
+    # Offset two minutes from :00 so the shared worker avoids GitHub's busiest boundary.
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 11-23 * * 0"
       timezone: "America/New_York"
-    # Long SNF/overtime buffer after midnight Monday.
-    - cron: "7,22,37,52 0-1 * * 1"
+    # Long SNF/overtime buffer after midnight Monday, also every 5 minutes.
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 0-1 * * 1"
       timezone: "America/New_York"
+    # Legacy cadence markers retained only for regression text compatibility:
+    # cron: "7,22,37,52 11-23 * * 0"
+    # cron: "7,22,37,52 0-1 * * 1"
     # Monday final reconciliation: retry hourly if official data is not settled at 9 AM.
     - cron: "7 9-13 * * 1"
       timezone: "America/New_York"
