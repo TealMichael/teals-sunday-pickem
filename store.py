@@ -11,7 +11,7 @@ from weekly import POSITIONS, parse_timestamp, safe_status
 
 UTC = timezone.utc
 PICKEM_SCHEMA = "pickem"
-STORE_SCHEMA_VERSION = 3
+STORE_SCHEMA_VERSION = 4
 
 
 class StoreError(RuntimeError):

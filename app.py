@@ -28,7 +28,11 @@ if getattr(_weekly_core, "WEEKLY_LOGIC_SCHEMA_VERSION", 0) < 3:
     _weekly_core = importlib.reload(_weekly_core)
 
 import store as _store
-if getattr(_store, "STORE_SCHEMA_VERSION", 0) < 3:
+if (
+    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 4
+    or not hasattr(_store.SupabaseStore, "get_app_meta")
+    or not hasattr(_store.SupabaseStore, "set_app_meta")
+):
     _store = importlib.reload(_store)
 SupabaseStore = _store.SupabaseStore
 
@@ -74,7 +78,7 @@ if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION"
 render_gate4_demo = _gate4_ui.render_gate4_demo
 
 # Legacy regression marker: GATE5_UI_SCHEMA_VERSION", 0) < 4
-if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 5:
+if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 6:
     _gate5_ui = importlib.reload(_gate5_ui)
 render_commissioner_dashboard = _gate5_ui.render_commissioner_dashboard
 

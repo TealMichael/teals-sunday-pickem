@@ -26,7 +26,7 @@ from gate6_ui import render_launch_readiness
 from newsletter import build_tuesday_newsletter, load_newsletter_data, sms_segment_estimate
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 5
+GATE5_UI_SCHEMA_VERSION = 6
 
 
 def _status_label(row: dict[str, Any]) -> str:
@@ -906,7 +906,17 @@ def _render_newsletter(store, current_week: dict[str, Any]) -> None:
     else:
         st.warning("The next Pick'em week is not open yet. You can preview the recap now, but send it after the new week becomes active.")
 
-    meta = store.get_app_meta("newsletter_settings") or {}
+    # The newsletter should still render if a warm Streamlit worker is briefly
+    # holding an older Store instance or if app_meta has a transient read issue.
+    # Persisted settings are convenience only; finalized recap data is the source
+    # of truth and must never be hidden by a settings lookup failure.
+    meta = {}
+    getter = getattr(store, "get_app_meta", None)
+    if callable(getter):
+        try:
+            meta = getter("newsletter_settings") or {}
+        except Exception:
+            meta = {}
     saved = meta.get("value") if isinstance(meta.get("value"), dict) else {}
     saved_url = str((saved or {}).get("app_url") or "").strip()
     detected_url = _detected_app_url()
@@ -926,8 +936,15 @@ def _render_newsletter(store, current_week: dict[str, Any]) -> None:
             if not lineup_url.startswith(("https://", "http://")):
                 st.error("Enter the full app link beginning with https://")
             else:
-                store.set_app_meta("newsletter_settings", {"app_url": lineup_url})
-                st.success("Lineup link saved for future Tuesdays.")
+                setter = getattr(store, "set_app_meta", None)
+                if not callable(setter):
+                    st.error("The lineup link could not be saved on this app worker yet. Refresh once and try again.")
+                else:
+                    try:
+                        setter("newsletter_settings", {"app_url": lineup_url})
+                        st.success("Lineup link saved for future Tuesdays.")
+                    except Exception:
+                        st.error("The lineup link could not be saved right now. The newsletter preview is still safe to use.")
     with regen_col:
         regenerate = st.button("Regenerate from data", use_container_width=True, key="newsletter_regenerate")
 

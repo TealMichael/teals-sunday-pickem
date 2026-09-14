@@ -23,16 +23,16 @@ def test_hotfix79_build_and_commissioner_newsletter_contract():
     app = (ROOT / "app.py").read_text("utf-8")
     store = (ROOT / "store.py").read_text("utf-8")
 
-    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.9"' in config
+    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.9.1"' in config
     assert 'commissioner_tools = ["Week", "Newsletter", "Players", "Corrections", "Clock", "Diagnostics"]' in ui
-    assert 'GATE5_UI_SCHEMA_VERSION = 5' in ui
+    assert 'GATE5_UI_SCHEMA_VERSION = 6' in ui
     assert 'elif tool == "Newsletter":' in ui
     assert '_render_newsletter(store, week)' in ui
-    assert 'getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 5' in app
-    assert 'STORE_SCHEMA_VERSION = 3' in store
+    assert 'getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 6' in app
+    assert 'STORE_SCHEMA_VERSION = 4' in store
     assert 'def get_app_meta(' in store
     assert 'def set_app_meta(' in store
-    assert 'getattr(_store, "STORE_SCHEMA_VERSION", 0) < 3' in app
+    assert 'getattr(_store, "STORE_SCHEMA_VERSION", 0) < 4' in app
 
 
 def test_perfect_lineup_uses_only_visible_25_and_manual_override():
