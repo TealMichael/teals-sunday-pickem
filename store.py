@@ -11,7 +11,7 @@ from weekly import POSITIONS, parse_timestamp, safe_status
 
 UTC = timezone.utc
 PICKEM_SCHEMA = "pickem"
-STORE_SCHEMA_VERSION = 2
+STORE_SCHEMA_VERSION = 3
 
 
 class StoreError(RuntimeError):
@@ -108,6 +108,19 @@ class SupabaseStore:
             return True
         except Exception:
             return False
+
+    def get_app_meta(self, key: str) -> dict[str, Any] | None:
+        """Read one small Commissioner/app setting from pickem.app_meta."""
+        res = self._table("app_meta").select("key,value,updated_at").eq("key", str(key)).limit(1).execute()
+        return res.data[0] if res.data else None
+
+    def set_app_meta(self, key: str, value: dict[str, Any]) -> dict[str, Any]:
+        """Persist one small Commissioner/app setting without a schema migration."""
+        payload = {"key": str(key), "value": dict(value or {})}
+        res = self._table("app_meta").upsert(payload, on_conflict="key").execute()
+        if not res.data:
+            raise StoreError("Could not save app setting. Try again.")
+        return res.data[0]
 
     # -------------------------
     # Gate 1 player/auth data

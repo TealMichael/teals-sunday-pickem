@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -21,9 +23,10 @@ from gate5 import (
 )
 from weekly import POSITIONS, et_label, parse_timestamp
 from gate6_ui import render_launch_readiness
+from newsletter import build_tuesday_newsletter, load_newsletter_data, sms_segment_estimate
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 4
+GATE5_UI_SCHEMA_VERSION = 5
 
 
 def _status_label(row: dict[str, Any]) -> str:
@@ -810,6 +813,156 @@ def _render_diagnostics(store, week: dict[str, Any]) -> None:
 
     with st.expander("Legacy build diagnostics & demos", expanded=False):
         _render_legacy_diagnostics(store, week)
+
+
+def _detected_app_url() -> str:
+    """Best-effort public app URL from the current Streamlit request."""
+    try:
+        headers = st.context.headers
+        host = str(headers.get("X-Forwarded-Host") or headers.get("Host") or "").strip()
+        proto = str(headers.get("X-Forwarded-Proto") or "https").strip().split(",")[0]
+        if host:
+            return f"{proto}://{host}".rstrip("/")
+    except Exception:
+        pass
+    return ""
+
+
+def _copy_newsletter_button(text: str, week_id: str) -> None:
+    payload = json.dumps(str(text))
+    safe_id = "".join(ch for ch in str(week_id) if ch.isalnum())[:32] or "newsletter"
+    st.components.v1.html(
+        f"""
+<div class="copy-wrap">
+  <button id="copy-{safe_id}" type="button">📋 Copy Tuesday newsletter</button>
+  <span id="copy-status-{safe_id}" aria-live="polite"></span>
+</div>
+<style>
+  :root {{ color-scheme:light; }}
+  html,body {{ margin:0; padding:0; background:transparent; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+  .copy-wrap {{ display:flex; align-items:center; gap:10px; width:100%; }}
+  button {{ flex:1; min-height:44px; border:1px solid #0F766E; border-radius:12px; background:#0F766E; color:#fff; font-size:14px; font-weight:800; cursor:pointer; }}
+  span {{ color:#155E56; font-size:12px; font-weight:750; white-space:nowrap; }}
+</style>
+<script>
+const text = {payload};
+const button = document.getElementById("copy-{safe_id}");
+const status = document.getElementById("copy-status-{safe_id}");
+async function copyText() {{
+  let copied = false;
+  try {{ await navigator.clipboard.writeText(text); copied = true; }} catch (err) {{}}
+  if (!copied) {{
+    const area = document.createElement("textarea");
+    area.value = text; area.style.position = "fixed"; area.style.opacity = "0";
+    document.body.appendChild(area); area.focus(); area.select();
+    try {{ copied = document.execCommand("copy"); }} catch (err) {{ copied = false; }}
+    document.body.removeChild(area);
+  }}
+  status.textContent = copied ? "Copied!" : "Select the text below to copy.";
+  if (copied) setTimeout(() => status.textContent = "", 1800);
+}}
+button.addEventListener("click", copyText);
+</script>
+        """,
+        height=50,
+    )
+
+
+def _newsletter_source_fingerprint(data: dict[str, Any], lineup_url: str) -> str:
+    final_results = [
+        (
+            str(row.get("player_id") or ""),
+            int(row.get("finish_rank") or 0),
+            float(row.get("weekly_score") or 0),
+        )
+        for row in data.get("final_results") or []
+    ]
+    perfect = [
+        (str(row.get("position") or ""), str(row.get("id") or ""), float(row.get("points") or 0))
+        for row in (data.get("perfect") or {}).get("players") or []
+    ]
+    raw = repr((data.get("final_week", {}).get("id"), final_results, perfect, str(lineup_url or ""))).encode("utf-8")
+    return hashlib.sha1(raw).hexdigest()
+
+
+def _render_newsletter(store, current_week: dict[str, Any]) -> None:
+    st.markdown("#### Tuesday Text Newsletter")
+    st.caption("Builds a short copy/paste message from finalized Pick'em data. No phone numbers are stored and nothing is sent automatically.")
+
+    data = load_newsletter_data(store, current_week)
+    if not data:
+        st.info("No finalized weekly results are available yet. This tool will populate after Monday finalization.")
+        return
+
+    final_week = data["final_week"]
+    next_week = data.get("next_week")
+    st.markdown(f"**Week {int(final_week.get('nfl_week') or 0)} final recap**")
+    if next_week:
+        published = bool(next_week.get("published_at"))
+        st.caption(
+            f"Next lineup: Week {int(next_week.get('nfl_week') or 0)}"
+            + (" is open." if published else " is not published yet — wait until lineups go live before sending.")
+        )
+    else:
+        st.warning("The next Pick'em week is not open yet. You can preview the recap now, but send it after the new week becomes active.")
+
+    meta = store.get_app_meta("newsletter_settings") or {}
+    saved = meta.get("value") if isinstance(meta.get("value"), dict) else {}
+    saved_url = str((saved or {}).get("app_url") or "").strip()
+    detected_url = _detected_app_url()
+    if "newsletter_lineup_url" not in st.session_state:
+        st.session_state["newsletter_lineup_url"] = saved_url or detected_url
+
+    lineup_url = st.text_input(
+        "Lineup link",
+        key="newsletter_lineup_url",
+        placeholder="https://your-pickem-app.streamlit.app",
+        help="This is the link added to the end of the Tuesday text. Save it once and the newsletter will reuse it every week.",
+    ).strip()
+
+    save_col, regen_col = st.columns(2)
+    with save_col:
+        if st.button("Save lineup link", use_container_width=True, key="newsletter_save_link"):
+            if not lineup_url.startswith(("https://", "http://")):
+                st.error("Enter the full app link beginning with https://")
+            else:
+                store.set_app_meta("newsletter_settings", {"app_url": lineup_url})
+                st.success("Lineup link saved for future Tuesdays.")
+    with regen_col:
+        regenerate = st.button("Regenerate from data", use_container_width=True, key="newsletter_regenerate")
+
+    generated = build_tuesday_newsletter(
+        final_week=final_week,
+        final_results=data["final_results"],
+        perfect=data["perfect"],
+        season_results=data["season_results"],
+        next_week=next_week,
+        lineup_url=lineup_url,
+    )
+    fingerprint = _newsletter_source_fingerprint(data, lineup_url)
+    if regenerate or st.session_state.get("newsletter_source_fingerprint") != fingerprint:
+        st.session_state["newsletter_text"] = generated
+        st.session_state["newsletter_source_fingerprint"] = fingerprint
+
+    newsletter_text = st.text_area(
+        "Newsletter",
+        key="newsletter_text",
+        height=230,
+        help="Edit anything you want before copying. Regenerate from data restores the automatic version.",
+    )
+    _copy_newsletter_button(newsletter_text, str(final_week.get("id") or final_week.get("nfl_week") or "week"))
+
+    chars = len(newsletter_text)
+    segments = sms_segment_estimate(newsletter_text)
+    st.caption(f"{chars} characters • approximately {segments} SMS segment{'s' if segments != 1 else ''} if sent as carrier SMS (iMessage/RCS may differ).")
+    if chars > 520:
+        st.warning("This is getting long for a text newsletter. Consider trimming nicknames or an optional line before sending.")
+
+    perfect = data.get("perfect") or {}
+    if not perfect.get("complete"):
+        st.warning("Perfect 5 could not be fully calculated from the archived visible player pool. Final standings are still valid.")
+
+
 def render_commissioner_dashboard(store, *, pin_pepper: str) -> None:
     st.markdown("### Commissioner")
     st.caption("Manage the current Sunday, players, corrections, clock broadcast, and recovery tools.")
@@ -828,7 +981,8 @@ def render_commissioner_dashboard(store, *, pin_pepper: str) -> None:
         + (f" • {week.get('data_message')}" if week.get("data_message") else "")
     )
 
-    commissioner_tools = ["Week", "Players", "Corrections", "Clock", "Diagnostics"]
+    # Legacy regression marker: commissioner_tools = ["Week", "Players", "Corrections", "Clock", "Diagnostics"]
+    commissioner_tools = ["Week", "Newsletter", "Players", "Corrections", "Clock", "Diagnostics"]
     if st.session_state.get("g5_tool") not in commissioner_tools:
         st.session_state["g5_tool"] = "Week"
     tool = st.segmented_control(
@@ -847,6 +1001,8 @@ def render_commissioner_dashboard(store, *, pin_pepper: str) -> None:
 
     if tool == "Week":
         _render_week_overview(store, week)
+    elif tool == "Newsletter":
+        _render_newsletter(store, week)
     elif tool == "Players":
         _render_players(store, week, pin_pepper)
     elif tool == "Corrections":

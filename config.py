@@ -7,8 +7,10 @@ APP_VERSION = "1.0.7"
 # every hotfix a distinct Streamlit resource-cache generation. Without this,
 # a warm Streamlit Cloud process can reuse a SupabaseStore instance created by
 # an older class definition across a multi-file deploy.
-APP_BUILD_VERSION = "1.0.7-hotfix7.8"
-# Prior build marker retained for legacy regression text checks: APP_BUILD_VERSION = "1.0.7-hotfix7.3"
+APP_BUILD_VERSION = "1.0.7-hotfix7.9"
+# Prior build markers retained for legacy regression text checks:
+# APP_BUILD_VERSION = "1.0.7-hotfix7.8"
+# APP_BUILD_VERSION = "1.0.7-hotfix7.3"
 TIMEZONE_NAME = "America/New_York"
 
 PLAYER_PIN_LENGTH = 4
