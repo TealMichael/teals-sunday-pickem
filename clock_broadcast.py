@@ -6,11 +6,13 @@ import hashlib
 import secrets
 from typing import Any, Mapping
 
+from config import LIVE_GAME_STALE_MINUTES
 from gate4 import add_zero_point_players, build_season_standings, build_storylines, build_weekly_leaderboard
+from weekly import parse_timestamp
 
 UTC = timezone.utc
 ET = ZoneInfo("America/New_York")
-CLOCK_SNAPSHOT_VERSION = 3
+CLOCK_SNAPSHOT_VERSION = 4
 CLOCK_MESSAGE_MAX = 420
 MANUAL_MESSAGE_MAX = 240
 
@@ -174,6 +176,14 @@ def _season_text(standings: list[dict[str, Any]], nfl_week: int) -> str:
     return _plain_from_rich(_season_rich(standings, nfl_week))
 
 
+def _game_state_fresh(game: Mapping[str, Any], *, now: datetime | None = None) -> bool:
+    stamp = parse_timestamp(game.get("provider_updated_at"))
+    if not stamp:
+        return True
+    current = (now or datetime.now(UTC)).astimezone(UTC)
+    return (current - stamp).total_seconds() < LIVE_GAME_STALE_MINUTES * 60
+
+
 def _live_games_rich(games: list[dict[str, Any]]) -> list[dict[str, str]]:
     live = [row for row in games if str(row.get("game_status") or "").upper() == "LIVE"]
     live.sort(key=lambda row: str(row.get("kickoff_at") or ""))
@@ -187,8 +197,9 @@ def _live_games_rich(games: list[dict[str, Any]]) -> list[dict[str, str]]:
         home_score = game.get("home_score") if game.get("home_score") is not None else 0
         period = game.get("period")
         clock = str(game.get("game_clock") or "").strip()
-        suffix = f" • Q{period}" if period else " • LIVE"
-        if clock:
+        fresh_state = _game_state_fresh(game)
+        suffix = f" • Q{period}" if (fresh_state and period) else " • LIVE"
+        if fresh_state and clock:
             suffix += f" {clock}"
         parts.extend([
             (away, _team_color(away)),
@@ -216,8 +227,9 @@ def _live_games_text(games: list[dict[str, Any]]) -> str:
         home_score = game.get("home_score") if game.get("home_score") is not None else 0
         period = game.get("period")
         clock = str(game.get("game_clock") or "").strip()
-        suffix = f" Q{period}" if period else " LIVE"
-        if clock:
+        fresh_state = _game_state_fresh(game)
+        suffix = f" Q{period}" if (fresh_state and period) else " LIVE"
+        if fresh_state and clock:
             suffix += f" {clock}"
         bits.append(f"{away} {away_score} {home} {home_score}{suffix}")
     return _clean("NFL LIVE • " + " • ".join(bits))

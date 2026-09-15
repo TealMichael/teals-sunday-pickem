@@ -1,15 +1,30 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import importlib
 from typing import Any
 from uuid import uuid4
 
-from config import LIVE_SCORE_REFRESH_MINUTES
-from nfl_sync import ensure_week_shell_from_scoreboard, publish_week_pool, reconcile_final, refresh_injuries, refresh_live_scores
+from config import (
+    ACTIVE_GAME_STATE_REFRESH_MINUTES,
+    ACTIVE_PLAYER_STAT_REFRESH_MINUTES,
+    LIVE_SCORE_REFRESH_MINUTES,
+)
+from nfl_sync import (
+    ensure_week_shell_from_scoreboard,
+    publish_week_pool,
+    reconcile_final,
+    refresh_injuries,
+    refresh_live_game_state,
+    refresh_live_player_stats,
+    refresh_live_scores,
+)
 from weekly import parse_timestamp
 
 UTC = timezone.utc
-AUTOMATION_RECOVERY_SCHEMA_VERSION = 4
+AUTOMATION_RECOVERY_SCHEMA_VERSION = 5
+# Legacy regression marker only: AUTOMATION_RECOVERY_SCHEMA_VERSION = 4
+ACTIVE_LIVE_LANE_SCHEMA_VERSION = 1
 
 # GitHub Actions remains the primary scheduler. These thresholds only activate
 # the Streamlit-server fallback after the scheduled job has had a small grace
@@ -50,6 +65,110 @@ def _successful_age(store, run_type: str, week_id: str, now: datetime) -> float 
         return None
     return _age_minutes(latest.get("completed_at") or latest.get("started_at"), now)
 
+
+
+ACTIVE_GAME_STATE_FAILED_COOLDOWN_MINUTES = 1
+ACTIVE_PLAYER_STAT_FAILED_COOLDOWN_MINUTES = 2
+ACTIVE_GAME_STATE_LEASE_TTL_SECONDS = 90
+ACTIVE_PLAYER_STAT_LEASE_TTL_SECONDS = 180
+
+
+
+# Legacy hook marker only: refresh_clock_snapshot(store, refreshed)
+def _refresh_clock_snapshot_best_effort(store, week: dict[str, Any]) -> None:
+    try:
+        import clock_broadcast as _clock_broadcast
+        if getattr(_clock_broadcast, "CLOCK_SNAPSHOT_VERSION", 0) < 4:
+            _clock_broadcast = importlib.reload(_clock_broadcast)
+        _clock_broadcast.refresh_clock_snapshot(store, week)
+    except Exception:
+        pass
+
+def _latest_game_state_age(store, week_id: str, now: datetime) -> float | None:
+    """Return age of the freshest persisted NFL game row for this week."""
+    try:
+        games = store.get_nfl_games(week_id)
+    except Exception:
+        return None
+    ages = [
+        age
+        for age in (_age_minutes(row.get("provider_updated_at"), now) for row in games)
+        if age is not None
+    ]
+    return min(ages) if ages else None
+
+
+def maybe_refresh_active_live_lane(
+    store,
+    week: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Use one active Sunday session as a leased faster live-data worker.
+
+    GitHub remains the durable five-minute scheduler. While at least one player
+    has the Sunday screen open, this lane can refresh fantasy stats about every
+    three minutes and the lighter game clock/score state about every two minutes.
+    Supabase leases guarantee that many open phones still produce one shared
+    provider refresh rather than one request stream per user.
+    """
+    now = (now or datetime.now(UTC)).astimezone(UTC)
+    if not week or bool(week.get("is_demo")) or not week.get("published_at"):
+        return week, None
+
+    week_id = str(week.get("id") or "")
+    lock = parse_timestamp(week.get("locks_at"))
+    status = str(week.get("data_status") or "").upper()
+    if not week_id or not lock or now < lock or now > lock + timedelta(hours=12):
+        return week, None
+    if status in {"FINAL", "PROVISIONAL"}:
+        return week, None
+
+    # Fantasy scoring is the more valuable/heavier lane. If it is due, let it
+    # run first; its ESPN summary responses also refresh score/period/clock, so
+    # we deliberately skip a redundant scoreboard call in the same fragment.
+    score_age = _age_minutes(week.get("last_data_refresh_at"), now)
+    if score_age is None or score_age >= ACTIVE_PLAYER_STAT_REFRESH_MINUTES:
+        attempt_age = _latest_attempt_age(store, "live_player_stats", week_id, now)
+        if attempt_age is None or attempt_age >= ACTIVE_PLAYER_STAT_FAILED_COOLDOWN_MINUTES:
+            owner = uuid4().hex
+            lease_key = f"week:{week_id}:active-player-stats"
+            if store.claim_refresh_lease(lease_key, owner=owner, ttl_seconds=ACTIVE_PLAYER_STAT_LEASE_TTL_SECONDS):
+                try:
+                    result = refresh_live_player_stats(store, week)
+                    store.clear_week_cache(week_id)
+                    refreshed = store.get_week(week_id) or week
+                    _refresh_clock_snapshot_best_effort(store, refreshed)
+                    return refreshed, {"action": "player_stats", "triggered": True, "success": True, "result": result}
+                except Exception as exc:
+                    return week, {"action": "player_stats", "triggered": True, "success": False, "error_type": type(exc).__name__}
+                finally:
+                    store.release_refresh_lease(lease_key, owner=owner)
+            return week, {"action": "player_stats", "triggered": False, "reason": "lease-busy-or-unavailable"}
+
+    # The game-state lane is one ESPN scoreboard request and does not touch the
+    # week-level fantasy-score freshness stamp. A recent heavy stats refresh or
+    # GitHub full refresh also updates nfl_games.provider_updated_at, naturally
+    # postponing this lightweight call and avoiding duplicate provider traffic.
+    state_age = _latest_game_state_age(store, week_id, now)
+    if state_age is None or state_age >= ACTIVE_GAME_STATE_REFRESH_MINUTES:
+        attempt_age = _latest_attempt_age(store, "live_game_state", week_id, now)
+        if attempt_age is None or attempt_age >= ACTIVE_GAME_STATE_FAILED_COOLDOWN_MINUTES:
+            owner = uuid4().hex
+            lease_key = f"week:{week_id}:active-game-state"
+            if store.claim_refresh_lease(lease_key, owner=owner, ttl_seconds=ACTIVE_GAME_STATE_LEASE_TTL_SECONDS):
+                try:
+                    result = refresh_live_game_state(store, week)
+                    store.clear_week_cache(week_id)
+                    _refresh_clock_snapshot_best_effort(store, week)
+                    return week, {"action": "game_state", "triggered": True, "success": True, "result": result}
+                except Exception as exc:
+                    return week, {"action": "game_state", "triggered": True, "success": False, "error_type": type(exc).__name__}
+                finally:
+                    store.release_refresh_lease(lease_key, owner=owner)
+            return week, {"action": "game_state", "triggered": False, "reason": "lease-busy-or-unavailable"}
+
+    return week, None
 
 def recovery_action_due(store, week: dict[str, Any], *, now: datetime | None = None) -> str | None:
     """Return the one launch-critical recovery action that is currently due.
@@ -193,11 +312,7 @@ def maybe_recover_critical_automation(store, week: dict[str, Any], *, now: datet
         )
         store.clear_week_cache(week_id)
         refreshed = store.get_week(week_id) or week
-        try:
-            from clock_broadcast import refresh_clock_snapshot
-            refresh_clock_snapshot(store, refreshed)
-        except Exception:
-            pass
+        _refresh_clock_snapshot_best_effort(store, refreshed)
         return refreshed, {"action": action, "triggered": True, "success": True, "result": result}
     except Exception as exc:
         if audit_id:

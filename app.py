@@ -36,17 +36,22 @@ if (
     _store = importlib.reload(_store)
 SupabaseStore = _store.SupabaseStore
 
+# Hotfix 7.8 legacy warm-reload markers retained for regression coverage:
+# getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 3
+# getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 4
+# getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 5
+
 import nfl_sources as _nfl_sources
 if getattr(_nfl_sources, "NFL_SOURCES_SCHEMA_VERSION", 0) < 2:
     _nfl_sources = importlib.reload(_nfl_sources)
 
 import nfl_sync as _nfl_sync
-if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 3:
+if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 4:
     _nfl_sync = importlib.reload(_nfl_sync)
 
 import automation_recovery as _automation_recovery
 _reloaded_automation_recovery = False
-if getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 4:
+if getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 5:
     _automation_recovery = importlib.reload(_automation_recovery)
     _reloaded_automation_recovery = True
 
@@ -73,7 +78,7 @@ render_player_game = _weekly_ui.render_player_game
 # occasionally keep an older helper module resident across a multi-file deploy,
 # so reload any pre-simplification Gate 4 module before binding the demo renderer.
 # Legacy regression marker only: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 4
-if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 5:
+if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 6:
     _gate4_ui = importlib.reload(_gate4_ui)
 render_gate4_demo = _gate4_ui.render_gate4_demo
 

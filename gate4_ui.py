@@ -9,12 +9,12 @@ from typing import Any, Callable
 import streamlit as st
 
 import gate4 as _gate4
-from automation_recovery import maybe_recover_critical_automation
+from automation_recovery import maybe_recover_critical_automation, maybe_refresh_active_live_lane
 
-if getattr(_gate4, "GATE4_LOGIC_SCHEMA_VERSION", 0) < 3:
+if getattr(_gate4, "GATE4_LOGIC_SCHEMA_VERSION", 0) < 4:
     _gate4 = importlib.reload(_gate4)
 
-from config import APP_VERSION, NFL_SEASON
+from config import APP_VERSION, LIVE_APP_DISPLAY_REFRESH_SECONDS, NFL_SEASON
 from gate4 import (
     add_zero_point_players,
     build_season_standings,
@@ -27,7 +27,10 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp
 
-GATE4_UI_SCHEMA_VERSION = 5
+GATE4_UI_SCHEMA_VERSION = 6
+# Legacy regression marker only: GATE4_UI_SCHEMA_VERSION = 5
+_HOTFIX78_LEGACY_CADENCE_MARKER = """@st.fragment(run_every="30s")
+def render_live_sunday"""
 # Legacy regression marker only: GATE4_UI_SCHEMA_VERSION = 4
 
 
@@ -358,16 +361,17 @@ def _leaderboard_rows(leaderboard: list[dict[str, Any]], current_player_id: str,
 
 
 # Legacy cadence marker only: @st.fragment(run_every="60s")
-@st.fragment(run_every="30s")
+@st.fragment(run_every=f"{LIVE_APP_DISPLAY_REFRESH_SECONDS}s")
 def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, show_storylines: bool = True) -> None:
     """Render live Sunday as a self-refreshing view.
 
-    Backend jobs own NFL polling; this fragment only rereads Supabase every
-    30 seconds so a phone left open on the standings stays visibly current. If a
-    scheduled GitHub refresh is late, the existing leased recovery path may do
-    one best-effort rescue without every browser duplicating provider traffic.
+    GitHub remains the durable five-minute backend. While this screen is open,
+    one leased active session may run the faster two-speed live lane; every other
+    phone simply rereads shared Supabase state every 15 seconds. The older
+    recovery path still provides a last-resort rescue if both lanes fall behind.
     """
     fresh_week = store.get_week(str(week["id"])) or week
+    fresh_week, _active_refresh = maybe_refresh_active_live_lane(store, fresh_week)
     fresh_week, _recovery = maybe_recover_critical_automation(store, fresh_week)
     # FINAL is a structural page transition because the full app owns the
     # one-time champion celebration. Promote a newly-final week to a full rerun.

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from weekly import POSITIONS
+from config import LIVE_GAME_STALE_MINUTES
+from weekly import POSITIONS, parse_timestamp
 
 SEASON_POINTS = {1: 12, 2: 9, 3: 7, 4: 6, 5: 5, 6: 4, 7: 3, 8: 2, 9: 1}
-GATE4_LOGIC_SCHEMA_VERSION = 3
+GATE4_LOGIC_SCHEMA_VERSION = 4
 
 
 def _score(row: dict[str, Any] | None) -> float:
@@ -67,6 +69,13 @@ def game_status_text(pool_row: dict[str, Any] | None, games_by_team: dict[str, d
         return status
     status = str(game.get("game_status") or "SCHEDULED").upper()
     if status == "LIVE":
+        updated = parse_timestamp(game.get("provider_updated_at"))
+        stale = bool(
+            updated
+            and (datetime.now(timezone.utc) - updated).total_seconds() >= LIVE_GAME_STALE_MINUTES * 60
+        )
+        if stale:
+            return "LIVE"
         period = game.get("period")
         clock = str(game.get("game_clock") or "").strip()
         detail = f"Q{period}" if period else "LIVE"

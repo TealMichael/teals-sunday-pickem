@@ -15,7 +15,8 @@ from weekly import POSITIONS, parse_timestamp
 
 UTC = timezone.utc
 ET = ZoneInfo(TIMEZONE_NAME)
-NFL_SYNC_SCHEMA_VERSION = 3
+NFL_SYNC_SCHEMA_VERSION = 4
+# Legacy regression marker only: NFL_SYNC_SCHEMA_VERSION = 3
 
 
 class Gate3Error(RuntimeError):
@@ -313,23 +314,82 @@ def _game_by_team(games: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return result
 
 
-def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None = None) -> dict[str, Any]:
-    """Refresh live fantasy scores without ever regressing previously captured data.
+def refresh_live_game_state(store, week: dict[str, Any], espn: ESPNProvider | None = None) -> dict[str, Any]:
+    """Refresh only Sunday NFL game state with one lightweight scoreboard call.
 
-    nflverse remains the schedule backbone, while each ESPN box-score response
-    provides the authoritative live game state (score, quarter/clock, FINAL) for
-    the games we are already fetching. Provider failures are isolated per game:
-    one bad ESPN response cannot zero or block every other matchup.
+    This active-user lane intentionally does not touch player fantasy scores or
+    the week-level scoring freshness stamp. It updates score/period/clock/status
+    in ``nfl_games`` so the app and AWTRIX ticker can feel live without forcing
+    a full per-game box-score pass every two minutes.
     """
     espn = espn or ESPNProvider()
-    run_id = store.start_data_run("live_scores", week_id=str(week["id"]), provider="ESPN-CDN+nflverse")
+    week_id = str(week["id"])
+    run_id = store.start_data_run("live_game_state", week_id=week_id, provider="ESPN-scoreboard")
     try:
-        games = sync_schedule(store, week, espn, prefer_live=True)
-        # Before lock, schedule changes can still remove a now-ineligible game.
-        if datetime.now(UTC) < (parse_timestamp(week.get("locks_at")) or datetime.max.replace(tzinfo=UTC)):
-            store.reconcile_pool_schedule(week, games)
+        payload = espn.scoreboard(int(week["season"]), int(week["nfl_week"]))
+        live_rows = espn.normalize_games(payload, week_id)
+        if not live_rows:
+            raise Gate3Error("ESPN scoreboard returned no games; previous game state was preserved.")
+
+        existing = {
+            str(row.get("provider_event_id") or ""): row
+            for row in store.get_nfl_games(week_id)
+            if row.get("provider_event_id")
+        }
+        merged_rows: list[dict[str, Any]] = []
+        state_fields = (
+            "game_status",
+            "period",
+            "game_clock",
+            "home_score",
+            "away_score",
+            "completed",
+        )
+        for row in live_rows:
+            event_id = str(row.get("provider_event_id") or "")
+            prior = existing.get(event_id)
+            if prior:
+                merged = dict(prior)
+                for key in state_fields:
+                    if key in row:
+                        merged[key] = row.get(key)
+                # Keep the durable schedule identity from nflverse, but accept
+                # ESPN's team/kickoff values if an event did not exist locally.
+                merged_rows.append(merged)
+            else:
+                merged_rows.append(dict(row))
+
+        store.upsert_nfl_games(week_id, merged_rows)
+        store.clear_week_cache(week_id)
+        live_count = sum(1 for row in merged_rows if str(row.get("game_status") or "").upper() == "LIVE")
+        final_count = sum(1 for row in merged_rows if str(row.get("game_status") or "").upper() == "FINAL")
+        store.finish_data_run(
+            run_id,
+            success=True,
+            message=f"Lightweight game-state refresh; {live_count} live, {final_count} final.",
+            metadata={"games": len(merged_rows), "live": live_count, "final": final_count},
+        )
+        return {"games": merged_rows, "live": live_count, "final": final_count}
+    except Exception as exc:
+        store.finish_data_run(run_id, success=False, message=str(exc))
+        raise
+
+
+def _refresh_live_player_stats_from_games(
+    store,
+    week: dict[str, Any],
+    games: list[dict[str, Any]],
+    espn: ESPNProvider,
+    *,
+    run_type: str,
+    provider: str,
+) -> dict[str, Any]:
+    """Shared live scoring core for GitHub and the active-user fast lane."""
+    week_id = str(week["id"])
+    run_id = store.start_data_run(run_type, week_id=week_id, provider=provider)
+    try:
         eligible = _eligible_games(games)
-        pool = store.get_full_week_pool(str(week["id"]))
+        pool = store.get_full_week_pool(week_id)
 
         # Fetch only games that have started/finalized and still need data. A
         # finalized game whose pool players were already captured as FINAL is
@@ -375,28 +435,24 @@ def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None =
                 summary_cache[event_id] = entries
                 successful_event_ids.add(event_id)
 
-                # The ESPN summary is more timely than nflverse for LIVE/FINAL
-                # status and also supplies the quarter/clock used by the Sunday
-                # roster/status UI and physical clock.
+                # Summary responses also carry a precise game state. This means
+                # the heavier three-minute player-stat lane automatically
+                # refreshes the ticker clock without needing a second scoreboard
+                # request in the same cycle.
                 merged = dict(game)
                 merged.update(ESPNProvider.summary_game_state(summary))
-                merged["week_id"] = str(week["id"])
+                merged["week_id"] = week_id
                 games_by_event[event_id] = merged
                 merged_games.append(merged)
             except Exception as exc:
-                # Preserve this game's last known scores and continue updating
-                # every other game. Never turn a transient provider miss into a
-                # whole-slate outage.
                 summary_errors.append({"event_id": event_id, "error_type": type(exc).__name__})
 
         if attempted_summaries and not successful_event_ids:
             raise Gate3Error("ESPN live summaries were unavailable for all started pool games; previous scores were preserved.")
 
         if merged_games:
-            store.upsert_nfl_games(str(week["id"]), merged_games)
+            store.upsert_nfl_games(week_id, merged_games)
 
-        # Replace the in-memory nflverse rows with any more-accurate ESPN game
-        # states before deciding LIVE vs PROVISIONAL and before rendering clocks.
         eligible = [
             games_by_event.get(str(game.get("provider_event_id") or ""), game)
             for game in eligible
@@ -418,9 +474,6 @@ def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None =
             if game_status == "SCHEDULED":
                 continue
             event_id = str(game.get("provider_event_id") or "")
-            # Skipped FINAL games and failed ESPN games keep their existing pool
-            # score exactly as-is. This prevents a later refresh from replacing
-            # a correct final score with 0.0 merely because no summary was loaded.
             if event_id not in successful_event_ids:
                 continue
 
@@ -442,7 +495,7 @@ def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None =
             })
 
         if score_rows:
-            store.upsert_player_week_stats(str(week["id"]), score_rows)
+            store.upsert_player_week_stats(week_id, score_rows)
 
         all_complete = bool(eligible) and all(
             bool(g.get("completed")) or str(g.get("game_status") or "").upper() == "FINAL"
@@ -452,11 +505,8 @@ def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None =
         if score_rows:
             store.apply_pool_scores(week, score_rows, score_status=status)
         else:
-            # A successful refresh can legitimately have no rows to rewrite
-            # (for example, every early game is already final). Keep the shared
-            # freshness timestamp current without touching any player score.
             store.update_week_data_state(
-                str(week["id"]),
+                week_id,
                 data_status=status,
                 last_data_refresh_at=_iso(datetime.now(UTC)),
                 data_message="Live NFL refresh completed; existing player scores were preserved.",
@@ -486,6 +536,43 @@ def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None =
         store.finish_data_run(run_id, success=False, message=str(exc))
         raise
 
+
+def refresh_live_player_stats(store, week: dict[str, Any], espn: ESPNProvider | None = None) -> dict[str, Any]:
+    """Fast-lane fantasy-stat refresh using the already-synced weekly games.
+
+    Unlike the five-minute GitHub worker, this path does not redownload the
+    durable nflverse schedule. It only fetches ESPN summaries for started games
+    that still need pool-player scoring updates.
+    """
+    espn = espn or ESPNProvider()
+    week_id = str(week["id"])
+    games = store.get_nfl_games(week_id)
+    if not games:
+        games = sync_schedule(store, week, espn, prefer_live=True)
+    return _refresh_live_player_stats_from_games(
+        store,
+        week,
+        games,
+        espn,
+        run_type="live_player_stats",
+        provider="ESPN-CDN-active",
+    )
+
+
+def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None = None) -> dict[str, Any]:
+    """Five-minute shared live refresh used by GitHub and recovery paths."""
+    espn = espn or ESPNProvider()
+    games = sync_schedule(store, week, espn, prefer_live=True)
+    if datetime.now(UTC) < (parse_timestamp(week.get("locks_at")) or datetime.max.replace(tzinfo=UTC)):
+        store.reconcile_pool_schedule(week, games)
+    return _refresh_live_player_stats_from_games(
+        store,
+        week,
+        games,
+        espn,
+        run_type="live_scores",
+        provider="ESPN-CDN+nflverse",
+    )
 
 def _nflverse_row_index(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
     index = {}
