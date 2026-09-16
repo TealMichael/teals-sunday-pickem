@@ -11,7 +11,8 @@ from weekly import POSITIONS, parse_timestamp, safe_status
 
 UTC = timezone.utc
 PICKEM_SCHEMA = "pickem"
-STORE_SCHEMA_VERSION = 4
+STORE_SCHEMA_VERSION = 5
+# Previous cumulative marker: STORE_SCHEMA_VERSION = 4
 
 
 class StoreError(RuntimeError):
@@ -566,6 +567,24 @@ class SupabaseStore:
         if not games:
             return []
         stamp = _iso(datetime.now(UTC))
+        # provider_updated_at represents the freshness of the *game state*,
+        # not merely the time we happened to poll ESPN. If a provider repeats
+        # the exact same LIVE clock/score for nine minutes, retain the older
+        # timestamp so the app and AWTRIX can hide its misleading game clock.
+        # One batch read (only when live games are present) is shared by every
+        # event; no extra external NFL request is made.
+        prior_live: dict[str, dict[str, Any]] = {}
+        if any(str(game.get("game_status") or "").upper() == "LIVE" for game in games):
+            try:
+                prior_live = {
+                    str(row.get("provider_event_id")): row
+                    for row in self.get_nfl_games(str(week_id))
+                    if row.get("provider_event_id") and str(row.get("game_status") or "").upper() == "LIVE"
+                }
+            except Exception:
+                # Freshness comparisons are best-effort; do not turn a
+                # temporary read issue into a failed core scoring write.
+                prior_live = {}
         # Postgres rejects one UPSERT statement when the same conflict key
         # appears twice in its input (SQLSTATE 21000: ON CONFLICT cannot affect
         # the same row twice). Provider feeds can occasionally repeat an event,
@@ -574,10 +593,20 @@ class SupabaseStore:
         for game in games:
             row = dict(game)
             row["week_id"] = str(week_id)
-            row["provider_updated_at"] = stamp
             event_id = str(row.get("provider_event_id") or "").strip()
             if not event_id:
                 continue
+            prior = prior_live.get(event_id)
+            unchanged_live = bool(
+                prior
+                and str(row.get("game_status") or "").upper() == "LIVE"
+                and all(row.get(field) == prior.get(field) for field in (
+                    "game_status", "period", "game_clock", "home_score", "away_score",
+                ))
+            )
+            row["provider_updated_at"] = (
+                prior.get("provider_updated_at") if unchanged_live and prior.get("provider_updated_at") else stamp
+            )
             by_event[event_id] = row
         payload = list(by_event.values())
         if not payload:
@@ -1120,6 +1149,19 @@ class SupabaseStore:
                     team_game[str(team)] = game
         pool = self.get_full_week_pool(str(week["id"]))
         stamp = _iso(datetime.now(UTC))
+
+        # An incomplete upstream schedule is not a genuine postponement. The
+        # previous implementation treated every missing team as ineligible,
+        # updating pool rows one-by-one before potentially running out of
+        # replacements. Reject that feed *before any write* instead of making
+        # already-published selections unavailable across several positions.
+        known_teams = {str(row.get("team_abbr") or "") for row in pool if row.get("team_abbr")}
+        missing_teams = known_teams - set(team_game)
+        if missing_teams:
+            raise StoreError(
+                "Incomplete NFL schedule; published pool was preserved "
+                f"({len(missing_teams)} team(s) missing)."
+            )
 
         # First make every row's current schedule eligibility explicit.
         for row in pool:

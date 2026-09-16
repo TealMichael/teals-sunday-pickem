@@ -15,7 +15,8 @@ from weekly import POSITIONS, parse_timestamp
 
 UTC = timezone.utc
 ET = ZoneInfo(TIMEZONE_NAME)
-NFL_SYNC_SCHEMA_VERSION = 4
+NFL_SYNC_SCHEMA_VERSION = 5
+# Previous cumulative marker: NFL_SYNC_SCHEMA_VERSION = 4
 # Legacy regression marker only: NFL_SYNC_SCHEMA_VERSION = 3
 
 
@@ -123,7 +124,13 @@ def sync_schedule(
                 continue
             prior_status = str(prior.get("game_status") or "").upper()
             new_status = str(game.get("game_status") or "").upper()
-            preserve = prior_status == "FINAL" or (prior_status == "LIVE" and new_status == "LIVE")
+            # The durable schedule file can briefly lag ESPN's game state.
+            # Never regress a confirmed FINAL to an unfinished status or an
+            # in-progress game to an unstarted one. Explicit postponed/canceled
+            # statuses remain allowed for an in-progress game.
+            preserve = prior_status == "FINAL" or (
+                prior_status == "LIVE" and new_status in {"LIVE", "SCHEDULED"}
+            )
             if preserve:
                 for key in ("game_status", "period", "game_clock", "home_score", "away_score", "completed"):
                     if key in prior:
@@ -350,6 +357,16 @@ def refresh_live_game_state(store, week: dict[str, Any], espn: ESPNProvider | No
             prior = existing.get(event_id)
             if prior:
                 merged = dict(prior)
+                old_status = str(prior.get("game_status") or "").upper()
+                new_status = str(row.get("game_status") or "").upper()
+                # An out-of-date scoreboard must not turn FINAL 27-17 into
+                # SCHEDULED 0-0, nor turn an already-LIVE game backwards to
+                # its pregame state. Preserve the entire confirmed state.
+                if (old_status == "FINAL" and new_status != "FINAL") or (
+                    old_status == "LIVE" and new_status == "SCHEDULED"
+                ):
+                    merged_rows.append(merged)
+                    continue
                 for key in state_fields:
                     if key in row:
                         merged[key] = row.get(key)

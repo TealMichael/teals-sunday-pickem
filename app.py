@@ -28,8 +28,9 @@ if getattr(_weekly_core, "WEEKLY_LOGIC_SCHEMA_VERSION", 0) < 3:
     _weekly_core = importlib.reload(_weekly_core)
 
 import store as _store
+# Legacy regression marker only: getattr(_store, "STORE_SCHEMA_VERSION", 0) < 4
 if (
-    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 4
+    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 5
     or not hasattr(_store.SupabaseStore, "get_app_meta")
     or not hasattr(_store.SupabaseStore, "set_app_meta")
 ):
@@ -46,12 +47,14 @@ if getattr(_nfl_sources, "NFL_SOURCES_SCHEMA_VERSION", 0) < 2:
     _nfl_sources = importlib.reload(_nfl_sources)
 
 import nfl_sync as _nfl_sync
-if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 4:
+_reloaded_nfl_sync = False
+if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 5:
     _nfl_sync = importlib.reload(_nfl_sync)
+    _reloaded_nfl_sync = True
 
 import automation_recovery as _automation_recovery
 _reloaded_automation_recovery = False
-if getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 5:
+if _reloaded_nfl_sync or getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 5:
     _automation_recovery = importlib.reload(_automation_recovery)
     _reloaded_automation_recovery = True
 
