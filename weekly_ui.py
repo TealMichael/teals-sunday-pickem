@@ -46,7 +46,8 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 9
+WEEKLY_UI_SCHEMA_VERSION = 10
+# Legacy regression marker only: WEEKLY_UI_SCHEMA_VERSION = 9
 
 
 def _compact_duration(seconds: int) -> str:
@@ -824,6 +825,16 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
                     st.error(str(exc))
 
 
+def _render_pool_change_disclaimer() -> None:
+    """Explain pre-lock pool replacements without implying saved picks can move."""
+    st.caption(
+        "ℹ️ Player statuses can change during the week. If a pool player is ruled OUT before "
+        "Saturday at 11:59 PM ET, the app may add a replacement to the pool. "
+        "**Your saved picks will never change automatically.** Check back before Sunday’s "
+        "1:00 PM ET lock if one of your starters is affected."
+    )
+
+
 def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
     lineup, picks, pool, pool_by_id = _load_lineup(store, week, player, pool)
     chosen, total = lineup_progress(picks)
@@ -832,6 +843,8 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
 
     st.markdown("### Review My Five")
     _render_review_editable_lineup(picks, pool_by_id)
+    if not bool(week.get("is_demo")):
+        _render_pool_change_disclaimer()
 
     if chosen < total:
         st.warning(f"Finish all five positions first. You have {chosen} of {total}.")
@@ -898,6 +911,8 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
     if chosen == total and not needs and not unavailable:
         st.markdown("### ✅ YOUR FIVE ARE READY")
         st.markdown(f'<div class="card">{_summary_rows(picks, pool_by_id)}</div>', unsafe_allow_html=True)
+        if not bool(week.get("is_demo")):
+            _render_pool_change_disclaimer()
         if bool(week.get("is_demo")):
             st.markdown('<div class="status-test"><strong>TEST WEEK • LOCK OPEN</strong><br>Build and edit freely while testing.</div>', unsafe_allow_html=True)
         if st.button("EDIT LINEUP", type="primary", use_container_width=True):
