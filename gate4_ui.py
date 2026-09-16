@@ -15,6 +15,7 @@ if getattr(_gate4, "GATE4_LOGIC_SCHEMA_VERSION", 0) < 4:
     _gate4 = importlib.reload(_gate4)
 
 from config import APP_VERSION, LIVE_APP_DISPLAY_REFRESH_SECONDS, NFL_SEASON
+from lineup_reveal import build_lineup_reveal
 from gate4 import (
     add_zero_point_players,
     build_season_standings,
@@ -25,9 +26,10 @@ from gate4 import (
     profile_stats,
 )
 from validation import validate_single_emoji
-from weekly import parse_timestamp
+from weekly import parse_timestamp, week_phase
 
-GATE4_UI_SCHEMA_VERSION = 6
+GATE4_UI_SCHEMA_VERSION = 7
+# Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 6
 # Legacy regression marker only: GATE4_UI_SCHEMA_VERSION = 5
 _HOTFIX78_LEGACY_CADENCE_MARKER = """@st.fragment(run_every="30s")
 def render_live_sunday"""
@@ -132,6 +134,65 @@ def _last_updated(week: dict[str, Any]) -> None:
     st.caption(f"NFL data refreshed {label}.")
     if status == "LIVE" and age_minutes > 45:
         st.warning("Scores may be delayed right now. The last NFL refresh is more than 45 minutes old; no lineup data has been lost.")
+
+
+
+def _render_lineup_reveal(week: dict[str, Any], bundle: dict[str, Any]) -> None:
+    """Post-lock reveal only; no public starter/owner details before 1 PM ET."""
+    if week_phase(week) != "locked" or bool(week.get("is_demo")):
+        return
+    reveal = build_lineup_reveal(bundle)
+    count = int(reveal["lineup_count"])
+    if count == 0:
+        return
+    popular = reveal.get("most_popular")
+    popular_text = (
+        f'{popular["position"]} {popular["player_name"]} · {popular["count"]} of {count} lineups'
+        if popular else "No starters recorded"
+    )
+    same_groups = reveal["same_brain"]
+    same_text = (
+        " · ".join(" + ".join(names) for names in same_groups[:2])
+        if same_groups else "No identical complete lineups"
+    )
+    if len(same_groups) > 2:
+        same_text += f" · +{len(same_groups) - 2} more"
+    st.markdown(
+        '<div class="card-tight">'
+        '<div class="eyebrow">🔓 THE 1 PM LINEUP REVEAL</div>'
+        f'<strong>{count} lineup{"s" if count != 1 else ""} in · {reveal["complete_count"]} complete</strong>'
+        f'<div class="small">🔥 Crowd pick: {escape(popular_text)}</div>'
+        f'<div class="small">🦄 {len(reveal["solo_picks"])} solo pick{"s" if len(reveal["solo_picks"]) != 1 else ""}'
+        f' · 👯 {len(same_groups)} Same Brain group{"s" if len(same_groups) != 1 else ""}</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    with st.expander("See who picked whom — all five positions", expanded=False):
+        st.caption("Locked starters only. Emergency backups stay private until activated.")
+        for position in reveal["positions"]:
+            pos = position["position"]
+            choices = position["choices"]
+            st.markdown(f"**{pos} · {position['picks_count']} picks**")
+            if not choices:
+                st.caption("No starters selected.")
+                continue
+            for choice in choices:
+                count_for_choice = int(choice["count"])
+                if count_for_choice == 1:
+                    owner = f' · 🦄 {choice["owners"][0]} went alone'
+                else:
+                    owner = " · " + ", ".join(choice["owners"])
+                st.markdown(
+                    '<div class="lineup-row">'
+                    f'<span class="small"><strong>{escape(choice["player_name"])}</strong>'
+                    f' · {count_for_choice} of {count} lineups{escape(owner)}</span>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+        if same_groups:
+            st.markdown("**👯 Same Brain — identical complete fives**")
+            for names in same_groups:
+                st.caption(" + ".join(names))
 
 
 def _storylines(bundle: dict[str, Any], leaderboard: list[dict[str, Any]]) -> None:
@@ -389,6 +450,10 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
         st.caption("Monday reconciliation is complete. These results are FINAL.")
     else:
         st.caption("Scores refresh automatically during Sunday games.")
+    # Only the locked Sunday view receives the reveal; never show group picks
+    # on the Tuesday-Saturday picker, even if a caller reuses this renderer.
+    if show_storylines and data_status != "FINAL":
+        _render_lineup_reveal(fresh_week, bundle)
     season: list[dict[str, Any]] = []
     if data_status == "FINAL":
         season, _ = _weekly_recap(store, fresh_week, bundle, leaderboard)
