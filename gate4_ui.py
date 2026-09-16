@@ -17,6 +17,7 @@ if getattr(_gate4, "GATE4_LOGIC_SCHEMA_VERSION", 0) < 4:
 from config import APP_VERSION, LIVE_APP_DISPLAY_REFRESH_SECONDS, NFL_SEASON
 from lineup_reveal import build_lineup_reveal
 from sunday_drama import build_personal_sunday_drama
+from personal_season_story import build_personal_season_story
 from gate4 import (
     add_zero_point_players,
     build_season_standings,
@@ -29,7 +30,8 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp, week_phase
 
-GATE4_UI_SCHEMA_VERSION = 8
+GATE4_UI_SCHEMA_VERSION = 9
+# Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 8
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 7
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 6
 # Legacy regression marker only: GATE4_UI_SCHEMA_VERSION = 5
@@ -639,11 +641,96 @@ def _how_to_play() -> None:
         )
 
 
+
+def _story_week_row(week: dict[str, Any]) -> str:
+    """Small escaped season-history row; only archived FINAL weeks appear."""
+    finish = int(week["finish_rank"])
+    finish_text = _ordinal(finish) if finish > 0 else "Unranked"
+    delta = week.get("rank_move")
+    movement = (
+        "First ranked week" if delta is None else
+        f"↑ {delta} place{'s' if delta != 1 else ''}" if delta > 0 else
+        f"↓ {abs(delta)} place{'s' if delta != -1 else ''}" if delta < 0 else
+        "Rank unchanged"
+    )
+    return (
+        '<div class="history-row">'
+        f'<span><strong>Week {int(week["week"])}</strong> · {escape(finish_text)} finish'
+        f'<div class="small">{float(week["score"]):.1f} fantasy pts · '
+        f'+{int(week["earned_points"])} season pts</div>'
+        f'<div class="small">{escape(movement)} in season standings</div></span>'
+        f'<span><strong>#{int(week["season_rank"])}</strong><div class="small">'
+        f'{int(week["season_points"])} pts total</div></span>'
+        '</div>'
+    )
+
+
+def _render_personal_season_story(story: dict[str, Any]) -> None:
+    """Read-only personal progress and earned badges from FINAL history."""
+    st.markdown("#### My Season Story")
+    summary = story.get("summary")
+    if not summary:
+        st.caption("Your story starts after your first finalized Sunday.")
+        return
+
+    rank = summary.get("season_rank")
+    current_rank = f"{_ordinal(int(rank))} in the season" if rank is not None else "Season rank pending"
+    best_score = summary.get("best_score")
+    best_text = (
+        f'{float(best_score):.1f} pts in Week {int(summary["best_week"])}'
+        if best_score is not None and summary.get("best_week") is not None else "Not available"
+    )
+    st.markdown(
+        '<div class="card-tight"><div class="eyebrow">YOUR SEASON SO FAR</div>'
+        f'<strong>{escape(current_rank)} · {int(summary["season_points"])} season pts</strong>'
+        f'<div class="small">{int(summary["weeks_played"])} week'
+        f'{"s" if int(summary["weeks_played"]) != 1 else ""} played'
+        f' · Personal best: {escape(best_text)}</div>'
+        '</div>', unsafe_allow_html=True,
+    )
+    st.caption("Finalized Sundays only. Weekly scores and ranks are historical; no projections.")
+    weeks = story["weeks"]
+    for week in weeks[:3]:
+        st.markdown(_story_week_row(week), unsafe_allow_html=True)
+    if len(weeks) > 3:
+        with st.expander(f"See {len(weeks) - 3} earlier weeks", expanded=False):
+            for week in weeks[3:]:
+                st.markdown(_story_week_row(week), unsafe_allow_html=True)
+
+    st.markdown("#### My Achievements")
+    awards = story.get("awards") or []
+    if not awards:
+        st.caption("Your first achievement is on its way.")
+        return
+    st.caption(f"{len(awards)} earned · Based on finalized results, never live projections.")
+    for award in awards[:4]:
+        st.markdown(
+            '<div class="card-tight">'
+            f'<strong>{escape(str(award["icon"]))} {escape(str(award["title"]))}</strong>'
+            f'<div class="small">{escape(str(award["detail"]))} · Week {int(award["week"])}</div>'
+            '</div>', unsafe_allow_html=True,
+        )
+    if len(awards) > 4:
+        with st.expander(f"See all {len(awards)} achievements", expanded=False):
+            for award in awards[4:]:
+                st.markdown(
+                    '<div class="card-tight">'
+                    f'<strong>{escape(str(award["icon"]))} {escape(str(award["title"]))}</strong>'
+                    f'<div class="small">{escape(str(award["detail"]))} · Week {int(award["week"])}</div>'
+                    '</div>', unsafe_allow_html=True,
+                )
+
+
 def render_profile(store, player: dict[str, Any], season: int, on_sign_out: Callable[[], None] | None) -> None:
     st.markdown(f"### {player.get('emoji','🏈')} {player.get('nickname','Player')}")
-    results = store.get_weekly_results(season=season, player_id=str(player["id"]))
-    stats = profile_stats(str(player["id"]), results)
+    # One cached archive read supplies both personal totals and full-group
+    # historical ranks. Never read current lineups or run NFL provider requests.
+    archived = store.get_weekly_results(season=season)
+    player_id = str(player["id"])
+    own_results = [row for row in archived if str(row.get("player_id")) == player_id]
+    stats = profile_stats(player_id, own_results)
     _profile_stat_grid(stats)
+    _render_personal_season_story(build_personal_season_story(archived, player_id))
 
     with st.expander("Change emoji"):
         new_emoji = st.text_input("Choose one emoji", value=str(player.get("emoji") or "🏈"), max_chars=8, key="profile_emoji")
