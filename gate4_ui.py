@@ -16,6 +16,7 @@ if getattr(_gate4, "GATE4_LOGIC_SCHEMA_VERSION", 0) < 4:
 
 from config import APP_VERSION, LIVE_APP_DISPLAY_REFRESH_SECONDS, NFL_SEASON
 from lineup_reveal import build_lineup_reveal
+from sunday_drama import build_personal_sunday_drama
 from gate4 import (
     add_zero_point_players,
     build_season_standings,
@@ -28,7 +29,8 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp, week_phase
 
-GATE4_UI_SCHEMA_VERSION = 7
+GATE4_UI_SCHEMA_VERSION = 8
+# Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 7
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 6
 # Legacy regression marker only: GATE4_UI_SCHEMA_VERSION = 5
 _HOTFIX78_LEGACY_CADENCE_MARKER = """@st.fragment(run_every="30s")
@@ -193,6 +195,79 @@ def _render_lineup_reveal(week: dict[str, Any], bundle: dict[str, Any]) -> None:
             st.markdown("**👯 Same Brain — identical complete fives**")
             for names in same_groups:
                 st.caption(" + ".join(names))
+
+
+
+def _render_personal_sunday_drama(
+    week: dict[str, Any], bundle: dict[str, Any],
+    leaderboard: list[dict[str, Any]], current_player_id: str,
+) -> None:
+    """Small, post-lock personal race card. No guesses about future outcomes."""
+    if week_phase(week) != "locked" or bool(week.get("is_demo")):
+        return
+    drama = build_personal_sunday_drama(bundle, leaderboard, current_player_id)
+    if not drama:
+        return
+
+    rank = int(drama["rank"])
+    tied = drama["tied_with"]
+    rank_text = f"Tied for {_ordinal(rank)}" if tied else _ordinal(rank)
+    highlights: list[str] = []
+    if tied:
+        names = ", ".join(tied[:2])
+        if len(tied) > 2:
+            names += f" +{len(tied) - 2} more"
+        highlights.append(f"🤝 Level with {names}")
+    chase = drama["chasing"]
+    if chase:
+        names = ", ".join(chase["names"][:2])
+        if len(chase["names"]) > 2:
+            names += f" +{len(chase['names']) - 2} more"
+        highlights.append(f"🎯 {chase['gap']:.1f} pts behind {names}")
+    ahead = drama["holding_off"]
+    if ahead:
+        names = ", ".join(ahead["names"][:2])
+        if len(ahead["names"]) > 2:
+            names += f" +{len(ahead['names']) - 2} more"
+        highlights.append(f"🛡️ {ahead['gap']:.1f} pts ahead of {names}")
+
+    games = drama["games"]
+    game_parts: list[str] = []
+    if games["live"]:
+        game_parts.append(f'{games["live"]} live')
+    if games["scheduled"]:
+        game_parts.append(f'{games["scheduled"]} not started')
+    if games["unknown"]:
+        game_parts.append(f'{games["unknown"]} status unavailable')
+    if not game_parts and games["known_players"] and games["final"] == games["known_players"]:
+        game_parts.append("All your players' games are final")
+    if game_parts:
+        highlights.append("🏈 Your players at last NFL update: " + " · ".join(game_parts))
+
+    rival = drama["rival_games"]
+    if rival:
+        their_games = rival["games"]
+        their_parts: list[str] = []
+        if their_games["live"]:
+            their_parts.append(f'{their_games["live"]} live')
+        if their_games["scheduled"]:
+            their_parts.append(f'{their_games["scheduled"]} not started')
+        if their_parts:
+            highlights.append(f'{rival["name"]} at last NFL update: ' + " · ".join(their_parts))
+
+    top = drama["top_scorer"]
+    if top:
+        highlights.append(f'⭐ Your top scorer: {top["name"]} · {top["points"]:.1f} pts')
+
+    details = "".join(f'<div class="small">{escape(line)}</div>' for line in highlights)
+    st.markdown(
+        '<div class="card-tight">'
+        '<div class="eyebrow">🏈 YOUR SUNDAY RACE</div>'
+        f'<strong>{escape(rank_text)} of {int(drama["total_lineups"])} · {float(drama["score"]):.1f} pts</strong>'
+        f'{details}'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _storylines(bundle: dict[str, Any], leaderboard: list[dict[str, Any]]) -> None:
@@ -454,6 +529,7 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
     # on the Tuesday-Saturday picker, even if a caller reuses this renderer.
     if show_storylines and data_status != "FINAL":
         _render_lineup_reveal(fresh_week, bundle)
+        _render_personal_sunday_drama(fresh_week, bundle, leaderboard, str(player.get("id") or ""))
     season: list[dict[str, Any]] = []
     if data_status == "FINAL":
         season, _ = _weekly_recap(store, fresh_week, bundle, leaderboard)

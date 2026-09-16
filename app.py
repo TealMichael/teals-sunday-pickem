@@ -81,7 +81,8 @@ render_player_game = _weekly_ui.render_player_game
 # occasionally keep an older helper module resident across a multi-file deploy,
 # so reload any pre-simplification Gate 4 module before binding the demo renderer.
 # Legacy regression marker only: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 4
-if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 7:
+# Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 7
+if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 8:
     _gate4_ui = importlib.reload(_gate4_ui)
 render_gate4_demo = _gate4_ui.render_gate4_demo
 
