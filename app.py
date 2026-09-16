@@ -57,6 +57,7 @@ if getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 5:
 
 import weekly_ui as _weekly_ui
 # Legacy regression marker only: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 9
+# Prior cumulative UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 10
 import gate4_ui as _gate4_ui
 import gate5_ui as _gate5_ui
 
@@ -68,7 +69,8 @@ import gate5_ui as _gate5_ui
 _weekly_params = inspect.signature(_weekly_ui.render_player_game).parameters
 if (
     _reloaded_automation_recovery
-    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 10
+    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 11
+    or not hasattr(_weekly_ui, "_render_player_card_button")
     or "on_sign_out" not in _weekly_params
     or "allow_demo_week" not in _weekly_params
 ):

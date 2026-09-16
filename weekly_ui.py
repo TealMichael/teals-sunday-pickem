@@ -14,6 +14,7 @@ if getattr(_weekly, "WEEKLY_LOGIC_SCHEMA_VERSION", 0) < 3:
     _weekly = importlib.reload(_weekly)
 
 from config import APP_VERSION
+from player_season_stats import attach_snapshot, load_or_prepare_snapshot, stats_line
 from automation_recovery import maybe_recover_critical_automation
 from gate4_ui import (
     maybe_render_final_celebration,
@@ -46,7 +47,8 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 10
+WEEKLY_UI_SCHEMA_VERSION = 11
+# Prior cumulative UI marker: WEEKLY_UI_SCHEMA_VERSION = 10
 # Legacy regression marker only: WEEKLY_UI_SCHEMA_VERSION = 9
 
 
@@ -635,7 +637,12 @@ def _render_player_card_button(
     check = "✓ " if selected else ""
     badge = " :yellow-badge[⚠ QUESTIONABLE]" if status == "QUESTIONABLE" else (" :red-badge[OUT]" if status == "OUT" else "")
     extra = f"\n{_markdown_escape(extra_line)}" if extra_line else ""
-    label = f"{check}**{name}**{badge}\n{meta}{extra}"
+    # The statistical strip is *inside the same native Streamlit button*, so
+    # it cannot obstruct taps or create a second picker interaction.
+    # Legacy button regression shape: label = f"{check}**{name}**{badge}\n{meta}{extra}"
+    season_text = _markdown_escape(stats_line(row)) if "_season_stats" in row else ""
+    season_strip = f"\n:gray[📊 {season_text}]" if season_text else ""
+    label = f"{check}**{name}**{badge}\n{meta}{season_strip}{extra}"
 
     return st.button(
         label,
@@ -680,6 +687,12 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
 
     st.markdown(f"### Choose your {position}")
     st.caption("Tap a player to highlight it. Your choice saves only when you tap Next.")
+    if not week.get("is_demo"):
+        previous_week = max(0, int(week.get("nfl_week") or 1) - 1)
+        if previous_week:
+            st.caption(f"Season stats through Week {previous_week} · averages per recorded game; TD, FG and XP are season totals.")
+        else:
+            st.caption("Season stats begin after Week 1.")
 
     starter = pool_by_id.get(current_id) if current_id else None
     backup = pool_by_id.get(backup_id) if backup_id else None
@@ -1041,6 +1054,16 @@ def render_player_game(
         _lock_transition_guard(week.get("locks_at"))
 
     pool = store.get_week_pool(str(week["id"]), visible_only=True)
+
+    if (phase == "open" and not bool(week.get("is_demo")) and pool_is_ready(pool)
+            and st.session_state.get("builder_mode") in {"pick", "backup", "review"}):
+        # All 25 visible cards + any future promoted reserves use one shared,
+        # frozen snapshot. Provider failures may hide only the statistics;
+        # they cannot affect the picker or any saved lineup.
+        try:
+            pool = attach_snapshot(pool, load_or_prepare_snapshot(store, week))
+        except Exception:
+            pass
 
     if phase == "open" and not pool_is_ready(pool):
         st.info("This week's player pool is being prepared. Picks will appear as soon as all five positions are ready.")
