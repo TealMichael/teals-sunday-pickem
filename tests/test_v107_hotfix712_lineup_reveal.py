@@ -139,12 +139,15 @@ def test_user_supplied_nicknames_and_player_names_are_html_escaped(monkeypatch):
     assert '&lt;script&gt;' in rendered and '&lt;img src=' in rendered
 
 
-def test_live_integration_keeps_reveal_after_lock_and_before_standings():
+def test_live_integration_prioritizes_reveal_teaser_then_standings_then_details():
     ui_source = (ROOT / "gate4_ui.py").read_text()
     start = ui_source.index("def render_live_sunday(")
     end = ui_source.index("def _render_season_rows", start)
     live = ui_source[start:end]
-    assert live.index('_render_lineup_reveal(fresh_week, bundle)') < live.index('st.markdown("### Standings")')
+    teaser = '_render_lineup_reveal(fresh_week, bundle, show_details=False)'
+    details = '_render_lineup_reveal(fresh_week, bundle, show_summary=False, reveal=reveal)'
+    standings = 'st.markdown("### Standings")'
+    assert live.index(teaser) < live.index(standings) < live.index(details)
     assert 'if show_storylines and data_status != "FINAL":' in live
     assert 'if week_phase(week) != "locked" or bool(week.get("is_demo")):' in ui_source
     assert 'getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 7' in (ROOT / "app.py").read_text()

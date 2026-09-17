@@ -7,6 +7,12 @@ import inspect
 import streamlit as st
 
 from auth import login_player, register_player, restore_from_cookie, revoke_cookie_session
+# The app file is re-executed on Streamlit reruns, but config.py may still be
+# cached from the prior deploy. Read the new build key before creating the
+# cached store or binding other UI modules.
+import config as _config
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.15":
+    _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
     APP_NAME,
@@ -16,7 +22,10 @@ from config import (
     REMEMBER_STORAGE_KEY,
 )
 from security import safe_secret_match
-from ui import hero, inject_css, page_config
+import ui as _ui
+if getattr(_ui, "UI_THEME_SCHEMA_VERSION", 0) < 2:
+    _ui = importlib.reload(_ui)
+hero, inject_css, page_config = _ui.hero, _ui.inject_css, _ui.page_config
 
 # A Streamlit Cloud worker may survive a multi-file deploy with old imported
 # modules still resident. Reload the Sunday-critical dependency chain in order
@@ -58,37 +67,37 @@ if _reloaded_nfl_sync or getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHE
     _automation_recovery = importlib.reload(_automation_recovery)
     _reloaded_automation_recovery = True
 
-import weekly_ui as _weekly_ui
-# Legacy regression marker only: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 9
-# Prior cumulative UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 10
 import gate4_ui as _gate4_ui
+import weekly_ui as _weekly_ui
 import gate5_ui as _gate5_ui
 
-# Streamlit Cloud can rerun app.py while a previously imported helper module
-# is still resident in the Python process. If that older module predates Gate 4
-# and lacks the sign-out callback parameter, reload it from the just-deployed
-# file before binding the function. This is a deployment-safety guard, not a
-# normal per-rerun reload.
+# Reload Gate 4 *before* Weekly UI, which imports Gate 4 functions by name.
+# Otherwise a warmed worker can show the old live screen even after deploying
+# both updated files, because Weekly UI held stale function references.
+# Legacy regression marker only: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 4
+# Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 7
+# Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 8
+# Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 9
+_reloaded_gate4_ui = False
+if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 10:
+    _gate4_ui = importlib.reload(_gate4_ui)
+    _reloaded_gate4_ui = True
+render_gate4_demo = _gate4_ui.render_gate4_demo
+
+# Legacy regression marker only: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 9
+# Prior cumulative UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 10
+# Prior cumulative UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 11
 _weekly_params = inspect.signature(_weekly_ui.render_player_game).parameters
 if (
     _reloaded_automation_recovery
-    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 11
+    or _reloaded_gate4_ui
+    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 12
     or not hasattr(_weekly_ui, "_render_player_card_button")
     or "on_sign_out" not in _weekly_params
     or "allow_demo_week" not in _weekly_params
 ):
     _weekly_ui = importlib.reload(_weekly_ui)
 render_player_game = _weekly_ui.render_player_game
-
-# Gate 4 navigation changed structurally in v0.4.4/v0.4.5. Streamlit Cloud can
-# occasionally keep an older helper module resident across a multi-file deploy,
-# so reload any pre-simplification Gate 4 module before binding the demo renderer.
-# Legacy regression marker only: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 4
-# Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 7
-# Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 8
-if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 9:
-    _gate4_ui = importlib.reload(_gate4_ui)
-render_gate4_demo = _gate4_ui.render_gate4_demo
 
 # Legacy regression marker: GATE5_UI_SCHEMA_VERSION", 0) < 4
 if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 6:

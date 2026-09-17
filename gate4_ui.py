@@ -30,7 +30,8 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp, week_phase
 
-GATE4_UI_SCHEMA_VERSION = 9
+GATE4_UI_SCHEMA_VERSION = 10
+# Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 9
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 8
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 7
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 6
@@ -121,31 +122,62 @@ def render_nav() -> str:
     return selected
 
 
-def _last_updated(week: dict[str, Any]) -> None:
+def _live_freshness_state(
+    week: dict[str, Any], games: list[dict[str, Any]] | None = None,
+    *, now: datetime | None = None,
+) -> tuple[str, str]:
+    """Describe confirmed refresh age without calling an NFL provider.
+
+    A week can still say LIVE after its games have all finished. Only show a
+    live-data health indicator when the shared game feed has a live game.
+    """
     stamp = parse_timestamp(week.get("last_data_refresh_at"))
     status = str(week.get("data_status") or "").upper()
+    live_games = status == "LIVE" and any(
+        isinstance(game, dict) and str(game.get("game_status") or "").upper() == "LIVE"
+        for game in (games or [])
+    )
     if not stamp:
-        if status == "LIVE":
-            st.warning("Live scores are waiting for their first refresh. Your lineup is safe.")
-        return
-    age_minutes = max(0, int((datetime.now(timezone.utc) - stamp).total_seconds() // 60))
+        return (
+            "warning", "Live scores are waiting for their first NFL refresh. Your lineup is safe."
+        ) if live_games else ("quiet", "NFL data refresh pending.")
+    age_minutes = max(0, int(((now or datetime.now(timezone.utc)) - stamp).total_seconds() // 60))
     if age_minutes < 1:
         label = "just now"
     elif age_minutes == 1:
         label = "1 minute ago"
     else:
         label = f"{age_minutes} minutes ago"
-    st.caption(f"NFL data refreshed {label}.")
-    if status == "LIVE" and age_minutes > 45:
-        st.warning("Scores may be delayed right now. The last NFL refresh is more than 45 minutes old; no lineup data has been lost.")
+    if not live_games:
+        return "quiet", f"NFL data last checked {label}."
+    if age_minutes <= 7:
+        return "fresh", f"🟢 Live updates active · NFL data checked {label}."
+    if age_minutes <= 15:
+        return "delayed", f"🟠 NFL data checked {label} · live scores may be delayed."
+    return (
+        "warning",
+        f"Live scores may be delayed. NFL data was last checked {label}; your lineup is safe.",
+    )
+
+
+def _last_updated(week: dict[str, Any], games: list[dict[str, Any]] | None = None) -> None:
+    tone, message = _live_freshness_state(week, games)
+    if tone == "warning":
+        st.warning(message)
+    else:
+        st.caption(message)
 
 
 
-def _render_lineup_reveal(week: dict[str, Any], bundle: dict[str, Any]) -> None:
+def _render_lineup_reveal(
+    week: dict[str, Any], bundle: dict[str, Any], *,
+    show_summary: bool = True, show_details: bool = True,
+    reveal: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     """Post-lock reveal only; no public starter/owner details before 1 PM ET."""
     if week_phase(week) != "locked" or bool(week.get("is_demo")):
         return
-    reveal = build_lineup_reveal(bundle)
+    reveal = reveal if reveal is not None else build_lineup_reveal(bundle)
     count = int(reveal["lineup_count"])
     if count == 0:
         return
@@ -155,48 +187,45 @@ def _render_lineup_reveal(week: dict[str, Any], bundle: dict[str, Any]) -> None:
         if popular else "No starters recorded"
     )
     same_groups = reveal["same_brain"]
-    same_text = (
-        " · ".join(" + ".join(names) for names in same_groups[:2])
-        if same_groups else "No identical complete lineups"
-    )
-    if len(same_groups) > 2:
-        same_text += f" · +{len(same_groups) - 2} more"
-    st.markdown(
-        '<div class="card-tight">'
-        '<div class="eyebrow">🔓 THE 1 PM LINEUP REVEAL</div>'
-        f'<strong>{count} lineup{"s" if count != 1 else ""} in · {reveal["complete_count"]} complete</strong>'
-        f'<div class="small">🔥 Crowd pick: {escape(popular_text)}</div>'
-        f'<div class="small">🦄 {len(reveal["solo_picks"])} solo pick{"s" if len(reveal["solo_picks"]) != 1 else ""}'
-        f' · 👯 {len(same_groups)} Same Brain group{"s" if len(same_groups) != 1 else ""}</div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    with st.expander("See who picked whom — all five positions", expanded=False):
-        st.caption("Locked starters only. Emergency backups stay private until activated.")
-        for position in reveal["positions"]:
-            pos = position["position"]
-            choices = position["choices"]
-            st.markdown(f"**{pos} · {position['picks_count']} picks**")
-            if not choices:
-                st.caption("No starters selected.")
-                continue
-            for choice in choices:
-                count_for_choice = int(choice["count"])
-                if count_for_choice == 1:
-                    owner = f' · 🦄 {choice["owners"][0]} went alone'
-                else:
-                    owner = " · " + ", ".join(choice["owners"])
-                st.markdown(
-                    '<div class="lineup-row">'
-                    f'<span class="small"><strong>{escape(choice["player_name"])}</strong>'
-                    f' · {count_for_choice} of {count} lineups{escape(owner)}</span>'
-                    '</div>',
-                    unsafe_allow_html=True,
-                )
-        if same_groups:
-            st.markdown("**👯 Same Brain — identical complete fives**")
-            for names in same_groups:
-                st.caption(" + ".join(names))
+    if show_summary:
+        st.markdown(
+            '<div class="card-tight">'
+            '<div class="eyebrow">🔓 THE 1 PM LINEUP REVEAL</div>'
+            f'<strong>{count} lineup{"s" if count != 1 else ""} in · {reveal["complete_count"]} complete</strong>'
+            f'<div class="small">🔥 Crowd pick: {escape(popular_text)}</div>'
+            f'<div class="small">🦄 {len(reveal["solo_picks"])} solo pick{"s" if len(reveal["solo_picks"]) != 1 else ""}'
+            f' · 👯 {len(same_groups)} Same Brain group{"s" if len(same_groups) != 1 else ""}</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+    if show_details:
+        with st.expander("See who picked whom — all five positions", expanded=False):
+            st.caption("Locked starters only. Emergency backups stay private until activated.")
+            for position in reveal["positions"]:
+                pos = position["position"]
+                choices = position["choices"]
+                st.markdown(f"**{pos} · {position['picks_count']} picks**")
+                if not choices:
+                    st.caption("No starters selected.")
+                    continue
+                for choice in choices:
+                    count_for_choice = int(choice["count"])
+                    if count_for_choice == 1:
+                        owner = f' · 🦄 {choice["owners"][0]} went alone'
+                    else:
+                        owner = " · " + ", ".join(choice["owners"])
+                    st.markdown(
+                        '<div class="lineup-row">'
+                        f'<span class="small"><strong>{escape(choice["player_name"])}</strong>'
+                        f' · {count_for_choice} of {count} lineups{escape(owner)}</span>'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
+            if same_groups:
+                st.markdown("**👯 Same Brain — identical complete fives**")
+                for names in same_groups:
+                    st.caption(" + ".join(names))
+    return reveal
 
 
 
@@ -527,18 +556,23 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
         st.caption("Monday reconciliation is complete. These results are FINAL.")
     else:
         st.caption("Scores refresh automatically during Sunday games.")
-    # Only the locked Sunday view receives the reveal; never show group picks
-    # on the Tuesday-Saturday picker, even if a caller reuses this renderer.
+    _last_updated(fresh_week, list(bundle.get("games") or []))
+    # Preserve the post-lock privacy gate and prioritize the player's position
+    # and live standings. The long who-picked-whom view moves below the scores.
+    reveal = None
     if show_storylines and data_status != "FINAL":
-        _render_lineup_reveal(fresh_week, bundle)
+        reveal = _render_lineup_reveal(fresh_week, bundle, show_details=False)
         _render_personal_sunday_drama(fresh_week, bundle, leaderboard, str(player.get("id") or ""))
     season: list[dict[str, Any]] = []
     if data_status == "FINAL":
         season, _ = _weekly_recap(store, fresh_week, bundle, leaderboard)
-    elif show_storylines:
-        _storylines(bundle, leaderboard)
     st.markdown("### Standings")
     _leaderboard_rows(leaderboard, str(player["id"]), detail=True)
+    if show_storylines and data_status != "FINAL":
+        if reveal:
+            _render_lineup_reveal(fresh_week, bundle, show_summary=False, reveal=reveal)
+        with st.expander("More Sunday storylines", expanded=False):
+            _storylines(bundle, leaderboard)
     if data_status == "FINAL":
         if season:
             leader = season[0]
@@ -548,7 +582,6 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
                 f'<div class="card-tight"><div class="eyebrow">Season Leader</div><strong>{escape(str(leader.get("emoji") or "🏆"))} {escape(str(leader.get("nickname") or "Leader"))} — {int(leader.get("season_points") or 0)} pts</strong><div class="small">{escape(own_text)}</div></div>',
                 unsafe_allow_html=True,
             )
-    _last_updated(fresh_week)
 
 
 def _render_season_rows(standings: list[dict[str, Any]], current_player_id: str | None = None) -> None:
@@ -711,7 +744,7 @@ def _render_personal_season_story(story: dict[str, Any]) -> None:
             '</div>', unsafe_allow_html=True,
         )
     if len(awards) > 4:
-        with st.expander(f"See all {len(awards)} achievements", expanded=False):
+        with st.expander(f"See {len(awards) - 4} more achievements", expanded=False):
             for award in awards[4:]:
                 st.markdown(
                     '<div class="card-tight">'
@@ -747,7 +780,7 @@ def render_profile(store, player: dict[str, Any], season: int, on_sign_out: Call
 
     with st.expander("Add to Home Screen"):
         st.markdown("**iPhone/iPad (Safari):** Share → **Add to Home Screen**.\n\n**Android (Chrome):** Menu → **Add to Home screen** or **Install app** if offered.")
-        st.caption("Optional, but it makes Sunday Pick'em feel much more like a regular phone app. Notifications are not required for Week 1.")
+        st.caption("Optional: open Sunday Pick'em from your home screen like a regular phone app. You can still play normally in your browser.")
 
     _how_to_play()
     st.markdown("#### Trophy Case")

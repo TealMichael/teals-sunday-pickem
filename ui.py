@@ -4,6 +4,8 @@ import streamlit as st
 
 from config import APP_NAME, APP_TAGLINE, APP_VERSION
 
+UI_THEME_SCHEMA_VERSION = 2
+
 
 def page_config() -> None:
     st.set_page_config(page_title=APP_NAME, page_icon="🏈", layout="centered", initial_sidebar_state="collapsed")
@@ -94,6 +96,13 @@ div[class*="st-key-pickbtn_"] [data-testid^="stBaseButton"]:disabled {
 }
 .lineup-row { display:flex; align-items:center; gap:.65rem; padding:.58rem 0; border-bottom:1px solid #EEF1F3; }
 .lineup-row:last-child { border-bottom:0; }
+/* Read-only picker progress: pending selections count only after Next saves. */
+.picker-progress { margin:.48rem 0 .34rem; }
+.picker-progress-label { color:#46545D; font-size:.78rem; font-weight:800; margin-bottom:.38rem; }
+.picker-progress-steps { display:flex; gap:.27rem; width:100%; }
+.picker-step { flex:1 1 0; min-width:0; text-align:center; padding:.43rem .08rem; border:1px solid #D9E1E5; border-radius:10px; background:#FFFFFF; color:#52616B; font-size:.75rem; line-height:1.2; font-weight:750; }
+.picker-step-saved { background:#EAF8F5; border-color:#B9E3DD; color:#155E56; }
+.picker-step-current { border:2px solid #0F766E; padding:calc(.43rem - 1px) .08rem; color:#0F766E; font-weight:900; }
 .onboard-grid { display:grid; grid-template-columns:1fr; gap:.6rem; margin:.7rem 0 1rem; }
 .onboard-card { background:#FFFFFF; border:1px solid var(--line); border-radius:16px; padding:.9rem; }
 .onboard-num { width:28px; height:28px; border-radius:999px; background:#ECF8F6; color:#155E56; display:inline-flex; align-items:center; justify-content:center; font-weight:900; margin-right:.45rem; }
@@ -195,8 +204,8 @@ div[class*="st-key-leaderbtn_"] [data-testid^="stBaseButton"]:hover { background
 .you-badge { display:inline-block; margin-left:.3rem; padding:.08rem .35rem; border-radius:999px; background:#ECF8F6; color:#155E56; font-size:.66rem; letter-spacing:.04em; font-weight:900; vertical-align:.08rem; }
 .history-card { background:#FFFFFF; border:1px solid var(--line); border-radius:15px; padding:.78rem .86rem; box-shadow:0 2px 10px rgba(23,32,39,.03); margin:.3rem 0 .65rem; }
 .history-head { display:flex; justify-content:space-between; align-items:center; gap:.8rem; padding-bottom:.45rem; border-bottom:1px solid #EEF1F3; margin-bottom:.15rem; }
-.profile-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem; margin:.35rem 0 .8rem; }
-.profile-stat { background:#FFFFFF; border:1px solid var(--line); border-radius:14px; padding:.68rem .66rem; min-height:92px; box-shadow:0 2px 10px rgba(23,32,39,.025); }
+.profile-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.45rem; margin:.25rem 0 .55rem; }
+.profile-stat { background:#FFFFFF; border:1px solid var(--line); border-radius:14px; padding:.6rem .62rem; min-height:86px; box-shadow:0 2px 10px rgba(23,32,39,.025); }
 .profile-stat-icon { font-size:1.15rem; }
 .profile-stat-value { font-size:1.45rem; line-height:1.1; font-weight:900; letter-spacing:-.04em; color:var(--ink); margin:.22rem 0 .15rem; }
 .profile-stat-label { color:var(--muted); font-size:.76rem; font-weight:720; }
@@ -222,6 +231,8 @@ div[class*="st-key-gate4_nav"] {
 div[class*="st-key-gate4_nav"] [role="radiogroup"],
 div[class*="st-key-gate4_nav"] [data-testid="stSegmentedControl"] {
   width:100% !important;
+  display:flex !important;
+  flex-wrap:nowrap !important;
   background:transparent !important;
   gap:.08rem !important;
   overflow:visible !important;
@@ -234,7 +245,7 @@ div[class*="st-key-gate4_nav"] button {
   border:0 !important;
   border-radius:17px !important;
   background:transparent !important;
-  color:#78848D !important;
+  color:#52616B !important;
   box-shadow:none !important;
 }
 div[class*="st-key-gate4_nav"] button p {
@@ -249,7 +260,7 @@ div[class*="st-key-gate4_nav"] button p {
   text-overflow:clip !important;
   white-space:nowrap !important;
   line-height:1.02 !important;
-  font-size:.66rem !important;
+  font-size:.76rem !important;
   font-weight:720 !important;
   letter-spacing:.005em !important;
 }
@@ -327,23 +338,22 @@ div[class*="st-key-gate4_nav"] button:focus-visible { outline:2px solid #58AAA0 
     bottom:calc(.35rem + env(safe-area-inset-bottom, 0px)) !important;
     border-radius:21px;
     box-sizing:border-box !important;
-    /* Community Cloud shows an owner-only Manage App/avatar control in the
-       lower-right. Reserve that area so Profile stays tappable for the owner,
-       while normal viewers simply see a subtle branded end-cap. */
-    padding:.3rem 7rem .3rem .4rem !important;
+    /* Leave a compact safe zone for Cloud's lower-right owner control.
+       The previous seven-rem gap squeezed all four labels on narrow phones. */
+    padding:.3rem 3.45rem .3rem .4rem !important;
   }
   div[class*="st-key-gate4_nav"]::after {
     content:"🏈";
     position:absolute;
-    right:2rem;
+    right:.95rem;
     top:50%;
     transform:translateY(-50%);
     opacity:.18;
-    font-size:1.15rem;
+    font-size:1rem;
     pointer-events:none;
   }
   div[class*="st-key-gate4_nav"] button { min-height:56px !important; }
-  div[class*="st-key-gate4_nav"] button p { font-size:.63rem !important; }
+  div[class*="st-key-gate4_nav"] button p { font-size:.75rem !important; }
   div[class*="st-key-gate4_nav"] button p span { min-width:38px !important; height:24px !important; font-size:1.16rem !important; }
 }
 </style>

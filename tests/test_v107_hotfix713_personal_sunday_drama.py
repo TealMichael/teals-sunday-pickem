@@ -198,8 +198,10 @@ def test_ui_all_final_only_when_all_selected_players_have_confirmed_final_games(
 def test_integration_after_reveal_before_general_storylines_and_no_mutations():
     source = (ROOT / "gate4_ui.py").read_text()
     live = source.split("def render_live_sunday(", 1)[1].split("def _render_season_rows", 1)[0]
-    assert live.index("_render_lineup_reveal(fresh_week, bundle)") < live.index("_render_personal_sunday_drama(")
-    assert live.index("_render_personal_sunday_drama(") < live.index("_storylines(bundle, leaderboard)")
+    assert live.index("_render_lineup_reveal(fresh_week, bundle, show_details=False)") < live.index("_render_personal_sunday_drama(")
+    assert live.index("_render_personal_sunday_drama(") < live.index('st.markdown("### Standings")')
+    assert live.index('st.markdown("### Standings")') < live.index("_storylines(bundle, leaderboard)")
+    assert 'with st.expander("More Sunday storylines", expanded=False):' in live
     assert 'if show_storylines and data_status != "FINAL":' in live
     assert 'if week_phase(week) != "locked" or bool(week.get("is_demo")):' in source
     assert "get_week_public_bundle" in live

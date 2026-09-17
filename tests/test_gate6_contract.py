@@ -34,7 +34,8 @@ def test_future_week_open_copy_is_dynamic():
 def test_profile_has_optional_home_screen_instructions():
     text = (ROOT / "gate4_ui.py").read_text()
     assert 'with st.expander("Add to Home Screen")' in text
-    assert "Notifications are not required for Week 1" in text
+    assert "You can still play normally in your browser" in text
+    assert "Notifications are not required for Week 1" not in text
 
 
 def test_nfl_worker_has_heartbeat_and_extended_snf_buffer_schedule():

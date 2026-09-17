@@ -47,7 +47,8 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 11
+WEEKLY_UI_SCHEMA_VERSION = 12
+# Prior cumulative UI marker: WEEKLY_UI_SCHEMA_VERSION = 11
 # Prior cumulative UI marker: WEEKLY_UI_SCHEMA_VERSION = 10
 # Legacy regression marker only: WEEKLY_UI_SCHEMA_VERSION = 9
 
@@ -656,6 +657,35 @@ def _render_player_card_button(
     )
 
 
+def _picker_progress_html(picks: list[dict], current_position: str) -> str:
+    """A read-only progress bar; pending taps never count as saved picks."""
+    saved = {
+        position for position, pick in picks_by_position(picks).items()
+        if position in POSITIONS and pick.get("pool_player_id")
+    }
+    step = POSITIONS.index(current_position) + 1
+    chips: list[str] = []
+    for position in POSITIONS:
+        classes = "picker-step"
+        if position in saved:
+            classes += " picker-step-saved"
+        if position == current_position:
+            classes += " picker-step-current"
+        indicator = " ✓" if position in saved else ""
+        current_attr = ' aria-current="step"' if position == current_position else ""
+        chips.append(
+            f'<span class="{classes}"{current_attr}>'
+            f'{html.escape(position + indicator)}</span>'
+        )
+    return (
+        '<div class="picker-progress" role="group"'
+        f' aria-label="Step {step} of 5; {len(saved)} of 5 picks saved">'
+        f'<div class="picker-progress-label">Step {step} of 5 · {len(saved)} saved</div>'
+        f'<div class="picker-progress-steps">{"".join(chips)}</div>'
+        '</div>'
+    )
+
+
 def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -> None:
     # While the builder is open, keep the already-loaded lineup snapshot warm.
     # The database remains authoritative when Next performs the actual write.
@@ -685,6 +715,7 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
     rows = _stable_order(str(player["id"]), str(week["id"]), position, position_pool(pool, position))
     mode = st.session_state.get("builder_mode", "pick")
 
+    st.markdown(_picker_progress_html(picks, position), unsafe_allow_html=True)
     st.markdown(f"### Choose your {position}")
     st.caption("Tap a player to highlight it. Your choice saves only when you tap Next.")
     if not week.get("is_demo"):
