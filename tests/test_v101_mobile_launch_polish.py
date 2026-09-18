@@ -5,10 +5,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_mobile_nav_reserves_owner_manage_app_clearance():
     css = (ROOT / "ui.py").read_text("utf-8")
-    assert 'padding:.3rem 3.45rem .3rem .4rem !important' in css
+    assert 'bottom:calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important' in css
+    assert 'padding:.3rem .4rem !important' in css
     assert 'font-size:.75rem !important' in css
-    assert 'content:"🏈"' in css
-    assert 'pointer-events:none' in css
+    assert 'content:"🏈"' not in css
 
 
 def test_streamlit_portal_surfaces_are_forced_light():

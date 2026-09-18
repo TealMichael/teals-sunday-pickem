@@ -11,7 +11,7 @@ from auth import login_player, register_player, restore_from_cookie, revoke_cook
 # cached from the prior deploy. Read the new build key before creating the
 # cached store or binding other UI modules.
 import config as _config
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.15":
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.15.1":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -23,7 +23,7 @@ from config import (
 )
 from security import safe_secret_match
 import ui as _ui
-if getattr(_ui, "UI_THEME_SCHEMA_VERSION", 0) < 2:
+if getattr(_ui, "UI_THEME_SCHEMA_VERSION", 0) < 3:
     _ui = importlib.reload(_ui)
 hero, inject_css, page_config = _ui.hero, _ui.inject_css, _ui.page_config
 

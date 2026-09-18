@@ -4,7 +4,7 @@ import streamlit as st
 
 from config import APP_NAME, APP_TAGLINE, APP_VERSION
 
-UI_THEME_SCHEMA_VERSION = 2
+UI_THEME_SCHEMA_VERSION = 3
 
 
 def page_config() -> None:
@@ -154,8 +154,9 @@ div[class*="st-key-signup_pin"] input {
 }
 
 /* The public app does not need Streamlit's in-app developer toolbar.
-   Community Cloud's owner-only Manage App control is host chrome and may still
-   appear, so the mobile nav also reserves a safe noninteractive zone for it. */
+   Community Cloud's owner-only floating account/Manage App control is host
+   chrome outside this app. Keep the bottom navigation ABOVE that control on
+   phones; reserving only right-side padding still covered Profile on iOS. */
 [data-testid="stToolbar"], .stDeployButton { visibility:hidden !important; }
 hr { border-color:var(--line); }
 
@@ -329,28 +330,21 @@ div[class*="st-key-gate4_nav"] button:focus-visible { outline:2px solid #58AAA0 
   .profile-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 480px) {
-  .block-container { padding-top:2.15rem; padding-left:.9rem; padding-right:.9rem; padding-bottom:7rem; }
+  /* Leave enough scroll clearance for the raised nav on small phones. */
+  .block-container { padding-top:2.15rem; padding-left:.9rem; padding-right:.9rem; padding-bottom:12.75rem; }
   .hero { padding-top:.65rem; }
   .hero-kicker { line-height:1.5; padding-top:.18rem; }
   .hero-title { font-size:1.64rem; }
   div[class*="st-key-gate4_nav"] {
-    width:calc(100vw - .7rem) !important;
-    bottom:calc(.35rem + env(safe-area-inset-bottom, 0px)) !important;
+    width:calc(100vw - 1rem) !important;
+    /* Cloud's owner avatar and Manage App button hover over the lower-right
+       corner OUTSIDE Streamlit's app DOM. Raise ALL four tabs above them, rather
+       than squeezing Profile into the avatar's hitbox. 5.5rem = 88 CSS px at
+       default font size, plus the device home-indicator safe area. */
+    bottom:calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important;
     border-radius:21px;
     box-sizing:border-box !important;
-    /* Leave a compact safe zone for Cloud's lower-right owner control.
-       The previous seven-rem gap squeezed all four labels on narrow phones. */
-    padding:.3rem 3.45rem .3rem .4rem !important;
-  }
-  div[class*="st-key-gate4_nav"]::after {
-    content:"🏈";
-    position:absolute;
-    right:.95rem;
-    top:50%;
-    transform:translateY(-50%);
-    opacity:.18;
-    font-size:1rem;
-    pointer-events:none;
+    padding:.3rem .4rem !important;
   }
   div[class*="st-key-gate4_nav"] button { min-height:56px !important; }
   div[class*="st-key-gate4_nav"] button p { font-size:.75rem !important; }
