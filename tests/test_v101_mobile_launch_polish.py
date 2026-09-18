@@ -3,9 +3,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_mobile_nav_reserves_owner_manage_app_clearance():
+def test_mobile_nav_docks_above_owner_manage_app_controls():
     css = (ROOT / "ui.py").read_text("utf-8")
-    assert 'bottom:calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important' in css
+    assert 'bottom:calc(4.1rem + env(safe-area-inset-bottom, 0px)) !important' in css
     assert 'padding:.3rem .4rem !important' in css
     assert 'font-size:.75rem !important' in css
     assert 'content:"🏈"' not in css

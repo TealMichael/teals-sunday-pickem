@@ -14,7 +14,7 @@ def test_owner_avatar_cannot_overlap_mobile_profile_tab():
     # INSIDE the fourth tab. Keep the safe-area inset additive.
     match = re.search(r'bottom:calc\(([\d.]+)rem \+ env\(safe-area-inset-bottom, 0px\)\)', nav)
     assert match, "mobile nav must clear owner chrome and device safe area"
-    assert float(match.group(1)) >= 5.0
+    assert 4.0 <= float(match.group(1)) <= 4.4
     assert "padding:.3rem .4rem !important" in nav
     assert "3.45rem" not in nav
     assert 'width:calc(100vw - 1rem) !important' in nav
@@ -27,7 +27,7 @@ def test_hotfix_loads_new_css_in_warm_streamlit_worker():
     app = (ROOT / "app.py").read_text("utf-8")
     config = (ROOT / "config.py").read_text("utf-8")
     css = (ROOT / "ui.py").read_text("utf-8")
-    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.15.1"' in config
-    assert 'getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.15.1"' in app
-    assert 'UI_THEME_SCHEMA_VERSION = 3' in css
-    assert 'getattr(_ui, "UI_THEME_SCHEMA_VERSION", 0) < 3' in app
+    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.15.2"' in config
+    assert 'getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.15.2"' in app
+    assert 'UI_THEME_SCHEMA_VERSION = 4' in css
+    assert 'getattr(_ui, "UI_THEME_SCHEMA_VERSION", 0) < 4' in app

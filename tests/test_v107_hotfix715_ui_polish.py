@@ -151,10 +151,10 @@ def test_profile_copy_mobile_nav_and_warm_deploy_guards():
     assert 'GATE4_UI_SCHEMA_VERSION = 10' in gate4
     assert 'getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 12' in app
     assert 'getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 10' in app
-    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.15"' in config
-    assert 'UI_THEME_SCHEMA_VERSION = 3' in css
-    assert 'getattr(_ui, "UI_THEME_SCHEMA_VERSION", 0) < 3' in app
-    assert 'getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.15.1"' in app
+    assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.15.2"' in config
+    assert 'UI_THEME_SCHEMA_VERSION = 4' in css
+    assert 'getattr(_ui, "UI_THEME_SCHEMA_VERSION", 0) < 4' in app
+    assert 'getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.15.2"' in app
     # Weekly UI binds Gate 4 functions with "from gate4_ui import ...". A warmed
     # worker must reload Gate 4 first or the Sunday renderer stays stale.
     assert app.index('if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 10:') < app.index('or _reloaded_gate4_ui')
