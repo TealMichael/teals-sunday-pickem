@@ -4,7 +4,7 @@ import streamlit as st
 
 from config import APP_NAME, APP_TAGLINE, APP_VERSION
 
-UI_THEME_SCHEMA_VERSION = 3
+UI_THEME_SCHEMA_VERSION = 4
 
 
 def page_config() -> None:
@@ -338,10 +338,10 @@ div[class*="st-key-gate4_nav"] button:focus-visible { outline:2px solid #58AAA0 
   div[class*="st-key-gate4_nav"] {
     width:calc(100vw - 1rem) !important;
     /* Cloud's owner avatar and Manage App button hover over the lower-right
-       corner OUTSIDE Streamlit's app DOM. Raise ALL four tabs above them, rather
-       than squeezing Profile into the avatar's hitbox. 5.5rem = 88 CSS px at
-       default font size, plus the device home-indicator safe area. */
-    bottom:calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important;
+       corner OUTSIDE Streamlit's app DOM. Keep all four tabs above them, but
+       dock the nav closer so it rests just above the avatar/logo cluster while
+       still clearing taps and the device home-indicator safe area. */
+    bottom:calc(4.1rem + env(safe-area-inset-bottom, 0px)) !important;
     border-radius:21px;
     box-sizing:border-box !important;
     padding:.3rem .4rem !important;
