@@ -26,7 +26,7 @@ from gate6_ui import render_launch_readiness
 from newsletter import build_tuesday_newsletter, load_newsletter_data, sms_segment_estimate
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 6
+GATE5_UI_SCHEMA_VERSION = 7
 
 
 def _status_label(row: dict[str, Any]) -> str:
@@ -530,6 +530,9 @@ def _render_live_dress_rehearsal(store, week: dict[str, Any]) -> None:
 
 def _render_clock(store, week: dict[str, Any]) -> None:
     from clock_broadcast import new_clock_token, refresh_clock_snapshot
+    from clock_melodies import (
+        MELODY_CHOICES, MELODY_TARGETS, get_week_melody, save_week_melody,
+    )
 
     st.markdown("#### 🏈 Sunday Clock")
     st.caption("Your Sunday broadcast layer for the AWTRIX clock. If you leave every message blank, the automatic Pick'em feed still runs by itself.")
@@ -542,6 +545,7 @@ def _render_clock(store, week: dict[str, Any]) -> None:
         return
 
     settings = store.get_clock_week_settings(str(week["id"]))
+    melody_settings = get_week_melody(store, str(week["id"]))
     st.markdown("##### This Sunday's messages")
     st.caption("These belong only to this NFL week and never carry into the next one automatically.")
     with st.form("g5_clock_messages"):
@@ -566,6 +570,38 @@ def _render_clock(store, week: dict[str, Any]) -> None:
             placeholder="House rule: bad fantasy decisions may be mocked publicly.",
             max_chars=240,
         )
+        st.markdown("**Optional melody**")
+        melody_ready = melody_settings is not None
+        melody_enabled = st.checkbox(
+            "Play a melody with a Commissioner message",
+            value=bool((melody_settings or {}).get("enabled", False)),
+            disabled=not melody_ready,
+            key=f"g5_clock_melody_enabled_{week['id']}",
+        )
+        target_keys = list(MELODY_TARGETS)
+        tune_keys = list(MELODY_CHOICES)
+        selected_target = (melody_settings or {}).get("target", "welcome")
+        selected_tune = (melody_settings or {}).get("tune", "happy_birthday")
+        melody_target = st.selectbox(
+            "Play with which message?",
+            target_keys,
+            index=target_keys.index(selected_target) if selected_target in target_keys else 0,
+            format_func=lambda key: MELODY_TARGETS[key],
+            disabled=not melody_ready,
+            key=f"g5_clock_melody_target_{week['id']}",
+        )
+        melody_tune = st.selectbox(
+            "Choose a melody",
+            tune_keys,
+            index=tune_keys.index(selected_tune) if selected_tune in tune_keys else 0,
+            format_func=lambda key: MELODY_CHOICES[key],
+            disabled=not melody_ready,
+            key=f"g5_clock_melody_tune_{week['id']}",
+        )
+        if melody_ready:
+            st.caption("Plays once each time that message appears, including recurring hourly slots. Other tickers remain silent.")
+        else:
+            st.caption("Melodies are unavailable until db/011_optional_commissioner_melodies.sql is applied. Ordinary messages still work.")
         save_messages = st.form_submit_button("Save Sunday Clock Messages", type="primary", use_container_width=True)
     if save_messages:
         try:
@@ -578,11 +614,22 @@ def _render_clock(store, week: dict[str, Any]) -> None:
                 custom_enabled=custom_enabled,
                 custom_text=custom_text,
             )
+        except Exception as exc:
+            st.error(f"Clock messages could not be saved: {exc}")
+        else:
+            if melody_ready:
+                try:
+                    save_week_melody(
+                        store, str(week["id"]),
+                        enabled=melody_enabled, target=melody_target, tune=melody_tune,
+                    )
+                except Exception as exc:
+                    # Never describe an unsuccessful music write as a successful save.
+                    st.warning(f"Messages were saved, but the optional melody was NOT saved: {exc}")
+                    return
             refresh_clock_snapshot(store, week)
             _set_flash("Sunday Clock messages saved for this week.")
             st.rerun()
-        except Exception as exc:
-            st.error(f"Clock messages could not be saved: {exc}")
 
     st.markdown("##### Automatic Sunday broadcast")
     st.caption("No setup needed each week. Before 1 PM the clock keeps picks private. After lock, it rotates app-owned updates without calculating anything on the clock itself.")

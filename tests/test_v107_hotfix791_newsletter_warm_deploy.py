@@ -11,11 +11,11 @@ def test_hotfix791_forces_store_and_commissioner_ui_reload_on_warm_worker():
 
     assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.9.1"' in config
     assert 'STORE_SCHEMA_VERSION = 4' in store
-    assert 'GATE5_UI_SCHEMA_VERSION = 6' in ui
+    assert 'GATE5_UI_SCHEMA_VERSION = 7' in ui
     assert 'getattr(_store, "STORE_SCHEMA_VERSION", 0) < 4' in app
     assert 'not hasattr(_store.SupabaseStore, "get_app_meta")' in app
     assert 'not hasattr(_store.SupabaseStore, "set_app_meta")' in app
-    assert 'getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 6' in app
+    assert 'getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 7' in app
 
 
 def test_newsletter_settings_failure_cannot_hide_final_recap():

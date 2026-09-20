@@ -28,6 +28,6 @@ def test_hotfix_loads_new_css_in_warm_streamlit_worker():
     config = (ROOT / "config.py").read_text("utf-8")
     css = (ROOT / "ui.py").read_text("utf-8")
     assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.15.2"' in config
-    assert 'getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.15.2"' in app
+    assert 'getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.16"' in app
     assert 'UI_THEME_SCHEMA_VERSION = 4' in css
     assert 'getattr(_ui, "UI_THEME_SCHEMA_VERSION", 0) < 4' in app

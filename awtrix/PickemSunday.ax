@@ -1,7 +1,7 @@
 # @name    Pickem Sunday
 # @desc    Sunday-only Teal's Pick'em broadcast via scoped Supabase RPC
 # @author  Teal's Sunday Pick'em
-# @version 1.0.7-hotfix7.1
+# @version 1.0.7-hotfix7.16
 # @headless true
 # @config  sb_url text "Supabase URL" default="" maxlen=160
 # @config  sb_key text "Publishable key" default="" maxlen=256
@@ -79,14 +79,35 @@ class PickemSunday
     var color = data.find("color")
     var accepted = false
     var rich = self.normalize_fragments(fragments)
+    # This optional field is supplied ONLY for a selected Commissioner message.
+    # Legacy feeds omit it; invalid RTTTL always falls back to silent text.
+    var melody = nil
+    if data.find("category") == "manual" && data.find("test") != true
+      melody = data.find("rtttl")
+    end
     if rich != nil
-      accepted = notify({"text": rich, "repeat": 1, "stack": true, "wakeup": true})
+      if melody != nil && str(melody) != ""
+        accepted = notify({"text": rich, "repeat": 1, "stack": true, "wakeup": true, "soundRtttl": str(melody)})
+      end
+      if !accepted
+        accepted = notify({"text": rich, "repeat": 1, "stack": true, "wakeup": true})
+      end
     end
     if !accepted
       if color != nil && color != ""
-        accepted = notify({"text": str(line), "textColor": str(color), "repeat": 1, "stack": true, "wakeup": true})
+        if melody != nil && str(melody) != ""
+          accepted = notify({"text": str(line), "textColor": str(color), "repeat": 1, "stack": true, "wakeup": true, "soundRtttl": str(melody)})
+        end
+        if !accepted
+          accepted = notify({"text": str(line), "textColor": str(color), "repeat": 1, "stack": true, "wakeup": true})
+        end
       else
-        accepted = notify({"text": str(line), "repeat": 1, "stack": true, "wakeup": true})
+        if melody != nil && str(melody) != ""
+          accepted = notify({"text": str(line), "repeat": 1, "stack": true, "wakeup": true, "soundRtttl": str(melody)})
+        end
+        if !accepted
+          accepted = notify({"text": str(line), "repeat": 1, "stack": true, "wakeup": true})
+        end
       end
     end
     if accepted

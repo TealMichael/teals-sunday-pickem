@@ -25,10 +25,10 @@ def test_hotfix79_build_and_commissioner_newsletter_contract():
 
     assert 'APP_BUILD_VERSION = "1.0.7-hotfix7.9.1"' in config
     assert 'commissioner_tools = ["Week", "Newsletter", "Players", "Corrections", "Clock", "Diagnostics"]' in ui
-    assert 'GATE5_UI_SCHEMA_VERSION = 6' in ui
+    assert 'GATE5_UI_SCHEMA_VERSION = 7' in ui
     assert 'elif tool == "Newsletter":' in ui
     assert '_render_newsletter(store, week)' in ui
-    assert 'getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 6' in app
+    assert 'getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 7' in app
     assert 'STORE_SCHEMA_VERSION = 4' in store
     assert 'def get_app_meta(' in store
     assert 'def set_app_meta(' in store
