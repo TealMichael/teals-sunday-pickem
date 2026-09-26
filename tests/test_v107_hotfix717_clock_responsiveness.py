@@ -115,7 +115,7 @@ def test_sql_parks_caleb_adds_all_day_saturday_preview_and_preserves_live_score_
 
 def test_awtrix_dynamic_sports_replace_stale_display_but_manual_can_stack():
     script = (ROOT / "awtrix" / "PickemSunday.ax").read_text("utf-8")
-    assert '# @version 1.0.7-hotfix7.17' in script
+    assert '# @version 1.0.7-hotfix7.18' in script
     assert 'category == "live_games"' in script
     assert 'category == "preview"' in script
     assert 'stack_it = false' in script
