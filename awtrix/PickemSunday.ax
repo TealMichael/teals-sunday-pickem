@@ -1,7 +1,7 @@
 # @name    Pickem Sunday
 # @desc    Sunday-only Teal's Pick'em broadcast via scoped Supabase RPC
 # @author  Teal's Sunday Pick'em
-# @version 1.0.7-hotfix7.18
+# @version 1.0.7-hotfix7.18.1
 # @headless true
 # @config  sb_url text "Supabase URL" default="" maxlen=160
 # @config  sb_key text "Publishable key" default="" maxlen=256
@@ -80,9 +80,9 @@ class PickemSunday
     var color = data.find("color")
     var category = data.find("category")
     var repeat_count = 1
-    # Long score/standings/preview tickers get two complete passes every time
-    # they activate. Other categories keep their established single pass.
-    if category == "preview" || category == "live_games" || category == "weekly"
+    # Long score/standings/preview tickers and Commissioner messages get two
+    # complete passes every time they activate. Other categories stay single-pass.
+    if category == "preview" || category == "live_games" || category == "weekly" || category == "manual"
       repeat_count = 2
     end
     var stack_it = true
