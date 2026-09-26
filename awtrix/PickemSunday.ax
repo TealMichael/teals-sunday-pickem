@@ -1,7 +1,7 @@
 # @name    Pickem Sunday
 # @desc    Sunday-only Teal's Pick'em broadcast via scoped Supabase RPC
 # @author  Teal's Sunday Pick'em
-# @version 1.0.7-hotfix7.17
+# @version 1.0.7-hotfix7.18.1
 # @headless true
 # @config  sb_url text "Supabase URL" default="" maxlen=160
 # @config  sb_key text "Publishable key" default="" maxlen=256
@@ -79,6 +79,12 @@ class PickemSunday
 
     var color = data.find("color")
     var category = data.find("category")
+    var repeat_count = 1
+    # Long score/standings/preview tickers and Commissioner messages get two
+    # complete passes every time they activate. Other categories stay single-pass.
+    if category == "preview" || category == "live_games" || category == "weekly" || category == "manual"
+      repeat_count = 2
+    end
     var stack_it = true
     # Fast-changing automatic sports/status messages replace the currently
     # displayed notification instead of waiting behind an older sports item.
@@ -97,27 +103,27 @@ class PickemSunday
     end
     if rich != nil
       if melody != nil && str(melody) != ""
-        accepted = notify({"text": rich, "repeat": 1, "stack": stack_it, "wakeup": true, "soundRtttl": str(melody)})
+        accepted = notify({"text": rich, "repeat": repeat_count, "stack": stack_it, "wakeup": true, "soundRtttl": str(melody)})
       end
       if !accepted
         # Legacy silent-fallback marker: accepted = notify({"text": rich, "repeat": 1, "stack": true, "wakeup": true})
-        accepted = notify({"text": rich, "repeat": 1, "stack": stack_it, "wakeup": true})
+        accepted = notify({"text": rich, "repeat": repeat_count, "stack": stack_it, "wakeup": true})
       end
     end
     if !accepted
       if color != nil && color != ""
         if melody != nil && str(melody) != ""
-          accepted = notify({"text": str(line), "textColor": str(color), "repeat": 1, "stack": stack_it, "wakeup": true, "soundRtttl": str(melody)})
+          accepted = notify({"text": str(line), "textColor": str(color), "repeat": repeat_count, "stack": stack_it, "wakeup": true, "soundRtttl": str(melody)})
         end
         if !accepted
-          accepted = notify({"text": str(line), "textColor": str(color), "repeat": 1, "stack": stack_it, "wakeup": true})
+          accepted = notify({"text": str(line), "textColor": str(color), "repeat": repeat_count, "stack": stack_it, "wakeup": true})
         end
       else
         if melody != nil && str(melody) != ""
-          accepted = notify({"text": str(line), "repeat": 1, "stack": stack_it, "wakeup": true, "soundRtttl": str(melody)})
+          accepted = notify({"text": str(line), "repeat": repeat_count, "stack": stack_it, "wakeup": true, "soundRtttl": str(melody)})
         end
         if !accepted
-          accepted = notify({"text": str(line), "repeat": 1, "stack": stack_it, "wakeup": true})
+          accepted = notify({"text": str(line), "repeat": repeat_count, "stack": stack_it, "wakeup": true})
         end
       end
     end
