@@ -22,7 +22,8 @@ from nfl_sync import (
 from weekly import parse_timestamp
 
 UTC = timezone.utc
-AUTOMATION_RECOVERY_SCHEMA_VERSION = 5
+AUTOMATION_RECOVERY_SCHEMA_VERSION = 6
+# Prior two-speed live engine generation: AUTOMATION_RECOVERY_SCHEMA_VERSION = 5
 # Legacy regression marker only: AUTOMATION_RECOVERY_SCHEMA_VERSION = 4
 ACTIVE_LIVE_LANE_SCHEMA_VERSION = 1
 
@@ -78,24 +79,37 @@ ACTIVE_PLAYER_STAT_LEASE_TTL_SECONDS = 180
 def _refresh_clock_snapshot_best_effort(store, week: dict[str, Any]) -> None:
     try:
         import clock_broadcast as _clock_broadcast
-        if getattr(_clock_broadcast, "CLOCK_SNAPSHOT_VERSION", 0) < 4:
+        if getattr(_clock_broadcast, "CLOCK_SNAPSHOT_VERSION", 0) < 5:
             _clock_broadcast = importlib.reload(_clock_broadcast)
         _clock_broadcast.refresh_clock_snapshot(store, week)
     except Exception:
         pass
 
 def _latest_game_state_age(store, week_id: str, now: datetime) -> float | None:
-    """Return age of the freshest persisted NFL game row for this week."""
+    """Return age of the last successful *full-scoreboard* refresh.
+
+    Do not infer whole-slate freshness from the freshest individual game row.
+    A Pick'em-player summary can legitimately update one game while unrelated
+    NFL games remain old; using that row used to postpone the lightweight
+    scoreboard refresh and could leave the AWTRIX NFL ticker well behind.
+
+    The row-age fallback is retained only for compatibility with older test/
+    store adapters that predate data-run history. When used, the *oldest* game
+    row controls freshness so one fresh game still cannot mask a stale slate.
+    """
     try:
-        games = store.get_nfl_games(week_id)
-    except Exception:
-        return None
-    ages = [
-        age
-        for age in (_age_minutes(row.get("provider_updated_at"), now) for row in games)
-        if age is not None
-    ]
-    return min(ages) if ages else None
+        return _successful_age(store, "live_game_state", week_id, now)
+    except (AttributeError, TypeError):
+        try:
+            games = store.get_nfl_games(week_id)
+        except Exception:
+            return None
+        ages = [
+            age
+            for age in (_age_minutes(row.get("provider_updated_at"), now) for row in games)
+            if age is not None
+        ]
+        return max(ages) if ages else None
 
 
 def maybe_refresh_active_live_lane(
@@ -147,9 +161,9 @@ def maybe_refresh_active_live_lane(
             return week, {"action": "player_stats", "triggered": False, "reason": "lease-busy-or-unavailable"}
 
     # The game-state lane is one ESPN scoreboard request and does not touch the
-    # week-level fantasy-score freshness stamp. A recent heavy stats refresh or
-    # GitHub full refresh also updates nfl_games.provider_updated_at, naturally
-    # postponing this lightweight call and avoiding duplicate provider traffic.
+    # week-level fantasy-score freshness stamp. Its cadence is tracked by its
+    # own successful full-scoreboard run, so one freshly updated Pick'em game
+    # can no longer mask stale scores elsewhere on the NFL slate.
     state_age = _latest_game_state_age(store, week_id, now)
     if state_age is None or state_age >= ACTIVE_GAME_STATE_REFRESH_MINUTES:
         attempt_age = _latest_attempt_age(store, "live_game_state", week_id, now)

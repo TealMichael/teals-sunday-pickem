@@ -7,11 +7,12 @@ import inspect
 import streamlit as st
 
 from auth import login_player, register_player, restore_from_cookie, revoke_cookie_session
+# Prior warm-reload marker: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.16"
 # The app file is re-executed on Streamlit reruns, but config.py may still be
 # cached from the prior deploy. Read the new build key before creating the
 # cached store or binding other UI modules.
 import config as _config
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.16":
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.17":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -57,13 +58,13 @@ if getattr(_nfl_sources, "NFL_SOURCES_SCHEMA_VERSION", 0) < 2:
 
 import nfl_sync as _nfl_sync
 _reloaded_nfl_sync = False
-if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 5:
+if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 6:
     _nfl_sync = importlib.reload(_nfl_sync)
     _reloaded_nfl_sync = True
 
 import automation_recovery as _automation_recovery
 _reloaded_automation_recovery = False
-if _reloaded_nfl_sync or getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 5:
+if _reloaded_nfl_sync or getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 6:
     _automation_recovery = importlib.reload(_automation_recovery)
     _reloaded_automation_recovery = True
 
@@ -100,7 +101,8 @@ if (
 render_player_game = _weekly_ui.render_player_game
 
 # Legacy regression marker: GATE5_UI_SCHEMA_VERSION", 0) < 4
-if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 7:
+# Prior Gate 5 warm-reload marker: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 7
+if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 8:
     _gate5_ui = importlib.reload(_gate5_ui)
 render_commissioner_dashboard = _gate5_ui.render_commissioner_dashboard
 

@@ -15,8 +15,8 @@ from weekly import POSITIONS, parse_timestamp
 
 UTC = timezone.utc
 ET = ZoneInfo(TIMEZONE_NAME)
-NFL_SYNC_SCHEMA_VERSION = 5
-# Previous cumulative marker: NFL_SYNC_SCHEMA_VERSION = 4
+NFL_SYNC_SCHEMA_VERSION = 6
+# Prior safety-audit generation: NFL_SYNC_SCHEMA_VERSION = 5
 # Legacy regression marker only: NFL_SYNC_SCHEMA_VERSION = 3
 
 
@@ -124,13 +124,12 @@ def sync_schedule(
                 continue
             prior_status = str(prior.get("game_status") or "").upper()
             new_status = str(game.get("game_status") or "").upper()
-            # The durable schedule file can briefly lag ESPN's game state.
-            # Never regress a confirmed FINAL to an unfinished status or an
-            # in-progress game to an unstarted one. Explicit postponed/canceled
-            # statuses remain allowed for an in-progress game.
-            preserve = prior_status == "FINAL" or (
-                prior_status == "LIVE" and new_status in {"LIVE", "SCHEDULED"}
-            )
+            # Safety audit guard: a lagging durable schedule may report a
+            # game as SCHEDULED after ESPN has already confirmed LIVE, or may
+            # temporarily lag a confirmed FINAL. Never let that coarser feed
+            # move a game backwards. A genuine ESPN/nflverse FINAL still wins
+            # over a prior LIVE state.
+            preserve = prior_status == "FINAL" or (prior_status == "LIVE" and new_status in {"LIVE", "SCHEDULED"})
             if preserve:
                 for key in ("game_status", "period", "game_clock", "home_score", "away_score", "completed"):
                     if key in prior:
@@ -357,19 +356,21 @@ def refresh_live_game_state(store, week: dict[str, Any], espn: ESPNProvider | No
             prior = existing.get(event_id)
             if prior:
                 merged = dict(prior)
-                old_status = str(prior.get("game_status") or "").upper()
-                new_status = str(row.get("game_status") or "").upper()
-                # An out-of-date scoreboard must not turn FINAL 27-17 into
-                # SCHEDULED 0-0, nor turn an already-LIVE game backwards to
-                # its pregame state. Preserve the entire confirmed state.
-                if (old_status == "FINAL" and new_status != "FINAL") or (
-                    old_status == "LIVE" and new_status == "SCHEDULED"
-                ):
-                    merged_rows.append(merged)
-                    continue
-                for key in state_fields:
-                    if key in row:
-                        merged[key] = row.get(key)
+                prior_status = str(prior.get("game_status") or "").upper()
+                incoming_status = str(row.get("game_status") or "").upper()
+                # Safety audit guard: a partial/lagging scoreboard must never
+                # turn a confirmed FINAL back into LIVE/SCHEDULED or a LIVE
+                # game back into SCHEDULED/0-0. Normal LIVE advances and FINAL
+                # transitions still update immediately.
+                preserve_prior_state = (
+                    prior_status == "FINAL" and incoming_status != "FINAL"
+                ) or (
+                    prior_status == "LIVE" and incoming_status == "SCHEDULED"
+                )
+                if not preserve_prior_state:
+                    for key in state_fields:
+                        if key in row:
+                            merged[key] = row.get(key)
                 # Keep the durable schedule identity from nflverse, but accept
                 # ESPN's team/kickoff values if an event did not exist locally.
                 merged_rows.append(merged)
@@ -577,9 +578,25 @@ def refresh_live_player_stats(store, week: dict[str, Any], espn: ESPNProvider | 
 
 
 def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None = None) -> dict[str, Any]:
-    """Five-minute shared live refresh used by GitHub and recovery paths."""
+    """Five-minute shared live refresh used by GitHub and recovery paths.
+
+    Hotfix 7.17 deliberately refreshes the *entire* ESPN scoreboard before
+    updating Pick'em player stats. Previously, non-pool NFL games could remain
+    stale because the heavy scoring lane refreshed only games that mattered to
+    the 25-player Pick'em pool. If ESPN's lightweight scoreboard is temporarily
+    unavailable, preserve the proven fallback path rather than failing scoring.
+    """
     espn = espn or ESPNProvider()
-    games = sync_schedule(store, week, espn, prefer_live=True)
+    try:
+        state = refresh_live_game_state(store, week, espn)
+        games = list(state.get("games") or [])
+    except Exception:
+        # Scoreboard freshness is important to the ticker but must never make
+        # the fantasy scoring worker less reliable. Preserve the existing
+        # durable schedule + live-state fallback when the scoreboard request
+        # itself is unavailable.
+        games = sync_schedule(store, week, espn, prefer_live=True)
+
     if datetime.now(UTC) < (parse_timestamp(week.get("locks_at")) or datetime.max.replace(tzinfo=UTC)):
         store.reconcile_pool_schedule(week, games)
     return _refresh_live_player_stats_from_games(
@@ -588,7 +605,7 @@ def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None =
         games,
         espn,
         run_type="live_scores",
-        provider="ESPN-CDN+nflverse",
+        provider="ESPN-scoreboard+ESPN-CDN",
     )
 
 def _nflverse_row_index(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:

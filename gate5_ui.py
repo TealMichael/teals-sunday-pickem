@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,7 +27,8 @@ from gate6_ui import render_launch_readiness
 from newsletter import build_tuesday_newsletter, load_newsletter_data, sms_segment_estimate
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 7
+GATE5_UI_SCHEMA_VERSION = 8
+# Prior schema marker retained for legacy regression checks: GATE5_UI_SCHEMA_VERSION = 7
 
 
 def _status_label(row: dict[str, Any]) -> str:
@@ -529,7 +531,11 @@ def _render_live_dress_rehearsal(store, week: dict[str, Any]) -> None:
 
 
 def _render_clock(store, week: dict[str, Any]) -> None:
-    from clock_broadcast import new_clock_token, refresh_clock_snapshot
+    import clock_broadcast as _clock_broadcast
+    if getattr(_clock_broadcast, "CLOCK_SNAPSHOT_VERSION", 0) < 5:
+        _clock_broadcast = importlib.reload(_clock_broadcast)
+    new_clock_token = _clock_broadcast.new_clock_token
+    refresh_clock_snapshot = _clock_broadcast.refresh_clock_snapshot
     from clock_melodies import (
         MELODY_CHOICES, MELODY_TARGETS, get_week_melody, save_week_melody,
     )
@@ -634,11 +640,12 @@ def _render_clock(store, week: dict[str, Any]) -> None:
     st.markdown("##### Automatic Sunday broadcast")
     st.caption("No setup needed each week. Before 1 PM the clock keeps picks private. After lock, it rotates app-owned updates without calculating anything on the clock itself.")
     st.markdown(
+        "**Saturday:** NFL Sunday Preview every ~15 min, all day  \n"
+        "**Sunday after lock:** live NFL scores every ~15 min  \n"
         "**Every ~15 min:** full current-week Pick'em standings  \n"
-        "**Every ~30 min:** all live NFL scores  \n"
-        "**Every ~30 min:** Player Update from this week's 25-player pool only  \n"
-        "**Starting Week 2, every ~30 min:** full season standings  \n"
-        "**Manual slots:** enabled Welcome / Party / Custom messages rotate about every 30 min"
+        "**Twice/hour:** Player Update from this week's 25-player pool only  \n"
+        "**Starting Week 2:** season standings remain in the normal rotation  \n"
+        "**Manual slot:** enabled Welcome / Party / Custom messages rotate hourly"
     )
 
     snap_row = store.get_clock_snapshot(str(week["id"]))
@@ -655,6 +662,7 @@ def _render_clock(store, week: dict[str, Any]) -> None:
         previews = [
             ("Before lock", payload.get("readiness")),
             ("Weekly standings", payload.get("weekly")),
+            ("Saturday NFL preview", payload.get("sunday_preview")),
             ("Live NFL scores", payload.get("live_games")),
             ("Season standings", payload.get("season_text")),
             ("Weekly champion", payload.get("champion")),

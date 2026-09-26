@@ -12,7 +12,7 @@ from weekly import parse_timestamp
 
 UTC = timezone.utc
 ET = ZoneInfo("America/New_York")
-CLOCK_SNAPSHOT_VERSION = 4
+CLOCK_SNAPSHOT_VERSION = 5
 CLOCK_MESSAGE_MAX = 420
 MANUAL_MESSAGE_MAX = 240
 
@@ -233,6 +233,57 @@ def _live_games_text(games: list[dict[str, Any]]) -> str:
             suffix += f" {clock}"
         bits.append(f"{away} {away_score} {home} {home_score}{suffix}")
     return _clean("NFL LIVE • " + " • ".join(bits))
+
+
+def _kickoff_label(value: Any) -> str:
+    stamp = parse_timestamp(value)
+    if not stamp:
+        return "TBD"
+    local = stamp.astimezone(ET)
+    hour = local.hour % 12 or 12
+    suffix = "AM" if local.hour < 12 else "PM"
+    if local.minute:
+        return f"{hour}:{local.minute:02d} {suffix}"
+    return f"{hour} {suffix}"
+
+
+def _sunday_preview_rich(games: list[dict[str, Any]], locks_at: Any) -> list[dict[str, str]]:
+    """Build a Saturday-safe preview of every Sunday NFL matchup in this week.
+
+    Schedule-only by design: no Pick'em selections, fantasy points, ownership,
+    or standings are exposed before the universal Sunday lock.
+    """
+    lock = parse_timestamp(locks_at)
+    sunday = lock.astimezone(ET).date() if lock else None
+    rows: list[dict[str, Any]] = []
+    for game in games:
+        kickoff = parse_timestamp(game.get("kickoff_at"))
+        if not kickoff:
+            continue
+        if sunday is not None and kickoff.astimezone(ET).date() != sunday:
+            continue
+        rows.append(game)
+    rows.sort(key=lambda row: str(row.get("kickoff_at") or ""))
+    if not rows:
+        return []
+
+    parts: list[tuple[Any, str]] = [("NFL SUNDAY PREVIEW • ", LIGHT_BLUE)]
+    for idx, game in enumerate(rows):
+        away = str(game.get("away_team") or "AWAY").upper()
+        home = str(game.get("home_team") or "HOME").upper()
+        if idx > 0:
+            parts.append((" • ", WHITE))
+        parts.extend([
+            (_kickoff_label(game.get("kickoff_at")) + " ", WHITE),
+            (away, _team_color(away)),
+            (" @ ", WHITE),
+            (home, _team_color(home)),
+        ])
+    return _rich(parts)
+
+
+def _sunday_preview_text(games: list[dict[str, Any]], locks_at: Any) -> str:
+    return _plain_from_rich(_sunday_preview_rich(games, locks_at))
 
 
 def _player_updates_rich(pool: list[dict[str, Any]], stats_rows: list[dict[str, Any]]) -> list[list[dict[str, str]]]:
@@ -568,7 +619,9 @@ def build_clock_snapshot(store, week: dict[str, Any], *, now: datetime | None = 
 
     weekly_rich = _weekly_rich(leaderboard, final=final)
     season_rich = _season_rich(season, int(week.get("nfl_week") or 0))
-    live_games_rich = _live_games_rich(list(bundle.get("games") or []))
+    games = list(bundle.get("games") or [])
+    live_games_rich = _live_games_rich(games)
+    sunday_preview_rich = _sunday_preview_rich(games, week.get("locks_at"))
     player_updates_rich = _player_updates_rich(pool, stats_rows)
     pulses_rich = _pulse_rich(story, pool)
 
@@ -601,8 +654,10 @@ def build_clock_snapshot(store, week: dict[str, Any], *, now: datetime | None = 
         "weekly_rich": weekly_rich,
         "season_text": _plain_from_rich(season_rich),
         "season_rich": season_rich,
-        "live_games": _live_games_text(list(bundle.get("games") or [])),
+        "live_games": _live_games_text(games),
         "live_games_rich": live_games_rich,
+        "sunday_preview": _plain_from_rich(sunday_preview_rich),
+        "sunday_preview_rich": sunday_preview_rich,
         "player_updates": [_plain_from_rich(parts) for parts in player_updates_rich],
         "player_updates_rich": player_updates_rich,
         "pulses": [_plain_from_rich(parts) for parts in pulses_rich],
