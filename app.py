@@ -12,7 +12,8 @@ from auth import login_player, register_player, restore_from_cookie, revoke_cook
 # cached from the prior deploy. Read the new build key before creating the
 # cached store or binding other UI modules.
 import config as _config
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.17":
+# Prior cumulative config guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.17"
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.19":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -102,7 +103,8 @@ render_player_game = _weekly_ui.render_player_game
 
 # Legacy regression marker: GATE5_UI_SCHEMA_VERSION", 0) < 4
 # Prior Gate 5 warm-reload marker: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 7
-if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 8:
+# Prior Gate 5 warm-reload marker: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 8
+if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 9:
     _gate5_ui = importlib.reload(_gate5_ui)
 render_commissioner_dashboard = _gate5_ui.render_commissioner_dashboard
 

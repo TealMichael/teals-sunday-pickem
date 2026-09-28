@@ -56,7 +56,7 @@ def test_compact_final_standings_keeps_competition_ranks_and_every_participant()
         {"finish_rank": 1, "nickname_snapshot": "Tim", "weekly_score": 100.0},
         {"finish_rank": 3, "nickname_snapshot": "Jenny", "weekly_score": 95.5},
     ]
-    assert compact_final_standings(results) == "1 Mike 100.0 | 1 Tim 100.0 | 3 Jenny 95.5"
+    assert compact_final_standings(results) == "1T Mike 100.0 • 1T Tim 100.0 • 3 Jenny 95.5"
 
 
 def test_tuesday_newsletter_has_required_short_text_sections():
@@ -84,10 +84,11 @@ def test_tuesday_newsletter_has_required_short_text_sections():
         lineup_url="https://pickem.example",
     )
     assert "Week 1 Final" in text
-    assert "Final: 1 Mike 110.4 | 2 Jenny 104.2" in text
-    assert "Perfect 5: QB Allen • RB Barkley • WR Jefferson • TE Kelce • K Aubrey = 145.6" in text
-    assert "Season leader: Mike — 12 pts" in text
-    assert "Set Week 2: https://pickem.example" in text
+    assert "🗣️ Commish: Mike opened the season with the Week 1 win at 110.4." in text
+    assert "🏆 Week 1: 1 Mike 110.4 • 2 Jenny 104.2" in text
+    assert "Perfect 5:" not in text
+    assert "📈 Season Top 5: 1 Mike 12 pts • 2 Jenny 9 pts" in text
+    assert "👉 Week 2 lineup: https://pickem.example" in text
     assert len(text) < 400
 
 

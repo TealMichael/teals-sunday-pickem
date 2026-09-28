@@ -24,10 +24,16 @@ from gate5 import (
 )
 from weekly import POSITIONS, et_label, parse_timestamp
 from gate6_ui import render_launch_readiness
-from newsletter import build_tuesday_newsletter, load_newsletter_data, sms_segment_estimate
+import newsletter as _newsletter
+if getattr(_newsletter, "NEWSLETTER_LOGIC_SCHEMA_VERSION", 0) < 2:
+    _newsletter = importlib.reload(_newsletter)
+build_tuesday_newsletter = _newsletter.build_tuesday_newsletter
+load_newsletter_data = _newsletter.load_newsletter_data
+sms_segment_estimate = _newsletter.sms_segment_estimate
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 8
+GATE5_UI_SCHEMA_VERSION = 9
+# Prior schema marker retained for legacy regression checks: GATE5_UI_SCHEMA_VERSION = 8
 # Prior schema marker retained for legacy regression checks: GATE5_UI_SCHEMA_VERSION = 7
 
 
@@ -936,7 +942,23 @@ def _newsletter_source_fingerprint(data: dict[str, Any], lineup_url: str) -> str
         (str(row.get("position") or ""), str(row.get("id") or ""), float(row.get("points") or 0))
         for row in (data.get("perfect") or {}).get("players") or []
     ]
-    raw = repr((data.get("final_week", {}).get("id"), final_results, perfect, str(lineup_url or ""))).encode("utf-8")
+    season_results = [
+        (
+            int(row.get("nfl_week") or 0),
+            str(row.get("player_id") or ""),
+            int(row.get("finish_rank") or 0),
+            float(row.get("weekly_score") or 0),
+            int(row.get("season_points") or 0),
+        )
+        for row in data.get("season_results") or []
+    ]
+    raw = repr((
+        data.get("final_week", {}).get("id"),
+        final_results,
+        perfect,
+        season_results,
+        str(lineup_url or ""),
+    )).encode("utf-8")
     return hashlib.sha1(raw).hexdigest()
 
 
@@ -1032,7 +1054,7 @@ def _render_newsletter(store, current_week: dict[str, Any]) -> None:
 
     perfect = data.get("perfect") or {}
     if not perfect.get("complete"):
-        st.warning("Perfect 5 could not be fully calculated from the archived visible player pool. Final standings are still valid.")
+        st.warning("Perfect-lineup comparison is unavailable for this recap. Weekly and season standings are still valid.")
 
 
 def render_commissioner_dashboard(store, *, pin_pepper: str) -> None:
