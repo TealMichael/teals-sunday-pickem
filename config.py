@@ -8,7 +8,8 @@ APP_VERSION = "1.0.8"
 # every hotfix a distinct Streamlit resource-cache generation. Without this,
 # a warm Streamlit Cloud process can reuse a SupabaseStore instance created by
 # an older class definition across a multi-file deploy.
-APP_BUILD_VERSION = "1.0.8-pickem-pulse"
+APP_BUILD_VERSION = "1.0.8-hotfix8.1"
+# Prior release: APP_BUILD_VERSION = "1.0.8-pickem-pulse"
 # Prior release: APP_BUILD_VERSION = "1.0.7-hotfix7.19"
 # Prior cumulative build: APP_BUILD_VERSION = "1.0.7-hotfix7.17"
 # Prior cumulative build: APP_BUILD_VERSION = "1.0.7-hotfix7.16"

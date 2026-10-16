@@ -48,7 +48,8 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 13
+WEEKLY_UI_SCHEMA_VERSION = 14
+# Previous release: WEEKLY_UI_SCHEMA_VERSION = 13
 # Previous cumulative marker: WEEKLY_UI_SCHEMA_VERSION = 12
 # Prior cumulative UI marker: WEEKLY_UI_SCHEMA_VERSION = 11
 # Prior cumulative UI marker: WEEKLY_UI_SCHEMA_VERSION = 10
@@ -955,6 +956,11 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
         _render_live_prelock_status(store, week, player)
 
     if chosen == total and not needs and not unavailable:
+        # This is the first content directly after Sunday Status on a ready
+        # lineup's home screen. The Pulse is optional and must never displace
+        # a required selection or injury-repair action.
+        if not bool(week.get("is_demo")):
+            render_pregame_pulse(store, week, player)
         st.markdown("### ✅ YOUR FIVE ARE READY")
         st.markdown(f'<div class="card">{_summary_rows(picks, pool_by_id)}</div>', unsafe_allow_html=True)
         if not bool(week.get("is_demo")):
@@ -966,9 +972,6 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
             st.session_state.builder_position = None
             st.session_state.builder_mode = "review"
             st.rerun()
-        # Optional story appears only when the lineup is ready; never distracts
-        # from building five or responding to an injury warning.
-        render_pregame_pulse(store, week, player)
     else:
         st.markdown(
             f'<div class="card"><div class="eyebrow">Your lineup</div><div class="big-number">{chosen} of {total}</div><div class="small">picks complete</div></div>',

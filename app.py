@@ -14,7 +14,7 @@ from auth import login_player, register_player, restore_from_cookie, revoke_cook
 import config as _config
 # Prior cumulative config guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.17"
 # Previous release guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.19"
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.8-pickem-pulse":
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.8-hotfix8.1":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -92,11 +92,12 @@ render_gate4_demo = _gate4_ui.render_gate4_demo
 # Prior cumulative UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 10
 # Prior cumulative UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 11
 # Previous UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 12
+# Previous release guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 13
 _weekly_params = inspect.signature(_weekly_ui.render_player_game).parameters
 if (
     _reloaded_automation_recovery
     or _reloaded_gate4_ui
-    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 13
+    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 14
     or not hasattr(_weekly_ui, "_render_player_card_button")
     or "on_sign_out" not in _weekly_params
     or "allow_demo_week" not in _weekly_params
