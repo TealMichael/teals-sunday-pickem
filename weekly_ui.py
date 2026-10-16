@@ -15,6 +15,7 @@ if getattr(_weekly, "WEEKLY_LOGIC_SCHEMA_VERSION", 0) < 3:
 
 from config import APP_VERSION
 from player_season_stats import attach_snapshot, load_or_prepare_snapshot, stats_line
+from pulse_ui import render_pregame_pulse
 from automation_recovery import maybe_recover_critical_automation
 from gate4_ui import (
     maybe_render_final_celebration,
@@ -47,7 +48,8 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 12
+WEEKLY_UI_SCHEMA_VERSION = 13
+# Previous cumulative marker: WEEKLY_UI_SCHEMA_VERSION = 12
 # Prior cumulative UI marker: WEEKLY_UI_SCHEMA_VERSION = 11
 # Prior cumulative UI marker: WEEKLY_UI_SCHEMA_VERSION = 10
 # Legacy regression marker only: WEEKLY_UI_SCHEMA_VERSION = 9
@@ -964,6 +966,9 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
             st.session_state.builder_position = None
             st.session_state.builder_mode = "review"
             st.rerun()
+        # Optional story appears only when the lineup is ready; never distracts
+        # from building five or responding to an injury warning.
+        render_pregame_pulse(store, week, player)
     else:
         st.markdown(
             f'<div class="card"><div class="eyebrow">Your lineup</div><div class="big-number">{chosen} of {total}</div><div class="small">picks complete</div></div>',

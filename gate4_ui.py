@@ -18,6 +18,7 @@ from config import APP_VERSION, LIVE_APP_DISPLAY_REFRESH_SECONDS, NFL_SEASON
 from lineup_reveal import build_lineup_reveal
 from sunday_drama import build_personal_sunday_drama
 from personal_season_story import build_personal_season_story
+from pulse_ui import render_live_pulse, render_reactions
 from gate4 import (
     add_zero_point_players,
     build_season_standings,
@@ -30,7 +31,8 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp, week_phase
 
-GATE4_UI_SCHEMA_VERSION = 10
+GATE4_UI_SCHEMA_VERSION = 11
+# Previous cumulative marker: GATE4_UI_SCHEMA_VERSION = 10
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 9
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 8
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 7
@@ -562,12 +564,15 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
     reveal = None
     if show_storylines and data_status != "FINAL":
         reveal = _render_lineup_reveal(fresh_week, bundle, show_details=False)
-        _render_personal_sunday_drama(fresh_week, bundle, leaderboard, str(player.get("id") or ""))
+        # The previous Sunday Race card is superseded by one compact Pulse.
+        # _render_personal_sunday_drama(fresh_week, bundle, leaderboard, str(player.get("id") or ""))
+    render_live_pulse(store, fresh_week, player, leaderboard, final=data_status == "FINAL")
     season: list[dict[str, Any]] = []
     if data_status == "FINAL":
         season, _ = _weekly_recap(store, fresh_week, bundle, leaderboard)
     st.markdown("### Standings")
     _leaderboard_rows(leaderboard, str(player["id"]), detail=True)
+    render_reactions(store, fresh_week, player, leaderboard)
     if show_storylines and data_status != "FINAL":
         if reveal:
             _render_lineup_reveal(fresh_week, bundle, show_summary=False, reveal=reveal)

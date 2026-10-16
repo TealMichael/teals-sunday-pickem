@@ -13,7 +13,8 @@ from auth import login_player, register_player, restore_from_cookie, revoke_cook
 # cached store or binding other UI modules.
 import config as _config
 # Prior cumulative config guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.17"
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.19":
+# Previous release guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.19"
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.8-pickem-pulse":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -41,7 +42,7 @@ if getattr(_weekly_core, "WEEKLY_LOGIC_SCHEMA_VERSION", 0) < 3:
 import store as _store
 # Legacy regression marker only: getattr(_store, "STORE_SCHEMA_VERSION", 0) < 4
 if (
-    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 5
+    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 6
     or not hasattr(_store.SupabaseStore, "get_app_meta")
     or not hasattr(_store.SupabaseStore, "set_app_meta")
 ):
@@ -81,7 +82,8 @@ import gate5_ui as _gate5_ui
 # Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 8
 # Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 9
 _reloaded_gate4_ui = False
-if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 10:
+# Previous guard: if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 10:
+if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 11:
     _gate4_ui = importlib.reload(_gate4_ui)
     _reloaded_gate4_ui = True
 render_gate4_demo = _gate4_ui.render_gate4_demo
@@ -89,11 +91,12 @@ render_gate4_demo = _gate4_ui.render_gate4_demo
 # Legacy regression marker only: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 9
 # Prior cumulative UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 10
 # Prior cumulative UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 11
+# Previous UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 12
 _weekly_params = inspect.signature(_weekly_ui.render_player_game).parameters
 if (
     _reloaded_automation_recovery
     or _reloaded_gate4_ui
-    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 12
+    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 13
     or not hasattr(_weekly_ui, "_render_player_card_button")
     or "on_sign_out" not in _weekly_params
     or "allow_demo_week" not in _weekly_params

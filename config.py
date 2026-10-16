@@ -2,12 +2,14 @@ from __future__ import annotations
 
 APP_NAME = "Teal's Sunday Pick'em"
 APP_TAGLINE = "Pick five. Own Sunday."
-APP_VERSION = "1.0.7"
+# Prior public version: APP_VERSION = "1.0.7"
+APP_VERSION = "1.0.8"
 # Internal deploy/cache key. Keep the public-facing version stable while making
 # every hotfix a distinct Streamlit resource-cache generation. Without this,
 # a warm Streamlit Cloud process can reuse a SupabaseStore instance created by
 # an older class definition across a multi-file deploy.
-APP_BUILD_VERSION = "1.0.7-hotfix7.19"
+APP_BUILD_VERSION = "1.0.8-pickem-pulse"
+# Prior release: APP_BUILD_VERSION = "1.0.7-hotfix7.19"
 # Prior cumulative build: APP_BUILD_VERSION = "1.0.7-hotfix7.17"
 # Prior cumulative build: APP_BUILD_VERSION = "1.0.7-hotfix7.16"
 # Prior cumulative build: APP_BUILD_VERSION = "1.0.7-hotfix7.15.2"

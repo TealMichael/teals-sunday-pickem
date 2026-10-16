@@ -11,7 +11,8 @@ from weekly import POSITIONS, parse_timestamp, safe_status
 
 UTC = timezone.utc
 PICKEM_SCHEMA = "pickem"
-STORE_SCHEMA_VERSION = 5
+STORE_SCHEMA_VERSION = 6
+# Previous cumulative marker: STORE_SCHEMA_VERSION = 5
 # Previous cumulative marker: STORE_SCHEMA_VERSION = 4
 
 
@@ -122,6 +123,23 @@ class SupabaseStore:
         if not res.data:
             raise StoreError("Could not save app setting. Try again.")
         return res.data[0]
+
+    def get_pulse_reactions(self, week_id: str) -> list[dict[str, Any]]:
+        """Small, server-only reaction records. One selection per player/week."""
+        prefix = f"pickem_pulse_reaction:{week_id}:"
+        rows = (self._table("app_meta").select("key,value")
+                .like("key", prefix + "%").limit(250).execute().data or [])
+        return list(rows)
+
+    def save_pulse_reaction(self, week_id: str, player_id: str, target_id: str, emoji: str) -> None:
+        """Server-authenticated caller supplies its own player_id; no free-text reactions."""
+        from pickem_pulse import REACTION_OPTIONS
+        if emoji and emoji not in REACTION_OPTIONS:
+            raise ValueError("Invalid reaction")
+        if str(player_id) == str(target_id) and emoji:
+            raise ValueError("Cannot react to yourself")
+        self.set_app_meta(f"pickem_pulse_reaction:{week_id}:{player_id}",
+                          {"target": str(target_id) if emoji else "", "emoji": emoji})
 
     # -------------------------
     # Gate 1 player/auth data
