@@ -1,0 +1,19 @@
+Teal's Sunday Pick'em v1.0.9 — TEST REPORT
+
+Full pytest regression suite: PASS (386 tests)
+Release guard: PASS
+Python compile check: PASS
+
+New security tests: 9 PASS
+- Mike T. is the only initial candidate
+- Wrong Commissioner PIN cannot link or grant trust
+- Correct PIN links by immutable player ID
+- Each separate remembered device/session requires approval
+- Revoked, expired, or tampered bearer sessions lose admin access
+- Invalid sessions cannot be linked
+- Nonremembered login approval is only for current app session
+- Malformed owner record fails closed
+- Repeated incorrect PIN attempts are throttled
+
+No Supabase migration, production deployment, or live data mutation performed.
+Live smoke testing must be completed by Michael after installation.

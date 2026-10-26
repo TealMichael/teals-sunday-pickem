@@ -31,7 +31,8 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp, week_phase
 
-GATE4_UI_SCHEMA_VERSION = 11
+GATE4_UI_SCHEMA_VERSION = 12
+# Previous release: GATE4_UI_SCHEMA_VERSION = 11
 # Previous cumulative marker: GATE4_UI_SCHEMA_VERSION = 10
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 9
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 8
@@ -55,12 +56,12 @@ def _medal(rank: int) -> str:
     return {1: "🥇", 2: "🥈", 3: "🥉"}.get(int(rank), "")
 
 
-def render_nav() -> str:
+def render_nav(*, include_commissioner: bool = False) -> str:
     # v0.4.5 hard-cleans the legacy Leaderboard sub-tab state so the second
     # destination is always a dedicated season-standings screen.
     st.session_state.pop("gate4_subtab", None)
     st.session_state.pop("gate4_leaderboard_subtab", None)
-    # Four stable top-level destinations. Keep the stored values unchanged for
+    # Four stable public destinations. Keep the stored values unchanged for
     # backward compatibility, but render consistent Material icons instead of
     # platform-dependent emoji. This mirrors native mobile tab-bar guidance:
     # familiar icon + single-word label + persistent selected state.
@@ -71,6 +72,11 @@ def render_nav() -> str:
         "🕘 History": ":material/history: History",
         "👤 Profile": ":material/person: Profile",
     }
+    # Only the server-approved owner is offered a fifth destination. "Commish"
+    # keeps five destinations legible inside the existing small-screen dock.
+    if include_commissioner:
+        options.append("🛡️ Commissioner")
+        nav_labels["🛡️ Commissioner"] = ":material/admin_panel_settings: Commish"
     default = st.session_state.get("gate4_tab") or options[0]
     # v0.4.4 simplifies the app shell: the current-week leaderboard lives on
     # Sunday, while the old Leaderboard destination becomes Season. Preserve a
@@ -120,6 +126,9 @@ def render_nav() -> str:
             label_visibility="collapsed",
         )
     selected = selected or default
+    if selected == "🛡️ Commissioner" and st.session_state.get("gate4_tab") != selected:
+        # Returning to the fifth tab always starts from its compact dashboard.
+        st.session_state.g5_view = "Home"
     st.session_state.gate4_tab = selected
     return selected
 

@@ -32,7 +32,8 @@ load_newsletter_data = _newsletter.load_newsletter_data
 sms_segment_estimate = _newsletter.sms_segment_estimate
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 9
+GATE5_UI_SCHEMA_VERSION = 10
+# Previous release: GATE5_UI_SCHEMA_VERSION = 9
 # Prior schema marker retained for legacy regression checks: GATE5_UI_SCHEMA_VERSION = 8
 # Prior schema marker retained for legacy regression checks: GATE5_UI_SCHEMA_VERSION = 7
 
@@ -82,6 +83,30 @@ def _render_flash() -> None:
         st.success(message)
 
 
+def _refresh_nfl_data(store, week: dict[str, Any]) -> None:
+    try:
+        st.toast("Refreshing NFL data…")
+        result = refresh_nfl_now(store, week)
+        st.session_state.g5_last_refresh = result
+        _set_flash("NFL data refresh completed. The current week now has the latest NFL status and refresh time.")
+        st.rerun()
+    except Exception as exc:
+        st.error(f"NFL refresh failed: {exc}")
+
+
+def _test_physical_clock(store, week: dict[str, Any]) -> None:
+    import clock_broadcast as _clock_broadcast
+    if getattr(_clock_broadcast, "CLOCK_SNAPSHOT_VERSION", 0) < 5:
+        _clock_broadcast = importlib.reload(_clock_broadcast)
+
+    try:
+        _clock_broadcast.refresh_clock_snapshot(store, week)
+        store.trigger_clock_test(str(week["id"]), uuid4().hex, seconds=120)
+        st.success("Clock test armed for two minutes. It uses sample content and never changes NFL week data. Allow up to a minute for the display to check in.")
+    except Exception as exc:
+        st.error(f"Clock test could not start: {exc}")
+
+
 def _render_week_overview(store, week: dict[str, Any]) -> None:
     snapshot = week_snapshot(store, week)
     c1, c2, c3, c4 = st.columns(4)
@@ -109,15 +134,7 @@ def _render_week_overview(store, week: dict[str, Any]) -> None:
     st.markdown("#### NFL Data")
     st.caption("Refreshes schedule/player status now. After lock it also runs the production live-score path.")
     if st.button("Refresh NFL Data Now", type="primary", use_container_width=True, key="g5_refresh_nfl"):
-        try:
-            # Toast feedback avoids inserting a spinner into the page layout.
-            st.toast("Refreshing NFL data…")
-            result = refresh_nfl_now(store, week)
-            st.session_state.g5_last_refresh = result
-            _set_flash("NFL data refresh completed. The Week screen now shows the latest stored status and refresh time.")
-            st.rerun()
-        except Exception as exc:
-            st.error(f"NFL refresh failed: {exc}")
+        _refresh_nfl_data(store, week)
 
     st.markdown("#### Week Controls")
     lock = parse_timestamp(week.get("locks_at"))
@@ -699,12 +716,7 @@ def _render_clock(store, week: dict[str, Any]) -> None:
         st.info("No scoped Pick'em clock token has been created yet.")
 
     if st.button("Test Clock", type="primary", use_container_width=True, disabled=not bool(token_status), key="g5_clock_test"):
-        try:
-            refresh_clock_snapshot(store, week)
-            store.trigger_clock_test(str(week["id"]), uuid4().hex, seconds=120)
-            st.success("Clock test armed for two minutes. It uses clearly labeled sample content and does not touch Week data. On a non-Sunday test, allow up to about a minute for the clock to check in.")
-        except Exception as exc:
-            st.error(f"Clock test could not start: {exc}")
+        _test_physical_clock(store, week)
 
     with st.expander("One-time clock setup", expanded=False):
         st.caption("This is a separate headless Sunday script. Leave the existing school Class Schedule and Fact Challenge clock scripts unchanged.")
@@ -1057,15 +1069,67 @@ def _render_newsletter(store, current_week: dict[str, Any]) -> None:
         st.warning("Perfect-lineup comparison is unavailable for this recap. Weekly and season standings are still valid.")
 
 
-def render_commissioner_dashboard(store, *, pin_pepper: str) -> None:
+def _render_commissioner_home(store, week: dict[str, Any]) -> None:
+    """Small phone-friendly landing page; every prior control remains one tap away."""
+    snapshot = week_snapshot(store, week)
+    st.markdown("#### This Week")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Players", snapshot["registered"])
+    c2.metric("Ready", snapshot["ready"])
+    c3.metric("Need picks", snapshot["incomplete"])
+    st.caption(
+        f"NFL data: {week.get('data_status') or 'WAITING'} • Last refresh: "
+        f"{_ago(week.get('last_data_refresh_at'))} • Locks {et_label(week.get('locks_at'))}"
+    )
+    needs = snapshot.get("needs_attention") or []
+    if needs:
+        with st.expander(f"Needs attention • {len(needs)}", expanded=False):
+            for row in needs:
+                st.write(f"{row.get('emoji') or '🏈'} **{row.get('nickname')}** — {_status_label(row)}")
+
+    st.markdown("#### Quick Actions")
+    left, right = st.columns(2)
+    with left:
+        if st.button("🔄 Refresh NFL Data", type="primary", use_container_width=True, key="g5_home_refresh"):
+            _refresh_nfl_data(store, week)
+    with right:
+        try:
+            clock_ready = bool(store.clock_schema_available() and store.get_clock_token_status())
+        except Exception:
+            clock_ready = False
+        if st.button("🕒 Test Clock", use_container_width=True, disabled=not clock_ready, key="g5_home_clock_test"):
+            _test_physical_clock(store, week)
+        if not clock_ready:
+            st.caption("Clock setup is in AWTRIX Clock.")
+
+    st.markdown("#### Commissioner Tools")
+    destinations = [
+        ("Week", "📅 Week & NFL", "Generate / finalize"),
+        ("Newsletter", "✉️ Newsletter", "Tuesday recap"),
+        ("Players", "👥 Players", "Lineups & PINs"),
+        ("Corrections", "🛠️ Corrections", "Pool & scores"),
+        ("Clock", "🕒 AWTRIX Clock", "Messages & setup"),
+        ("Diagnostics", "⚙️ Diagnostics", "Recovery & tests"),
+    ]
+    for offset in range(0, len(destinations), 2):
+        left, right = st.columns(2)
+        for column, (name, label, detail) in zip((left, right), destinations[offset:offset + 2]):
+            with column:
+                if st.button(label, use_container_width=True, key=f"g5_home_{name}"):
+                    st.session_state.g5_view = name
+                    st.rerun()
+                st.caption(detail)
+
+
+def render_commissioner_dashboard(store, *, pin_pepper: str, linked_player: bool = False) -> None:
     st.markdown("### Commissioner")
-    st.caption("Manage the current Sunday, players, corrections, clock broadcast, and recovery tools.")
+    st.caption("Your Sunday controls, all in one place.")
     _render_flash()
 
     week = store.get_real_week()
     if not week:
         st.error("No current real week is available.")
-        if st.button("Exit Commissioner", use_container_width=True):
+        if not linked_player and st.button("Exit Emergency Commissioner", use_container_width=True):
             st.session_state.commish = False
             st.rerun()
         return
@@ -1077,23 +1141,24 @@ def render_commissioner_dashboard(store, *, pin_pepper: str) -> None:
 
     # Legacy regression marker: commissioner_tools = ["Week", "Players", "Corrections", "Clock", "Diagnostics"]
     commissioner_tools = ["Week", "Newsletter", "Players", "Corrections", "Clock", "Diagnostics"]
-    if st.session_state.get("g5_tool") not in commissioner_tools:
-        st.session_state["g5_tool"] = "Week"
-    tool = st.segmented_control(
-        "Commissioner tool",
-        commissioner_tools,
-        default="Week",
-        key="g5_tool",
-        width="stretch",
-        label_visibility="collapsed",
-    ) or "Week"
+    tool = str(st.session_state.get("g5_view") or "Home")
+    if tool not in ["Home", *commissioner_tools]:
+        tool = "Home"
+        st.session_state.g5_view = "Home"
 
-    if st.button("Exit Commissioner", use_container_width=True, key="g5_exit"):
-        st.session_state.commish = False
-        st.session_state.pop("g5_tool", None)
-        st.rerun()
+    if tool != "Home":
+        if st.button("← Commissioner Home", use_container_width=True, key="g5_back_home"):
+            st.session_state.g5_view = "Home"
+            st.rerun()
+    if not linked_player:
+        if st.button("Exit Emergency Commissioner", use_container_width=True, key="g5_exit_emergency"):
+            st.session_state.commish = False
+            st.session_state.g5_view = "Home"
+            st.rerun()
 
-    if tool == "Week":
+    if tool == "Home":
+        _render_commissioner_home(store, week)
+    elif tool == "Week":
         _render_week_overview(store, week)
     elif tool == "Newsletter":
         _render_newsletter(store, week)

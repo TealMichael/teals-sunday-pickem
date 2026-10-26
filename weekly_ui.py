@@ -48,7 +48,8 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 14
+WEEKLY_UI_SCHEMA_VERSION = 15
+# Previous release: WEEKLY_UI_SCHEMA_VERSION = 14
 # Previous release: WEEKLY_UI_SCHEMA_VERSION = 13
 # Previous cumulative marker: WEEKLY_UI_SCHEMA_VERSION = 12
 # Prior cumulative UI marker: WEEKLY_UI_SCHEMA_VERSION = 11
@@ -1008,6 +1009,8 @@ def render_player_game(
     *,
     allow_demo_week: bool = False,
     skip_onboarding: bool = False,
+    commissioner_available: bool = False,
+    on_commissioner=None,
 ) -> None:
     if st.session_state.get("gate4_demo"):
         render_gate4_demo(player)
@@ -1037,6 +1040,11 @@ def render_player_game(
     week = demo_week if allow_demo_week and st.session_state.use_demo_week and demo_week else real_week
 
     if not week:
+        if commissioner_available and on_commissioner:
+            tab = render_nav(include_commissioner=True)
+            if tab == "🛡️ Commissioner":
+                on_commissioner()
+                return
         st.info("The next Sunday week is being prepared.")
         st.caption(f"Build {APP_VERSION}")
         return
@@ -1046,7 +1054,10 @@ def render_player_game(
     # Gate 2's isolated test week remains a focused lineup-builder test. The
     # normal app gets the four-tab Gate 4 navigation.
     if not bool(week.get("is_demo")):
-        tab = render_nav()
+        tab = render_nav(include_commissioner=commissioner_available)
+        if tab == "🛡️ Commissioner" and commissioner_available and on_commissioner:
+            on_commissioner()
+            return
         if tab == "🏆 Season":
             render_leaderboards(store, week, player, phase)
             return
@@ -1073,7 +1084,7 @@ def render_player_game(
             st.session_state.builder_mode = "home"
             st.session_state.builder_position = None
             st.session_state.pop("builder_return_mode", None)
-            if st.session_state.get("commish"):
+            if st.session_state.get("commish") or st.session_state.get("gate2_demo"):
                 st.session_state.gate2_demo = False
                 st.session_state.pop("gate2_demo_player_id", None)
             st.rerun()

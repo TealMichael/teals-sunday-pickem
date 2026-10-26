@@ -1,0 +1,31 @@
+TEAL'S SUNDAY PICK'EM — v1.0.9
+
+Commit message:
+v1.0.9 — Link Mike T. to Commissioner and simplify admin dashboard
+
+Release tag:
+v1.0.9
+
+Files changed at repository root:
+app.py
+config.py
+gate4_ui.py
+gate5_ui.py
+weekly_ui.py
+ui.py
+GITHUB_TAG_AND_COMMIT.txt
+GITHUB_RELEASE_NOTES.txt
+
+New root file:
+commissioner_access.py
+
+New test file:
+tests/test_v109_unified_commissioner.py
+
+Optional release notes:
+RELEASE_HANDOFF_v1.0.9_UNIFIED_COMMISSIONER.md
+V1_0_9_TEST_REPORT.txt
+GITHUB_UPLOAD_NOTES_v1.0.9.txt
+
+No SQL or Streamlit secrets changes needed. Keep the original v1.0.8 archive
+for rollback. Install after NFL Sunday has finished.

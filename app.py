@@ -14,7 +14,8 @@ from auth import login_player, register_player, restore_from_cookie, revoke_cook
 import config as _config
 # Prior cumulative config guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.17"
 # Previous release guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.19"
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.8-hotfix8.1":
+# Historical guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.8-hotfix8.1"
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.9-commissioner-unified":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -25,8 +26,14 @@ from config import (
     REMEMBER_STORAGE_KEY,
 )
 from security import safe_secret_match
+from commissioner_access import (
+    approve_commissioner_device,
+    commissioner_device_trusted,
+    commissioner_tab_available,
+)
 import ui as _ui
-if getattr(_ui, "UI_THEME_SCHEMA_VERSION", 0) < 4:
+# Historical theme guard: getattr(_ui, "UI_THEME_SCHEMA_VERSION", 0) < 4
+if getattr(_ui, "UI_THEME_SCHEMA_VERSION", 0) < 5:
     _ui = importlib.reload(_ui)
 hero, inject_css, page_config = _ui.hero, _ui.inject_css, _ui.page_config
 
@@ -83,7 +90,7 @@ import gate5_ui as _gate5_ui
 # Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 9
 _reloaded_gate4_ui = False
 # Previous guard: if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 10:
-if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 11:
+if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 12:
     _gate4_ui = importlib.reload(_gate4_ui)
     _reloaded_gate4_ui = True
 render_gate4_demo = _gate4_ui.render_gate4_demo
@@ -93,14 +100,16 @@ render_gate4_demo = _gate4_ui.render_gate4_demo
 # Prior cumulative UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 11
 # Previous UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 12
 # Previous release guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 13
+# Historical guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 14
 _weekly_params = inspect.signature(_weekly_ui.render_player_game).parameters
 if (
     _reloaded_automation_recovery
     or _reloaded_gate4_ui
-    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 14
+    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 15
     or not hasattr(_weekly_ui, "_render_player_card_button")
     or "on_sign_out" not in _weekly_params
     or "allow_demo_week" not in _weekly_params
+    or "on_commissioner" not in _weekly_params
 ):
     _weekly_ui = importlib.reload(_weekly_ui)
 render_player_game = _weekly_ui.render_player_game
@@ -108,7 +117,8 @@ render_player_game = _weekly_ui.render_player_game
 # Legacy regression marker: GATE5_UI_SCHEMA_VERSION", 0) < 4
 # Prior Gate 5 warm-reload marker: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 7
 # Prior Gate 5 warm-reload marker: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 8
-if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 9:
+# Historical guard: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 9
+if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 10:
     _gate5_ui = importlib.reload(_gate5_ui)
 render_commissioner_dashboard = _gate5_ui.render_commissioner_dashboard
 
@@ -237,6 +247,8 @@ if "player" not in st.session_state:
     st.session_state.player = None
 if "commish" not in st.session_state:
     st.session_state.commish = False
+if "commish_ephemeral_player_id" not in st.session_state:
+    st.session_state.commish_ephemeral_player_id = None
 if "active_device_token" not in st.session_state:
     st.session_state.active_device_token = None
 if "remember_restore_checked" not in st.session_state:
@@ -406,6 +418,7 @@ def _apply_player_auth_result(result, *, error_key: str) -> None:
 
     st.session_state[error_key] = ""
     st.session_state.player = result.player
+    st.session_state.commish_ephemeral_player_id = None
     st.session_state.remember_restore_checked = True
     if result.cookie_value:
         st.session_state.active_device_token = result.cookie_value
@@ -448,6 +461,8 @@ def _sign_out_submit() -> None:
     st.session_state.remember_restore_checked = True
     st.session_state.player = None
     st.session_state.active_device_token = None
+    st.session_state.commish_ephemeral_player_id = None
+    st.session_state.g5_view = "Home"
 
 
 def player_login_ui() -> None:
@@ -513,8 +528,8 @@ def player_login_ui() -> None:
 
 
 def commish_login_ui() -> None:
-    st.markdown("### Commissioner")
-    st.caption("Separate admin access. This does not use a player PIN.")
+    st.markdown("### Emergency Commissioner Access")
+    st.caption("Account-recovery fallback only. For everyday use, sign in as Mike T. and open the Commissioner tab.")
     with st.form("commish_login"):
         username = st.text_input("Commissioner username")
         pin = st.text_input("6-digit admin PIN", type="password", max_chars=6)
@@ -557,7 +572,7 @@ if not st.session_state.player and not st.session_state.remember_restore_checked
             st.stop()
 
 
-if st.session_state.commish:
+def _render_commissioner_content(*, linked_player: bool) -> None:
     # Gate 2's isolated lineup-builder test remains Commissioner-only in v1.0.2.
     # It can use a selected real account as the identity while all picks remain
     # confined to the synthetic Gate 2 Test Week.
@@ -577,31 +592,106 @@ if st.session_state.commish:
             st.session_state.gate2_demo = False
             st.session_state.pop("gate2_demo_player_id", None)
             st.error("The selected Gate 2 demo player is no longer available.")
-        st.stop()
+        return
 
     # Gate 4 demo remains an isolated Commissioner diagnostic. Gate 5 owns the
     # real admin dashboard and never requires a player login.
     if st.session_state.get("gate4_demo"):
         render_gate4_demo()
-        st.stop()
+        return
 
+    render_commissioner_dashboard(store, pin_pepper=secret("PIN_PEPPER"), linked_player=linked_player)
+
+
+def _render_linked_commissioner() -> None:
+    """Authorize every Commissioner render, including its write-capable tools."""
+    player = st.session_state.player
+    player_id = str((player or {}).get("id") or "")
+    token = str(st.session_state.get("active_device_token") or "")
+    if not player or not commissioner_tab_available(store, player):
+        st.error("Commissioner access is not available for this player.")
+        return
+
+    if token:
+        trusted = commissioner_device_trusted(
+            store, player, token=token, session_pepper=secret("SESSION_PEPPER"),
+        )
+    else:
+        # Players who unchecked Remember Me may use Commissioner during the
+        # current Streamlit session, but approval is never saved to a device.
+        trusted = st.session_state.get("commish_ephemeral_player_id") == player_id
+
+    if not trusted:
+        st.markdown("### Commissioner")
+        st.caption("One-time verification for this device. Your player account stays signed in.")
+        with st.form("commissioner_link_form", clear_on_submit=True):
+            admin_pin = st.text_input("6-digit Commissioner PIN", type="password", max_chars=6)
+            submit = st.form_submit_button("Unlock Commissioner", type="primary", use_container_width=True)
+        if submit:
+            try:
+                ok = approve_commissioner_device(
+                    store,
+                    player,
+                    entered_pin=admin_pin,
+                    expected_pin=secret("COMMISH_PIN"),
+                    token=token,
+                    session_pepper=secret("SESSION_PEPPER"),
+                )
+            except _store.LoginRateLimited:
+                st.error("Too many incorrect Commissioner PIN attempts. Please try again in a few minutes.")
+                return
+            except Exception:
+                st.error("Commissioner verification is temporarily unavailable. Please try again later.")
+                return
+            if not ok:
+                st.error("Commissioner PIN was incorrect or your player session expired.")
+                return
+            if not token:
+                st.session_state.commish_ephemeral_player_id = player_id
+            st.session_state.g5_view = "Home"
+            st.rerun()
+        return
+
+    _render_commissioner_content(linked_player=True)
+
+
+if st.session_state.commish:
     try:
-        render_commissioner_dashboard(store, pin_pepper=secret("PIN_PEPPER"))
+        _render_commissioner_content(linked_player=False)
     except Exception as exc:
         _friendly_runtime_error("commissioner", exc)
     st.stop()
 
 if st.session_state.player:
-    # Public/player sessions may never remain inside the synthetic Gate 2 week.
-    st.session_state.gate2_demo = False
-    st.session_state.pop("gate2_demo_player_id", None)
     try:
-        render_player_game(store, st.session_state.player, on_sign_out=_sign_out_submit)
+        eligible = commissioner_tab_available(store, st.session_state.player)
+    except Exception:
+        # Availability must fail closed without taking down ordinary gameplay.
+        eligible = False
+    # A linked Commissioner diagnostic can use its isolated week, but must be
+    # fully reauthorized before rendering any demo or administrative action.
+    if st.session_state.get("gate2_demo") or st.session_state.get("gate4_demo"):
+        if eligible:
+            try:
+                _render_linked_commissioner()
+            except Exception as exc:
+                _friendly_runtime_error("commissioner", exc)
+            st.stop()
+        st.session_state.gate2_demo = False
+        st.session_state.gate4_demo = False
+    if not st.session_state.get("gate2_demo"):
+        st.session_state.pop("gate2_demo_player_id", None)
+    try:
+        render_player_game(
+            store, st.session_state.player, on_sign_out=_sign_out_submit,
+            commissioner_available=eligible,
+            on_commissioner=_render_linked_commissioner if eligible else None,
+        )
     except Exception as exc:
         _friendly_runtime_error("player", exc)
     st.stop()
 
 player_login_ui()
 st.markdown("---")
-with st.expander("Commissioner"):
+with st.expander("Emergency Commissioner Access"):
     commish_login_ui()

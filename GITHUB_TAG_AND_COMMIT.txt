@@ -1,3 +1,3 @@
-Tag: v1.0.7
-Release title: v1.0.7 — Sunday Clock Broadcast + Commissioner Cleanup
-Commit: v1.0.7 — Sunday Clock Broadcast + Commissioner Cleanup
+Tag: v1.0.9
+Release title: v1.0.9 — Unified Commissioner Login + Simplified Dashboard
+Commit: v1.0.9 — Link Mike T. to Commissioner and simplify admin dashboard
