@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from copy import deepcopy
+from threading import RLock
 import time
 from typing import Any
 from uuid import UUID
@@ -11,7 +13,8 @@ from weekly import POSITIONS, parse_timestamp, safe_status
 
 UTC = timezone.utc
 PICKEM_SCHEMA = "pickem"
-STORE_SCHEMA_VERSION = 6
+STORE_SCHEMA_VERSION = 7
+# Previous release: STORE_SCHEMA_VERSION = 6
 # Previous cumulative marker: STORE_SCHEMA_VERSION = 5
 # Previous cumulative marker: STORE_SCHEMA_VERSION = 4
 
@@ -48,20 +51,26 @@ class SupabaseStore:
         from supabase.client import ClientOptions
 
         self._public_cache: dict[tuple, tuple[float, Any]] = {}
+        self._season_card_stats_cache: dict[tuple, dict[str, Any]] = {}
+        self._season_card_stats_lock = RLock()
         self.url = str(url).rstrip("/")
         self.client = create_client(
             url,
             service_key,
             options=ClientOptions(
+                schema=PICKEM_SCHEMA,
                 postgrest_client_timeout=8,
                 storage_client_timeout=8,
                 auto_refresh_token=False,
                 persist_session=False,
             ),
         )
+        # Initialize the shared transport once before concurrent sessions use it.
+        # client.schema(...) constructs another HTTP client in supabase 2.31.
+        self.client.postgrest
 
     def _table(self, name: str):
-        return self.client.schema(PICKEM_SCHEMA).table(name)
+        return self.client.table(name)
 
     def _cache_get(self, key: tuple) -> Any | None:
         cache = getattr(self, "_public_cache", None)
@@ -116,12 +125,51 @@ class SupabaseStore:
         res = self._table("app_meta").select("key,value,updated_at").eq("key", str(key)).limit(1).execute()
         return res.data[0] if res.data else None
 
+    def get_season_card_stats(self, key: str, *, schema: int, through_week: int) -> dict[str, Any] | None:
+        """Reuse only complete, already-frozen picker statistics on this store.
+
+        Authorization, reactions and mutable settings always use get_app_meta.
+        Missing/failed snapshots are never cached, so normal retries still run.
+        """
+        if not str(key).startswith("season_card_stats:"):
+            return self.get_app_meta(key)
+        # Also support lightweight store adapters constructed without __init__.
+        cache = self.__dict__.setdefault("_season_card_stats_cache", {})
+        lock = getattr(self, "_season_card_stats_lock", None)
+        if lock is None:
+            lock = self.__dict__.setdefault("_season_card_stats_lock", RLock())
+        cache_key = (str(key), int(schema), int(through_week))
+        with lock:
+            if cache_key in cache:
+                return deepcopy(cache[cache_key])
+            row = self.get_app_meta(key)
+            value = (row or {}).get("value") or {}
+            if (isinstance(value, dict) and value.get("schema") == schema
+                    and value.get("through_week") == through_week
+                    and isinstance(value.get("players"), dict) and value["players"]
+                    and not value.get("retry_after")):
+                # A season has 18 weeks. Bound old-season entries in long-lived workers.
+                if len(cache) >= 32:
+                    cache.pop(next(iter(cache)))
+                cache[cache_key] = deepcopy(row)
+            return deepcopy(row)
+
     def set_app_meta(self, key: str, value: dict[str, Any]) -> dict[str, Any]:
         """Persist one small Commissioner/app setting without a schema migration."""
         payload = {"key": str(key), "value": dict(value or {})}
         res = self._table("app_meta").upsert(payload, on_conflict="key").execute()
         if not res.data:
             raise StoreError("Could not save app setting. Try again.")
+        # Invalidate only this store's frozen-stat entry after a confirmed write.
+        # The lock also prevents an earlier in-flight read from repopulating it
+        # after this method returns. Other app_meta keys are never cached here.
+        lock = getattr(self, "_season_card_stats_lock", None)
+        if str(key).startswith("season_card_stats:") and lock is not None:
+            with lock:
+                cache = self._season_card_stats_cache
+                for cache_key in list(cache):
+                    if cache_key[0] == str(key):
+                        cache.pop(cache_key, None)
         return res.data[0]
 
     def get_pulse_reactions(self, week_id: str) -> list[dict[str, Any]]:

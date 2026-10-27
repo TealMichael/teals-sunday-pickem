@@ -33,7 +33,7 @@ def render_order(*, chosen=5, needs=None, unavailable=None, demo=False):
         "lineup_progress": lambda picks: (chosen, 5),
         "required_backup_positions": lambda *args: needs,
         "unavailable_starter_positions": lambda *args: unavailable,
-        "_render_live_prelock_status": lambda *args: events.append("sunday-status"),
+        "_render_live_prelock_status": lambda *args: (events.append("sunday-status"), (None, ["picks"], [], {}))[1],
         "render_pregame_pulse": lambda *args: events.append("pulse"),
         "_summary_rows": lambda *args: "<div>Five picks</div>",
         "_render_pool_change_disclaimer": lambda: events.append("disclaimer"),

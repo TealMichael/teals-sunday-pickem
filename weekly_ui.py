@@ -48,7 +48,8 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 15
+WEEKLY_UI_SCHEMA_VERSION = 16
+# Previous release: WEEKLY_UI_SCHEMA_VERSION = 15
 # Previous release: WEEKLY_UI_SCHEMA_VERSION = 14
 # Previous release: WEEKLY_UI_SCHEMA_VERSION = 13
 # Previous cumulative marker: WEEKLY_UI_SCHEMA_VERSION = 12
@@ -176,7 +177,7 @@ def _render_sunday_status_card(week: dict, picks: list[dict], pool_by_id: dict[s
 
 
 @st.fragment(run_every="60s")
-def _render_live_prelock_status(store, week: dict, player: dict) -> None:
+def _render_live_prelock_status(store, week: dict, player: dict) -> tuple[dict | None, list[dict], list[dict], dict[str, dict]]:
     """Keep the Sunday confidence card fresh while a phone sits open.
 
     This fragment never edits a lineup. It rereads the current week/pool/lineup
@@ -197,6 +198,10 @@ def _render_live_prelock_status(store, week: dict, player: dict) -> None:
         snapshot_ttl_seconds=0,
     )
     _render_sunday_status_card(fresh_week, picks, pool_by_id)
+    # Full renders reuse this invocation's fresh read for the lineup below.
+    # Timed fragment reruns still execute recovery and a new read above; no
+    # initial snapshot is captured in the fragment's arguments.
+    return _lineup, picks, resolved_pool, pool_by_id
 
 
 @st.fragment(run_every="15s")
@@ -942,11 +947,6 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
 
 
 def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
-    lineup, picks, pool, pool_by_id = _load_lineup(store, week, player, pool)
-    chosen, total = lineup_progress(picks)
-    needs = required_backup_positions(picks, pool_by_id)
-    unavailable = unavailable_starter_positions(picks, pool_by_id)
-
     if st.session_state.pop("lineup_saved_flash", False):
         if bool(week.get("is_demo")):
             st.success("Test lineup saved. You can keep editing while the Gate 2 test week is open.")
@@ -954,7 +954,12 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
             st.success("Lineup saved. You can make changes until Sunday at 1:00 PM ET.")
 
     if not bool(week.get("is_demo")):
-        _render_live_prelock_status(store, week, player)
+        lineup, picks, pool, pool_by_id = _render_live_prelock_status(store, week, player)
+    else:
+        lineup, picks, pool, pool_by_id = _load_lineup(store, week, player, pool)
+    chosen, total = lineup_progress(picks)
+    needs = required_backup_positions(picks, pool_by_id)
+    unavailable = unavailable_starter_positions(picks, pool_by_id)
 
     if chosen == total and not needs and not unavailable:
         # This is the first content directly after Sunday Status on a ready

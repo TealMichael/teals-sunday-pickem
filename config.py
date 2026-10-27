@@ -4,12 +4,14 @@ APP_NAME = "Teal's Sunday Pick'em"
 APP_TAGLINE = "Pick five. Own Sunday."
 # Prior public version: APP_VERSION = "1.0.8"
 # Historical public-version regression marker: APP_VERSION = "1.0.7"
-APP_VERSION = "1.0.9"
+APP_VERSION = "1.0.10"
+# Previous release: APP_VERSION = "1.0.9"
 # Internal deploy/cache key. Keep the public-facing version stable while making
 # every hotfix a distinct Streamlit resource-cache generation. Without this,
 # a warm Streamlit Cloud process can reuse a SupabaseStore instance created by
 # an older class definition across a multi-file deploy.
-APP_BUILD_VERSION = "1.0.9-commissioner-unified"
+APP_BUILD_VERSION = "1.0.10-performance1"
+# Previous release: APP_BUILD_VERSION = "1.0.9-commissioner-unified"
 # Prior release: APP_BUILD_VERSION = "1.0.8-hotfix8.1"
 # Prior release: APP_BUILD_VERSION = "1.0.8-pickem-pulse"
 # Prior release: APP_BUILD_VERSION = "1.0.7-hotfix7.19"

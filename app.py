@@ -15,7 +15,8 @@ import config as _config
 # Prior cumulative config guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.17"
 # Previous release guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.19"
 # Historical guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.8-hotfix8.1"
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.9-commissioner-unified":
+# Previous release guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.9-commissioner-unified"
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.10-performance1":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -48,8 +49,9 @@ if getattr(_weekly_core, "WEEKLY_LOGIC_SCHEMA_VERSION", 0) < 3:
 
 import store as _store
 # Legacy regression marker only: getattr(_store, "STORE_SCHEMA_VERSION", 0) < 4
+# Previous release guard: getattr(_store, "STORE_SCHEMA_VERSION", 0) < 6
 if (
-    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 6
+    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 7
     or not hasattr(_store.SupabaseStore, "get_app_meta")
     or not hasattr(_store.SupabaseStore, "set_app_meta")
 ):
@@ -77,6 +79,14 @@ if _reloaded_nfl_sync or getattr(_automation_recovery, "AUTOMATION_RECOVERY_SCHE
     _automation_recovery = importlib.reload(_automation_recovery)
     _reloaded_automation_recovery = True
 
+# Reload changed dependencies after providers and before their UI consumers.
+import player_season_stats as _player_season_stats
+if getattr(_player_season_stats, "PLAYER_SEASON_STATS_LOGIC_VERSION", 0) < 1:
+    _player_season_stats = importlib.reload(_player_season_stats)
+import gate5 as _gate5
+if getattr(_gate5, "GATE5_LOGIC_SCHEMA_VERSION", 0) < 1:
+    _gate5 = importlib.reload(_gate5)
+
 import gate4_ui as _gate4_ui
 import weekly_ui as _weekly_ui
 import gate5_ui as _gate5_ui
@@ -101,11 +111,12 @@ render_gate4_demo = _gate4_ui.render_gate4_demo
 # Previous UI guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 12
 # Previous release guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 13
 # Historical guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 14
+# Previous release guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 15
 _weekly_params = inspect.signature(_weekly_ui.render_player_game).parameters
 if (
     _reloaded_automation_recovery
     or _reloaded_gate4_ui
-    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 15
+    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 16
     or not hasattr(_weekly_ui, "_render_player_card_button")
     or "on_sign_out" not in _weekly_params
     or "allow_demo_week" not in _weekly_params
@@ -118,7 +129,8 @@ render_player_game = _weekly_ui.render_player_game
 # Prior Gate 5 warm-reload marker: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 7
 # Prior Gate 5 warm-reload marker: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 8
 # Historical guard: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 9
-if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 10:
+# Previous release guard: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 10
+if getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 11:
     _gate5_ui = importlib.reload(_gate5_ui)
 render_commissioner_dashboard = _gate5_ui.render_commissioner_dashboard
 

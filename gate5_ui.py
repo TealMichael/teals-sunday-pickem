@@ -32,7 +32,8 @@ load_newsletter_data = _newsletter.load_newsletter_data
 sms_segment_estimate = _newsletter.sms_segment_estimate
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 10
+GATE5_UI_SCHEMA_VERSION = 11
+# Previous release: GATE5_UI_SCHEMA_VERSION = 10
 # Previous release: GATE5_UI_SCHEMA_VERSION = 9
 # Prior schema marker retained for legacy regression checks: GATE5_UI_SCHEMA_VERSION = 8
 # Prior schema marker retained for legacy regression checks: GATE5_UI_SCHEMA_VERSION = 7
@@ -259,7 +260,7 @@ def _render_corrections(store, week: dict[str, Any]) -> None:
         impact = None
         if outgoing:
             try:
-                impact = pool_override_preview(store, week, str(outgoing["id"]))
+                impact = pool_override_preview(store, week, str(outgoing["id"]), pool_rows=pool)
             except Exception as exc:
                 st.error(str(exc))
         if impact:
@@ -290,6 +291,9 @@ def _render_corrections(store, week: dict[str, Any]) -> None:
                 st.rerun()
             except Exception as exc:
                 st.error(str(exc))
+                # A failed multi-step mutation may have changed pool visibility.
+                # Preserve the old score-section reread on this action path.
+                pool = store.get_full_week_pool(str(week["id"]))
         if after_lock:
             st.caption("Locked: Commissioner pool changes are disabled after Sunday at 1:00 PM ET.")
 
@@ -301,7 +305,7 @@ def _render_corrections(store, week: dict[str, Any]) -> None:
         return
     lock = parse_timestamp(week.get("locks_at"))
     after_lock = bool(lock and datetime.now(UTC) >= lock)
-    visible_pool = [r for r in store.get_full_week_pool(str(week["id"])) if r.get("is_visible")]
+    visible_pool = [r for r in pool if r.get("is_visible")]
     score_map = {
         f"{r.get('position')} • {r.get('player_name')} • {r.get('team_abbr')}": r
         for r in visible_pool

@@ -10,6 +10,7 @@ from validation import validate_player_pin
 from weekly import parse_timestamp
 
 UTC = timezone.utc
+GATE5_LOGIC_SCHEMA_VERSION = 1
 
 
 class CommissionerError(RuntimeError):
@@ -132,8 +133,11 @@ def generate_pool_again(store, week: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def pool_override_preview(store, week: dict[str, Any], outgoing_pool_id: str) -> dict[str, Any]:
-    pool = {str(row["id"]): row for row in store.get_full_week_pool(str(week["id"]))}
+def pool_override_preview(store, week: dict[str, Any], outgoing_pool_id: str, *, pool_rows: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    # Optional context is for this render's preview only. Mutation functions
+    # retain their own current-pool and lock validation in the store.
+    rows = pool_rows if pool_rows is not None else store.get_full_week_pool(str(week["id"]))
+    pool = {str(row["id"]): row for row in rows}
     outgoing = pool.get(str(outgoing_pool_id))
     if not outgoing:
         raise CommissionerError("The selected current player is no longer in this week's pool.")

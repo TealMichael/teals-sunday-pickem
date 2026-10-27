@@ -16,6 +16,7 @@ from nfl_sources import NFLverseProvider, normalize_name, normalize_team
 
 UTC = timezone.utc
 STATS_SNAPSHOT_SCHEMA = 1
+PLAYER_SEASON_STATS_LOGIC_VERSION = 1
 FAILURE_RETRY_MINUTES = 20
 POSITIONS = frozenset({"QB", "RB", "WR", "TE", "K"})
 
@@ -148,6 +149,13 @@ def snapshot_key(week: Mapping[str, Any]) -> str:
     return f"season_card_stats:{int(week['season'])}:{int(week['nfl_week'])}:v{STATS_SNAPSHOT_SCHEMA}"
 
 
+def _snapshot_record(store, key: str, week: Mapping[str, Any]) -> dict[str, Any] | None:
+    loader = getattr(store, "get_season_card_stats", None)
+    if callable(loader):
+        return loader(key, schema=STATS_SNAPSHOT_SCHEMA, through_week=int(week["nfl_week"]) - 1)
+    return store.get_app_meta(key)
+
+
 def load_or_prepare_snapshot(store, week: dict[str, Any], *, provider=None) -> dict[str, Any] | None:
     """One shared, frozen per-week snapshot; failures never block lineup picks.
 
@@ -159,7 +167,7 @@ def load_or_prepare_snapshot(store, week: dict[str, Any], *, provider=None) -> d
         return None
     key = snapshot_key(week)
     try:
-        existing = store.get_app_meta(key)
+        existing = _snapshot_record(store, key, week)
         value = (existing or {}).get("value") or {}
         if (value.get("schema") == STATS_SNAPSHOT_SCHEMA
                 and int(value.get("through_week") or 0) == int(week["nfl_week"]) - 1
@@ -181,7 +189,7 @@ def load_or_prepare_snapshot(store, week: dict[str, Any], *, provider=None) -> d
         return None
     try:
         # Check again after lease; another session may just have completed it.
-        existing = store.get_app_meta(key)
+        existing = _snapshot_record(store, key, week)
         value = (existing or {}).get("value") or {}
         if value.get("schema") == STATS_SNAPSHOT_SCHEMA and isinstance(value.get("players"), dict):
             return value
