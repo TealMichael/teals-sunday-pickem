@@ -169,21 +169,29 @@ def blocked(*args, **kwargs):
 socket.socket.connect = blocked
 socket.create_connection = blocked
 import config, store, player_season_stats, gate5, weekly_ui, gate5_ui
+import nfl_sources, nfl_sync, automation_recovery, gate4_ui
 config.APP_BUILD_VERSION = "1.0.9-commissioner-unified"
 store.STORE_SCHEMA_VERSION = 6
 player_season_stats.PLAYER_SEASON_STATS_LOGIC_VERSION = 0
 gate5.GATE5_LOGIC_SCHEMA_VERSION = 0
 weekly_ui.WEEKLY_UI_SCHEMA_VERSION = 15
 gate5_ui.GATE5_UI_SCHEMA_VERSION = 10
+nfl_sources.NFL_SOURCES_SCHEMA_VERSION = 2
+nfl_sync.NFL_SYNC_SCHEMA_VERSION = 6
 from pathlib import Path
 prefix = Path("app.py").read_text().split("\\npage_config()", 1)[0]
 scope = {"__name__": "warm_deploy_probe"}
 exec(compile(prefix, "app.py", "exec"), scope)
-assert scope["APP_BUILD_VERSION"] == "1.0.11-performance2"
-assert scope["APP_VERSION"] == "1.0.11"
+assert scope["APP_BUILD_VERSION"] == "1.0.12-performance3"
+assert scope["APP_VERSION"] == "1.0.12"
 assert store.STORE_SCHEMA_VERSION == 8
 assert weekly_ui.WEEKLY_UI_SCHEMA_VERSION == 16
 assert gate5_ui.GATE5_UI_SCHEMA_VERSION == 11
+assert nfl_sources.NFL_SOURCES_SCHEMA_VERSION == 3
+assert nfl_sync.NFL_SYNC_SCHEMA_VERSION == 7
+assert nfl_sync.ESPNProvider is nfl_sources.ESPNProvider
+assert automation_recovery.refresh_live_player_stats is nfl_sync.refresh_live_player_stats
+assert gate4_ui.maybe_refresh_active_live_lane is automation_recovery.maybe_refresh_active_live_lane
 assert weekly_ui.load_or_prepare_snapshot is player_season_stats.load_or_prepare_snapshot
 assert gate5_ui.pool_override_preview is gate5.pool_override_preview
 assert scope["render_player_game"] is weekly_ui.render_player_game

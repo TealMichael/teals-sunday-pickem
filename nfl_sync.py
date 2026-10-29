@@ -10,12 +10,12 @@ from config import LIVE_SCORE_REFRESH_MINUTES, NFL_SEASON, TIMEZONE_NAME
 from nfl_rankings import WEEK1_KICKER_TEAM_ORDER, nflverse_rankings, week1_rankings
 from nfl_scoring import score_stat_line
 from gate4_results import archive_week_results
-from nfl_sources import ESPNProvider, NFLverseProvider, SleeperProvider, normalize_name, normalize_team, parse_iso
+from nfl_sources import ESPNProvider, NFLverseProvider, SleeperProvider, iter_espn_summary_results, normalize_name, normalize_team, parse_iso
 from weekly import POSITIONS, parse_timestamp
 
 UTC = timezone.utc
 ET = ZoneInfo(TIMEZONE_NAME)
-NFL_SYNC_SCHEMA_VERSION = 6
+NFL_SYNC_SCHEMA_VERSION = 7
 # Prior safety-audit generation: NFL_SYNC_SCHEMA_VERSION = 5
 # Legacy regression marker only: NFL_SYNC_SCHEMA_VERSION = 3
 
@@ -420,7 +420,7 @@ def _refresh_live_player_stats_from_games(
         games_by_event: dict[str, dict[str, Any]] = {
             str(game.get("provider_event_id") or ""): dict(game) for game in eligible if game.get("provider_event_id")
         }
-        attempted_summaries = 0
+        summary_games: list[dict[str, Any]] = []
 
         for game in eligible:
             status = str(game.get("game_status") or "SCHEDULED").upper()
@@ -446,9 +446,17 @@ def _refresh_live_player_stats_from_games(
             event_id = str(game.get("provider_event_id") or "")
             if not event_id:
                 continue
-            attempted_summaries += 1
+            summary_games.append(game)
+
+        attempted_summaries = len(summary_games)
+        outcomes = iter_espn_summary_results(
+            espn, [str(game["provider_event_id"]) for game in summary_games],
+        )
+        for game, (summary, error) in zip(summary_games, outcomes):
+            event_id = str(game["provider_event_id"])
             try:
-                summary = espn.summary(event_id)
+                if error is not None:
+                    raise error
                 entries = espn.player_stats(summary)
                 summary_cache[event_id] = entries
                 successful_event_ids.add(event_id)

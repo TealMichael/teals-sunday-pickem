@@ -1,0 +1,19 @@
+{
+  "baseline_original_files": 279,
+  "compiled_python_files": 119,
+  "release_guard": "PASS",
+  "release_tests": {
+    "python_3_12": 446,
+    "python_3_13": 446
+  },
+  "rollback_tests_python_3_13": 423,
+  "overlay_matches_full_release": true,
+  "all_original_files_restored_by_documented_rollback": true,
+  "changed_runtime_files": [
+    "app.py",
+    "config.py",
+    "nfl_sources.py",
+    "nfl_sync.py"
+  ],
+  "required_upgrade_deletions": []
+}

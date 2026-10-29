@@ -16,7 +16,8 @@ import config as _config
 # Previous release guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.19"
 # Historical guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.8-hotfix8.1"
 # Previous release guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.9-commissioner-unified"
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.11-performance2":
+# Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.11-performance2"
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.12-performance3":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -64,12 +65,13 @@ SupabaseStore = _store.SupabaseStore
 # getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 5
 
 import nfl_sources as _nfl_sources
-if getattr(_nfl_sources, "NFL_SOURCES_SCHEMA_VERSION", 0) < 2:
+if getattr(_nfl_sources, "NFL_SOURCES_SCHEMA_VERSION", 0) < 3:
     _nfl_sources = importlib.reload(_nfl_sources)
 
 import nfl_sync as _nfl_sync
 _reloaded_nfl_sync = False
-if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 6:
+# Previous performance guard: getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 6
+if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 7:
     _nfl_sync = importlib.reload(_nfl_sync)
     _reloaded_nfl_sync = True
 

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import csv
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 import re
+from threading import Lock
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
@@ -15,7 +18,8 @@ from config import GATE3_HTTP_TIMEOUT_SECONDS, NFL_SEASON_TYPE, TIMEZONE_NAME
 
 UTC = timezone.utc
 ET = ZoneInfo(TIMEZONE_NAME)
-NFL_SOURCES_SCHEMA_VERSION = 2
+NFL_SOURCES_SCHEMA_VERSION = 3
+ESPN_SUMMARY_MAX_WORKERS = 3
 
 TEAM_ALIASES = {
     "JAC": "JAX",
@@ -90,6 +94,9 @@ class ESPNProvider:
 
     def __init__(self, session: requests.Session | None = None):
         self.session = session or _session()
+        # Explicitly supplied sessions may have custom adapters or mutable
+        # behavior. Keep those providers on the original sequential path.
+        self._default_summary_session = self.session if session is None else None
 
     def scoreboard(self, season: int, week: int, *, season_type: int | None = None) -> dict[str, Any]:
         """Fetch a weekly scoreboard using two known ESPN query shapes.
@@ -302,6 +309,71 @@ class ESPNProvider:
                     values = {labels[i]: raw_values[i] for i in range(min(len(labels), len(raw_values)))}
                     _merge_category(target["stats"], category_name, values)
         return list(merged.values())
+
+
+def iter_espn_summary_results(
+    provider: ESPNProvider,
+    event_ids: list[str],
+) -> Iterable[tuple[dict[str, Any] | None, Exception | None]]:
+    """Retrieve summaries with isolated sessions; yield in input order.
+
+    Only the built-in provider with its original default session opts in.
+    Custom providers/sessions retain sequential calls and caller ownership.
+    Workers do HTTP only; the caller still parses, merges and writes scores.
+    """
+    def fetch(client, event_id):
+        try:
+            return client.summary(event_id), None
+        except Exception as exc:
+            return None, exc
+
+    if (
+        len(event_ids) < 2
+        or type(provider) is not ESPNProvider
+        or provider.session is not getattr(provider, "_default_summary_session", None)
+        or "summary" in provider.__dict__
+    ):
+        for event_id in event_ids:
+            yield fetch(provider, event_id)
+        return
+
+    jobs = deque(enumerate(event_ids))
+    jobs_lock = Lock()
+    # Preserve caller-thread headers/cookies, including scoreboard cookies,
+    # without sharing either mutable container across concurrent requests.
+    headers = provider.session.headers.copy()
+    cookies = provider.session.cookies.copy()
+
+    def fetch_jobs():
+        collected = []
+        with _session() as session:
+            session.headers.update(headers)
+            session.cookies.update(cookies)
+            client = ESPNProvider(session)
+            while True:
+                with jobs_lock:
+                    if not jobs:
+                        break
+                    index, event_id = jobs.popleft()
+                collected.append((index, fetch(client, event_id)))
+        return collected
+
+    outcomes = [None] * len(event_ids)
+    # Join every worker (and close its session) before exposing any results.
+    # A worker/setup failure aborts safely before the scoring caller can write.
+    with ThreadPoolExecutor(
+        max_workers=min(ESPN_SUMMARY_MAX_WORKERS, len(event_ids)),
+        thread_name_prefix="pickem-espn",
+    ) as executor:
+        futures = [executor.submit(fetch_jobs) for _ in range(min(ESPN_SUMMARY_MAX_WORKERS, len(event_ids)))]
+        for future in futures:
+            for index, outcome in future.result():
+                outcomes[index] = outcome
+
+    for outcome in outcomes:
+        if outcome is None:
+            raise SourceError("ESPN summary batch did not complete; previous scores were preserved.")
+        yield outcome
 
 
 class SleeperProvider:
