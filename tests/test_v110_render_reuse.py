@@ -179,9 +179,9 @@ from pathlib import Path
 prefix = Path("app.py").read_text().split("\\npage_config()", 1)[0]
 scope = {"__name__": "warm_deploy_probe"}
 exec(compile(prefix, "app.py", "exec"), scope)
-assert scope["APP_BUILD_VERSION"] == "1.0.10-performance1"
-assert scope["APP_VERSION"] == "1.0.10"
-assert store.STORE_SCHEMA_VERSION == 7
+assert scope["APP_BUILD_VERSION"] == "1.0.11-performance2"
+assert scope["APP_VERSION"] == "1.0.11"
+assert store.STORE_SCHEMA_VERSION == 8
 assert weekly_ui.WEEKLY_UI_SCHEMA_VERSION == 16
 assert gate5_ui.GATE5_UI_SCHEMA_VERSION == 11
 assert weekly_ui.load_or_prepare_snapshot is player_season_stats.load_or_prepare_snapshot

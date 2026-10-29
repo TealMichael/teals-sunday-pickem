@@ -18,7 +18,8 @@ def archive_week_results(store, week: dict[str, Any]) -> dict[str, Any]:
     Idempotent: weekly_results upserts by (week_id, player_id), so a Monday
     retry or Commissioner re-run cannot duplicate awards.
     """
-    bundle = store.get_week_public_bundle(str(week["id"]), ttl_seconds=0.01)
+    # Monday archives must not reuse a live UI bundle cached before scoring.
+    bundle = store.get_week_public_bundle(str(week["id"]), ttl_seconds=0.01, fresh=True)
     leaderboard = build_weekly_leaderboard(bundle)
     stamp = str(week.get("finalized_at") or _iso_now())
     rows: list[dict[str, Any]] = []

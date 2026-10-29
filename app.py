@@ -16,7 +16,7 @@ import config as _config
 # Previous release guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.19"
 # Historical guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.8-hotfix8.1"
 # Previous release guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.9-commissioner-unified"
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.10-performance1":
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.11-performance2":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -51,7 +51,7 @@ import store as _store
 # Legacy regression marker only: getattr(_store, "STORE_SCHEMA_VERSION", 0) < 4
 # Previous release guard: getattr(_store, "STORE_SCHEMA_VERSION", 0) < 6
 if (
-    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 7
+    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 8
     or not hasattr(_store.SupabaseStore, "get_app_meta")
     or not hasattr(_store.SupabaseStore, "set_app_meta")
 ):

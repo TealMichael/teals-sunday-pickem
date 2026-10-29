@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from copy import deepcopy
-from threading import RLock
+from threading import Event, RLock
 import time
 from typing import Any
 from uuid import UUID
@@ -13,7 +13,8 @@ from weekly import POSITIONS, parse_timestamp, safe_status
 
 UTC = timezone.utc
 PICKEM_SCHEMA = "pickem"
-STORE_SCHEMA_VERSION = 7
+STORE_SCHEMA_VERSION = 8
+# Previous performance release: STORE_SCHEMA_VERSION = 7
 # Previous release: STORE_SCHEMA_VERSION = 6
 # Previous cumulative marker: STORE_SCHEMA_VERSION = 5
 # Previous cumulative marker: STORE_SCHEMA_VERSION = 4
@@ -35,6 +36,15 @@ class PicksLocked(StoreError):
     pass
 
 
+class _BundleFlight:
+    """One in-progress build for a particular bundle cache generation."""
+
+    def __init__(self, generation: int):
+        self.generation = generation
+        self.done = Event()
+        self.error: BaseException | None = None
+
+
 def _iso(dt: datetime) -> str:
     return dt.astimezone(UTC).isoformat()
 
@@ -51,6 +61,10 @@ class SupabaseStore:
         from supabase.client import ClientOptions
 
         self._public_cache: dict[tuple, tuple[float, Any]] = {}
+        self._public_cache_lock = RLock()
+        self._public_cache_generations: dict[tuple, int] = {}
+        self._bundle_flights: dict[tuple, _BundleFlight] = {}
+        self._fresh_bundle_active: dict[tuple, int] = {}
         self._season_card_stats_cache: dict[tuple, dict[str, Any]] = {}
         self._season_card_stats_lock = RLock()
         self.url = str(url).rstrip("/")
@@ -94,16 +108,36 @@ class SupabaseStore:
         return value
 
     def clear_week_cache(self, week_id: str | None = None) -> None:
-        cache = getattr(self, "_public_cache", None)
-        if not cache:
-            return
-        if week_id is None:
-            cache.clear()
-            return
-        week_id = str(week_id)
-        for key in list(cache):
-            if week_id in {str(part) for part in key}:
-                cache.pop(key, None)
+        # Track in-flight builds even if nothing has been cached yet. Otherwise
+        # a read started before a confirmed write can refill the cache afterward.
+        lock = self.__dict__.setdefault("_public_cache_lock", RLock())
+        with lock:
+            cache = self.__dict__.setdefault("_public_cache", {})
+            flights = self.__dict__.setdefault("_bundle_flights", {})
+            fresh_active = self.__dict__.setdefault("_fresh_bundle_active", {})
+            generations = self.__dict__.setdefault("_public_cache_generations", {})
+            candidates = set(cache) | set(flights) | set(fresh_active)
+            if week_id is None:
+                affected = candidates
+                cache.clear()
+                # An in-flight current-week lookup must also be invalidated.
+                affected.add(("real_week",))
+            else:
+                week_id = str(week_id)
+                affected = {key for key in candidates if week_id in {str(part) for part in key}}
+                for key in affected:
+                    cache.pop(key, None)
+            for key in affected:
+                generations[key] = generations.get(key, 0) + 1
+
+    def _invalidate_real_week_alias(self) -> None:
+        """A confirmed week-row update invalidates the current-week shortcut."""
+        lock = self.__dict__.setdefault("_public_cache_lock", RLock())
+        with lock:
+            self.__dict__.setdefault("_public_cache", {}).pop(("real_week",), None)
+            generations = self.__dict__.setdefault("_public_cache_generations", {})
+            key = ("real_week",)
+            generations[key] = generations.get(key, 0) + 1
 
     def _cache_drop_prefix(self, prefix: str) -> None:
         cache = getattr(self, "_public_cache", None)
@@ -310,30 +344,38 @@ class SupabaseStore:
     # -------------------------
     def get_real_week(self) -> dict[str, Any] | None:
         cache_key = ("real_week",)
-        cached = self._cache_get(cache_key)
-        if cached is not None:
-            return cached
-        res = (
-            self._table("weeks")
-            .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo,data_status,last_data_refresh_at,finalized_at,data_message,results_archived_at,rosters_purged_at")
-            .eq("is_demo", False)
-            .order("season", desc=True)
-            .order("nfl_week", desc=False)
-            .execute()
-        )
-        rows = list(res.data or [])
-        if not rows:
-            return self._cache_set(cache_key, None, 15)
-        now = datetime.now(UTC)
-        # Keep the just-finished Sunday as the current app week through Monday.
-        # The next shell may already exist, but it should not take over until
-        # its Tuesday-noon open time actually arrives.
-        opened = [r for r in rows if (parse_timestamp(r.get("opens_at")) or now) <= now]
-        if opened:
-            value = sorted(opened, key=lambda r: (int(r.get("season") or 0), int(r.get("nfl_week") or 0)))[-1]
-        else:
-            value = sorted(rows, key=lambda r: (parse_timestamp(r.get("opens_at")) or now))[0]
-        return self._cache_set(cache_key, value, 30)
+        lock = self.__dict__.setdefault("_public_cache_lock", RLock())
+        while True:
+            with lock:
+                cached = self._cache_get(cache_key)
+                if cached is not None:
+                    return cached
+                generation = self.__dict__.setdefault("_public_cache_generations", {}).get(cache_key, 0)
+            res = (
+                self._table("weeks")
+                .select("id,season,nfl_week,label,opens_at,locks_at,published_at,is_demo,data_status,last_data_refresh_at,finalized_at,data_message,results_archived_at,rosters_purged_at")
+                .eq("is_demo", False)
+                .order("season", desc=True)
+                .order("nfl_week", desc=False)
+                .execute()
+            )
+            rows = list(res.data or [])
+            if not rows:
+                value, ttl = None, 15
+            else:
+                now = datetime.now(UTC)
+                # Keep the just-finished Sunday as current through Monday.
+                # Tuesday's unopened shell must not take over prematurely.
+                opened = [r for r in rows if (parse_timestamp(r.get("opens_at")) or now) <= now]
+                if opened:
+                    value = sorted(opened, key=lambda r: (int(r.get("season") or 0), int(r.get("nfl_week") or 0)))[-1]
+                else:
+                    value = sorted(rows, key=lambda r: (parse_timestamp(r.get("opens_at")) or now))[0]
+                ttl = 30
+            with lock:
+                if generation != self._public_cache_generations.get(cache_key, 0):
+                    continue  # A week-row write happened during this request.
+                return self._cache_set(cache_key, value, ttl)
 
     def get_demo_week(self) -> dict[str, Any] | None:
         cache_key = ("demo_week",)
@@ -627,6 +669,7 @@ class SupabaseStore:
             return self.get_week(str(week_id))
         res = self._table("weeks").update(payload).eq("id", str(week_id)).execute()
         self.clear_week_cache(str(week_id))
+        self._invalidate_real_week_alias()
         return res.data[0] if res.data else None
 
     def upsert_nfl_games(self, week_id: str, games: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1552,11 +1595,88 @@ class SupabaseStore:
         )
         return list(self._cache_set(cache_key, rows, 20))
 
-    def get_week_public_bundle(self, week_id: str, *, ttl_seconds: float = 8.0) -> dict[str, Any]:
+    def get_week_public_bundle(self, week_id: str, *, ttl_seconds: float = 8.0, fresh: bool = False) -> dict[str, Any]:
+        """Share completed public reads, never a half-built or invalidated one.
+
+        Ordinary callers coalesce a cold miss per week *and generation*. A
+        fresh caller bypasses the cache entirely, including an existing entry
+        with a longer TTL, for clock and final-archive correctness. Neither
+        path holds a global lock while querying Supabase.
+        """
         cache_key = ("gate4_bundle", str(week_id))
-        cached = self._cache_get(cache_key)
-        if cached is not None:
-            return dict(cached)
+        lock = self.__dict__.setdefault("_public_cache_lock", RLock())
+        flights = self.__dict__.setdefault("_bundle_flights", {})
+        fresh_active = self.__dict__.setdefault("_fresh_bundle_active", {})
+        generations = self.__dict__.setdefault("_public_cache_generations", {})
+        while True:
+            with lock:
+                generation = generations.get(cache_key, 0)
+                if not fresh:
+                    cached = self._cache_get(cache_key)
+                    if cached is not None:
+                        return deepcopy(cached)
+                    flight = flights.get(cache_key)
+                    if flight is not None and flight.generation == generation:
+                        builder = False
+                    else:
+                        flight = _BundleFlight(generation)
+                        flights[cache_key] = flight
+                        builder = True
+                else:
+                    flight = None
+                    builder = True
+                    fresh_active[cache_key] = fresh_active.get(cache_key, 0) + 1
+
+            if not builder:
+                # Wait on this specific week/generation, not on other users'
+                # cache keys. Errors are not cached; the next call can retry.
+                flight.done.wait()
+                if flight.error is not None:
+                    raise flight.error
+                continue
+
+            try:
+                value = self._load_week_public_bundle(str(week_id))
+            except BaseException as exc:
+                with lock:
+                    invalidated = generations.get(cache_key, 0) != generation
+                    if fresh:
+                        remaining = fresh_active[cache_key] - 1
+                        if remaining:
+                            fresh_active[cache_key] = remaining
+                        else:
+                            fresh_active.pop(cache_key, None)
+                    if flight is not None:
+                        if not invalidated:
+                            flight.error = exc
+                        if flights.get(cache_key) is flight:
+                            flights.pop(cache_key, None)
+                        flight.done.set()
+                if invalidated:
+                    continue
+                raise
+
+            with lock:
+                invalidated = generations.get(cache_key, 0) != generation
+                if fresh:
+                    remaining = fresh_active[cache_key] - 1
+                    if remaining:
+                        fresh_active[cache_key] = remaining
+                    else:
+                        fresh_active.pop(cache_key, None)
+                if flight is not None:
+                    if not invalidated:
+                        self._cache_set(cache_key, deepcopy(value), ttl_seconds)
+                    if flights.get(cache_key) is flight:
+                        flights.pop(cache_key, None)
+                    flight.done.set()
+            if not invalidated:
+                return deepcopy(value)
+            # A confirmed write occurred during the read. Fetch the latest
+            # generation rather than returning or publishing obsolete rows.
+
+    def _load_week_public_bundle(self, week_id: str) -> dict[str, Any]:
+        """Original five-query public shape; no auth or mutable metadata."""
         lineups = list(
             self._table("lineups")
             .select("id,week_id,player_id,confirmed_at,created_at,updated_at")
@@ -1587,14 +1707,13 @@ class SupabaseStore:
                 .data
                 or []
             )
-        value = {
+        return {
             "lineups": lineups,
             "picks": picks,
             "players": players,
             "pool": self.get_full_week_pool(str(week_id)),
             "games": self.get_nfl_games(str(week_id), eligible_only=False),
         }
-        return dict(self._cache_set(cache_key, value, ttl_seconds))
 
     def get_weekly_results(
         self,

@@ -577,7 +577,9 @@ def build_clock_snapshot(store, week: dict[str, Any], *, now: datetime | None = 
     """Build the compact, read-only Sunday broadcast snapshot from app-owned data."""
     now = (now or datetime.now(UTC)).astimezone(UTC)
     week_id = str(week["id"])
-    bundle = store.get_week_public_bundle(week_id, ttl_seconds=0.01)
+    # A short TTL does not bypass an existing longer-lived cache entry.
+    # Broadcasting must use an authoritative read, especially after scoring.
+    bundle = store.get_week_public_bundle(week_id, ttl_seconds=0.01, fresh=True)
     leaderboard = build_weekly_leaderboard(bundle)
     registered_players = store.get_registered_players()
     existing_weekly = {str(row.get("player_id")) for row in leaderboard}

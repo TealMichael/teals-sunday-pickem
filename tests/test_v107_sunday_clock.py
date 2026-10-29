@@ -83,7 +83,7 @@ class FakeClockStore:
     def __init__(self):
         self.snapshot = None
 
-    def get_week_public_bundle(self, week_id, ttl_seconds=8.0):
+    def get_week_public_bundle(self, week_id, ttl_seconds=8.0, fresh=False):
         return {
             "players": [
                 {"id": "p1", "nickname": "Alpha", "emoji": "🏈"},

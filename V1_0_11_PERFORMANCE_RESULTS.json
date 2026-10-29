@@ -1,0 +1,43 @@
+{
+  "release": {
+    "version": "1.0.11",
+    "build": "1.0.11-performance2",
+    "tag": "v1.0.11",
+    "base_version": "1.0.10",
+    "commit_message": "perf: release v1.0.11 with coordinated fresh public cache reads"
+  },
+  "verification": {
+    "python_3_12": {"baseline_passed": 412, "release_passed": 423, "warnings": 22},
+    "python_3_13": {"baseline_passed": 412, "release_passed": 423, "warnings": 22},
+    "python_source_count": 115,
+    "compilation": "PASS",
+    "release_guard": "PASS",
+    "new_regression_cases": 11,
+    "production_access": false,
+    "physical_iphone_measured": false
+  },
+  "synthetic_operations": {
+    "eight_forced_concurrent_cold_bundle_readers": {"v1_0_10": 40, "v1_0_11": 5},
+    "one_cold_populated_bundle": {"v1_0_10": 5, "v1_0_11": 5},
+    "immediate_warm_bundle": {"v1_0_10": 0, "v1_0_11": 0},
+    "short_ttl_with_existing_long_ttl_cache": {"v1_0_10": 0, "v1_0_11": 0},
+    "explicit_fresh_with_existing_cache": {"v1_0_10": null, "v1_0_11": 5},
+    "unit": "logical database operations, not milliseconds",
+    "scope": "in-process shared store, synthetic data, external services blocked"
+  },
+  "freshness_safety": {
+    "inflight_old_read_after_invalidation": "discarded and retried",
+    "failed_builder": "waiters awakened, no partial cache",
+    "independent_keys": "not serialized across database I/O",
+    "clock_and_archival": "explicit authoritative read",
+    "commissioner_override_during_provider_wait": "preserved by post-provider pool reread",
+    "default_bundle_ttl_seconds": 8
+  },
+  "limitations": [
+    "No physical iPhone timing or page-load latency benchmark",
+    "No production provider or Supabase requests",
+    "No coordination across independent server processes",
+    "Original standalone performance audit and probe archive unavailable",
+    "Original 19-scenario before/after UI snapshot harness unavailable"
+  ]
+}
