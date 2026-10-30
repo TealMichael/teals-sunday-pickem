@@ -18,7 +18,8 @@ import config as _config
 # Previous release guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.9-commissioner-unified"
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.11-performance2"
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.12-performance3"
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.13-performance4":
+# Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.13-performance4"
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.14-performance5":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -53,7 +54,7 @@ import store as _store
 # Legacy regression marker only: getattr(_store, "STORE_SCHEMA_VERSION", 0) < 4
 # Previous release guard: getattr(_store, "STORE_SCHEMA_VERSION", 0) < 6
 if (
-    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 8
+    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 9
     or not hasattr(_store.SupabaseStore, "get_app_meta")
     or not hasattr(_store.SupabaseStore, "set_app_meta")
 ):
@@ -103,7 +104,7 @@ import gate5_ui as _gate5_ui
 # Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 9
 _reloaded_gate4_ui = False
 # Previous guard: if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 10:
-if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 12:
+if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 13:
     _gate4_ui = importlib.reload(_gate4_ui)
     _reloaded_gate4_ui = True
 render_gate4_demo = _gate4_ui.render_gate4_demo

@@ -40,6 +40,14 @@ class Query(BaseQuery):
             for row in result.data:
                 row['lineup_picks'] = deepcopy([p for p in self.store.tables['lineup_picks']
                                                if p['lineup_id'] == row['id']])
+        if self.operation == 'select' and ',players(' in getattr(self, 'fields', ''):
+            projected = []
+            for row in result.data:
+                value = {k: row.get(k) for k in self.fields.split(',players(', 1)[0].split(',')}
+                person = next((p for p in self.store.tables['players'] if p['id'] == row['player_id']), None)
+                value['players'] = {k: person.get(k) for k in ['id','nickname','emoji']} if person else None
+                projected.append(value)
+            result.data = projected
         return result
 
 class LineupStore(SupabaseStore):

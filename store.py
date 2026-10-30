@@ -7,13 +7,16 @@ import time
 from typing import Any
 from uuid import UUID
 
+from postgrest.exceptions import APIError
+
 from config import LOGIN_WINDOW_MINUTES, MAX_FAILED_LOGINS_PER_WINDOW
 from weekly import POSITIONS, parse_timestamp, safe_status
 
 
 UTC = timezone.utc
 PICKEM_SCHEMA = "pickem"
-STORE_SCHEMA_VERSION = 8
+STORE_SCHEMA_VERSION = 9
+# Previous performance release: STORE_SCHEMA_VERSION = 8
 # Previous performance release: STORE_SCHEMA_VERSION = 7
 # Previous release: STORE_SCHEMA_VERSION = 6
 # Previous cumulative marker: STORE_SCHEMA_VERSION = 5
@@ -1676,6 +1679,77 @@ class SupabaseStore:
             # generation rather than returning or publishing obsolete rows.
 
     def _load_week_public_bundle(self, week_id: str) -> dict[str, Any]:
+        """Read public profiles with lineups while preserving the pick query order."""
+        lineup_fields = "id,week_id,player_id,confirmed_at,created_at,updated_at"
+        profile_fields = "id,nickname,emoji"
+        try:
+            rows = (
+                self._table("lineups")
+                .select(f"{lineup_fields},players({profile_fields})")
+                .eq("week_id", str(week_id))
+                .execute()
+                .data
+            )
+        except APIError as exc:
+            # Only relationship/schema-cache incompatibility permits the legacy
+            # reads. Permissions, timeouts and other failures must reach callers.
+            if exc.code not in {"PGRST200", "PGRST201"}:
+                raise
+            return self._load_week_public_bundle_legacy(week_id)
+
+        if rows is None:
+            rows = []
+        if not isinstance(rows, list):
+            raise StoreError("Unexpected public-lineup response")
+        lineup_keys = lineup_fields.split(",")
+        profile_keys = profile_fields.split(",")
+        lineups: list[dict[str, Any]] = []
+        players: list[dict[str, Any]] = []
+        seen_players: set[str] = set()
+        for item in rows:
+            if (
+                not isinstance(item, dict)
+                or "players" not in item
+                or any(key not in item for key in lineup_keys)
+                or item["id"] is None
+                or item["player_id"] is None
+            ):
+                raise StoreError("Incomplete public-lineup response")
+            profile = item["players"]
+            if profile is not None and (
+                not isinstance(profile, dict)
+                or any(key not in profile for key in profile_keys)
+                or str(profile["id"]) != str(item["player_id"])
+            ):
+                raise StoreError("Unexpected public-lineup profile identity")
+            # A null profile is a valid left join; retain even empty lineups.
+            lineups.append({key: item[key] for key in lineup_keys})
+            if profile is not None and str(profile["id"]) not in seen_players:
+                seen_players.add(str(profile["id"]))
+                players.append({key: profile[key] for key in profile_keys})
+
+        # Do not nest/regroup picks: their returned order can break ties in
+        # lineup-reveal displays. Keep the original columns and standalone read.
+        lineup_ids = [str(row["id"]) for row in lineups]
+        picks: list[dict[str, Any]] = []
+        if lineup_ids:
+            picks = list(
+                self._table("lineup_picks")
+                .select("id,lineup_id,position,pool_player_id,emergency_pool_player_id,updated_at")
+                .in_("lineup_id", lineup_ids)
+                .execute()
+                .data
+                or []
+            )
+        return {
+            "lineups": lineups,
+            "picks": picks,
+            "players": players,
+            "pool": self.get_full_week_pool(str(week_id)),
+            "games": self.get_nfl_games(str(week_id), eligible_only=False),
+        }
+
+    def _load_week_public_bundle_legacy(self, week_id: str) -> dict[str, Any]:
         """Original five-query public shape; no auth or mutable metadata."""
         lineups = list(
             self._table("lineups")

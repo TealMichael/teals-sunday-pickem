@@ -18,7 +18,8 @@ def test_roster_detail_renders_inline_beneath_selected_row():
     block = text.split('def _leaderboard_rows', 1)[1].split('def render_live_sunday', 1)[0]
     assert 'if detail and selected_id == row_player_id:' in block
     assert '_render_roster_detail(row, current_player_id)' in block
-    assert 'st.rerun()' in block
+    assert 'on_click=_toggle_leaderboard_detail if detail else None' in block
+    assert 'st.rerun()' not in block
 
 
 def test_gate4_visual_polish_css_present():

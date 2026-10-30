@@ -21,8 +21,10 @@ class Query:
         self.store, self.table = store, table
         self.week_id = ""
         self.change = None
+        self.fields = "*"
 
-    def select(self, *args, **kwargs):
+    def select(self, fields="*", **kwargs):
+        self.fields = fields
         return self
 
     def order(self, *args, **kwargs):
@@ -46,6 +48,15 @@ class Query:
             if self.change is not None:
                 self.store.tables[self.table][0].update(self.change)
             result = deepcopy(self.store.tables[self.table])
+            if self.table == "lineups" and ",players(" in self.fields:
+                fields = self.fields.split(",players(", 1)[0].split(",")
+                projected = []
+                for row in result:
+                    value = {k: row.get(k) for k in fields}
+                    profile = next((p for p in self.store.tables["players"] if p["id"] == row["player_id"]), None)
+                    value["players"] = deepcopy(profile)
+                    projected.append(value)
+                result = projected
             should_hold = (self.store.block_table == self.table
                            and (self.store.block_week is None or self.week_id == self.store.block_week)
                            and not self.store.block_started.is_set())
@@ -115,7 +126,7 @@ def _start_eight(store):
     return executor, futures
 
 
-def test_eight_concurrent_cold_readers_share_one_five_query_bundle():
+def test_eight_concurrent_cold_readers_share_one_four_query_bundle():
     store = ProbeStore()
     store.block_table = "lineups"
     executor, futures = _start_eight(store)
@@ -128,11 +139,11 @@ def test_eight_concurrent_cold_readers_share_one_five_query_bundle():
         results = [future.result(timeout=10) for future in futures]
     finally:
         executor.shutdown(wait=True)
-    assert store.operations == 5
+    assert store.operations == 4
     assert all(result == results[0] for result in results)
     results[0]["pool"][0]["score_total"] = 999
     assert store.get_week_public_bundle("w1")["pool"][0]["score_total"] == 11.5
-    assert store.operations == 5
+    assert store.operations == 4
 
 
 def test_failed_builder_wakes_waiters_and_next_request_retries():
@@ -154,7 +165,7 @@ def test_failed_builder_wakes_waiters_and_next_request_retries():
     assert store.operations == 1
     assert not store._public_cache
     assert store.get_week_public_bundle("w1")["lineups"]
-    assert store.operations == 6
+    assert store.operations == 5
 
 
 @pytest.mark.parametrize("clear_all", [False, True])
@@ -171,7 +182,7 @@ def test_invalidation_during_inflight_read_discards_stale_generation(clear_all):
         store.unblock.set()
         assert old_reader.result(timeout=10)["lineups"][0]["confirmed_at"] == "new-confirmation"
     assert store.get_week_public_bundle("w1")["lineups"][0]["confirmed_at"] == "new-confirmation"
-    assert store.operations == 10
+    assert store.operations == 8
 
 
 def test_slow_week_does_not_block_a_different_week_key():
@@ -187,7 +198,7 @@ def test_slow_week_does_not_block_a_different_week_key():
         finally:
             store.unblock.set()
         assert slow.result(timeout=10)["pool"]
-    assert store.operations == 10
+    assert store.operations == 8
 
 
 def test_short_ttl_does_not_bypass_cache_but_explicit_fresh_does():
@@ -195,9 +206,9 @@ def test_short_ttl_does_not_bypass_cache_but_explicit_fresh_does():
     assert store.get_week_public_bundle("w1")["pool"][0]["score_total"] == 11.5
     store.pool[0]["score_total"] = 22.0
     assert store.get_week_public_bundle("w1", ttl_seconds=0.01)["pool"][0]["score_total"] == 11.5
-    assert store.operations == 5
+    assert store.operations == 4
     assert store.get_week_public_bundle("w1", ttl_seconds=0.01, fresh=True)["pool"][0]["score_total"] == 22.0
-    assert store.operations == 10
+    assert store.operations == 8
 
 
 def test_explicit_fresh_read_retries_if_a_write_occurs_mid_read():
@@ -210,7 +221,7 @@ def test_explicit_fresh_read_retries_if_a_write_occurs_mid_read():
         store.clear_week_cache("w1")
         store.unblock.set()
         assert future.result(timeout=10)["lineups"][0]["confirmed_at"] == "new-confirmation"
-    assert store.operations == 10
+    assert store.operations == 8
     assert ("gate4_bundle", "w1") not in store._public_cache
 
 

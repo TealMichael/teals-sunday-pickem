@@ -1,0 +1,34 @@
+2026-10-30 00:39:43.868 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-30 00:39:43.868 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-30 00:39:43.868 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-30 00:39:43.868 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-30 00:39:43.868 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-30 00:39:43.868 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-30 00:39:43.868 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-30 00:39:43.868 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+live_cold_15_players 1 12 1.243
+live_warm 1 3 0.204
+live_expired_cache 1 10 0.508
+own_roster_open 1 3 0.205
+own_roster_close 1 3 0.203
+other_roster_open 1 3 0.194
+other_roster_switch 1 3 0.197
+cheer_add 2 7 0.387
+cheer_remove 2 7 0.385
+season_control 1 2 0.128
+return_live 1 3 0.196
+after_manual_override 1 8 0.417
+missing_profile_left_join 1 8 0.418
+provisional_results 1 8 0.412
+2026-10-30 00:39:49.510 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+final_results 1 9 0.45
+2026-10-30 00:39:49.908 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+empty_lineups_final 1 7 0.343
+2026-10-30 00:39:50.217 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+no_lineups_final 1 6 0.308

@@ -31,7 +31,8 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp, week_phase
 
-GATE4_UI_SCHEMA_VERSION = 12
+GATE4_UI_SCHEMA_VERSION = 13
+# Previous performance release: GATE4_UI_SCHEMA_VERSION = 12
 # Previous release: GATE4_UI_SCHEMA_VERSION = 11
 # Previous cumulative marker: GATE4_UI_SCHEMA_VERSION = 10
 # Prior cumulative marker: GATE4_UI_SCHEMA_VERSION = 9
@@ -504,6 +505,14 @@ def _render_roster_detail(row: dict[str, Any], current_player_id: str) -> None:
                             st.write(str(detail_text))
 
 
+def _toggle_leaderboard_detail(player_id: str) -> None:
+    """Select the roster before the normal authenticated page/fragment run."""
+    if str(st.session_state.get("gate4_detail_player_id") or "") == player_id:
+        st.session_state.pop("gate4_detail_player_id", None)
+    else:
+        st.session_state.gate4_detail_player_id = player_id
+
+
 def _leaderboard_rows(leaderboard: list[dict[str, Any]], current_player_id: str, *, detail: bool = True) -> None:
     if not leaderboard:
         st.info("No one has a lineup in this week yet.")
@@ -527,13 +536,11 @@ def _leaderboard_rows(leaderboard: list[dict[str, Any]], current_player_id: str,
         label = f"{prefix}{rank}. {row.get('emoji','🏈')} {row.get('nickname','Player')}  ·  {float(row.get('score') or 0):.1f} pts"
         if is_self:
             label += "  ← YOU"
-        if st.button(label, key=f"leaderbtn_{row.get('lineup_id')}", use_container_width=True):
-            if detail:
-                if selected_id == row_player_id:
-                    st.session_state.pop("gate4_detail_player_id", None)
-                else:
-                    st.session_state.gate4_detail_player_id = row_player_id
-                st.rerun()
+        st.button(
+            label, key=f"leaderbtn_{row.get('lineup_id')}", use_container_width=True,
+            on_click=_toggle_leaderboard_detail if detail else None,
+            args=(row_player_id,) if detail else None,
+        )
         if detail and selected_id == row_player_id:
             _render_roster_detail(row, current_player_id)
 
