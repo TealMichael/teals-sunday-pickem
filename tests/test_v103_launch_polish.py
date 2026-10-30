@@ -36,10 +36,10 @@ def test_player_tap_is_local_and_next_owns_the_supabase_write():
 def test_builder_has_deliberate_next_and_questionable_backup_step():
     text = (ROOT / "weekly_ui.py").read_text("utf-8")
     assert 'starter_needs_backup = bool(starter_is_questionable and not backup_ready)' in text
-    assert 'next_label = "Choose Emergency Backup →"' in text
-    assert 'next_label = f"Next: {nxt} →" if nxt else "Review My Five →"' in text
-    assert 'next_label = "Return to Review →"' in text
-    assert 'next_label = "Return to Lineup →"' in text
+    assert 'return "Choose Emergency Backup →"' in text
+    assert 'return f"Next: {nxt} →" if nxt else "Review My Five →"' in text
+    assert 'return "Return to Review →"' in text
+    assert 'return "Return to Lineup →"' in text
     assert 'disabled=not current_id' in text
     assert 'disabled=not backup_ready' in text
 

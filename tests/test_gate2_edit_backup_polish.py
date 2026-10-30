@@ -7,7 +7,7 @@ def _ui():
 
 def test_complete_lineup_edit_opens_review_not_qb():
     text = _ui()
-    marker = 'if st.button("EDIT LINEUP"'
+    marker = 'if action == "home_edit"'
     start = text.index(marker)
     block = text[start:start+350]
     assert 'builder_position = None' in block
@@ -31,7 +31,7 @@ def test_questionable_selection_uses_full_wording():
 def test_position_selection_waits_for_explicit_next():
     text = _ui()
     assert 'Tap a player to highlight it. Your choice saves only when you tap Next.' in text
-    assert 'next_label = f"Next: {nxt} →" if nxt else "Review My Five →"' in text
+    assert 'return f"Next: {nxt} →" if nxt else "Review My Five →"' in text
     assert 'disabled=not current_id' in text
 
 

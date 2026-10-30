@@ -29,6 +29,7 @@ def render_order(*, chosen=5, needs=None, unavailable=None, demo=False):
     )
     symbols = {
         "st": st,
+        "_lineup_action": lambda *args: {},
         "_load_lineup": lambda *args: (None, ["picks"], [], {}),
         "lineup_progress": lambda picks: (chosen, 5),
         "required_backup_positions": lambda *args: needs,

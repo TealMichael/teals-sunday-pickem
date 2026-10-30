@@ -1,0 +1,262 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "configuration": "ordinary",
+      "scenarios": 44,
+      "visible_trees_and_saved_data": "identical",
+      "operation_change": "identical",
+      "ordered_data_queries_and_store_frames": "identical",
+      "all_after_full_runs": 1
+    },
+    {
+      "configuration": "owner_1",
+      "scenarios": 47,
+      "visible_trees_and_saved_data": "identical",
+      "operation_change": "only one owner lookup removed per eliminated run",
+      "ordered_data_queries_and_store_frames": "identical",
+      "all_after_full_runs": 1
+    },
+    {
+      "configuration": "owner_2",
+      "scenarios": 47,
+      "visible_trees_and_saved_data": "identical",
+      "operation_change": "only one owner lookup removed per eliminated run",
+      "ordered_data_queries_and_store_frames": "identical",
+      "all_after_full_runs": 1
+    },
+    {
+      "configuration": "owner_3",
+      "scenarios": 47,
+      "visible_trees_and_saved_data": "identical",
+      "operation_change": "only one owner lookup removed per eliminated run",
+      "ordered_data_queries_and_store_frames": "identical",
+      "all_after_full_runs": 1
+    }
+  ],
+  "compared_scenario_pairs": 185,
+  "owner_query_delay_seconds": 0.04,
+  "owner_timing": [
+    {
+      "scenario": "build_my_five",
+      "before_median_seconds": 0.24803904000009425,
+      "after_median_seconds": 0.19430880300001263,
+      "samples": {
+        "before": [
+          0.2586582069998258,
+          0.24803904000009425,
+          0.23072530400008873
+        ],
+        "after": [
+          0.19430880300001263,
+          0.19947652900009416,
+          0.18414356599987514
+        ]
+      },
+      "before_queries": 4,
+      "after_queries": 3,
+      "before_runs": 2,
+      "after_runs": 1
+    },
+    {
+      "scenario": "next_first_save",
+      "before_median_seconds": 0.28461545999994087,
+      "after_median_seconds": 0.22142147399995338,
+      "samples": {
+        "before": [
+          0.28244398799984083,
+          0.28461545999994087,
+          0.29779917499990916
+        ],
+        "after": [
+          0.22142147399995338,
+          0.23253383099995517,
+          0.22134721399993396
+        ]
+      },
+      "before_queries": 5,
+      "after_queries": 4,
+      "before_runs": 2,
+      "after_runs": 1
+    },
+    {
+      "scenario": "next_existing_lineup",
+      "before_median_seconds": 0.257374278000043,
+      "after_median_seconds": 0.19225114799996845,
+      "samples": {
+        "before": [
+          0.25529424699993797,
+          0.2631925149999006,
+          0.257374278000043
+        ],
+        "after": [
+          0.20470371600004,
+          0.19225114799996845,
+          0.1909380020001663
+        ]
+      },
+      "before_queries": 4,
+      "after_queries": 3,
+      "before_runs": 2,
+      "after_runs": 1
+    },
+    {
+      "scenario": "back",
+      "before_median_seconds": 0.16491155200014873,
+      "after_median_seconds": 0.10406958299995495,
+      "samples": {
+        "before": [
+          0.1591256379999777,
+          0.16823655700000018,
+          0.16491155200014873
+        ],
+        "after": [
+          0.12516986199989333,
+          0.10406958299995495,
+          0.10255418000019745
+        ]
+      },
+      "before_queries": 2,
+      "after_queries": 1,
+      "before_runs": 2,
+      "after_runs": 1
+    },
+    {
+      "scenario": "next_unchanged",
+      "before_median_seconds": 0.1677703069999552,
+      "after_median_seconds": 0.10482810100006645,
+      "samples": {
+        "before": [
+          0.15678213499995763,
+          0.1677703069999552,
+          0.1924419829999806
+        ],
+        "after": [
+          0.1262457219997941,
+          0.10482810100006645,
+          0.09977660099980312
+        ]
+      },
+      "before_queries": 2,
+      "after_queries": 1,
+      "before_runs": 2,
+      "after_runs": 1
+    },
+    {
+      "scenario": "confirm_lineup",
+      "before_median_seconds": 0.3798144089998914,
+      "after_median_seconds": 0.3161393029999999,
+      "samples": {
+        "before": [
+          0.3798144089998914,
+          0.3921506239998962,
+          0.37620478400003776
+        ],
+        "after": [
+          0.3248257890002151,
+          0.3161393029999999,
+          0.3154270400000314
+        ]
+      },
+      "before_queries": 7,
+      "after_queries": 6,
+      "before_runs": 2,
+      "after_runs": 1
+    },
+    {
+      "scenario": "edit_lineup",
+      "before_median_seconds": 0.20585445799997615,
+      "after_median_seconds": 0.14688744499994755,
+      "samples": {
+        "before": [
+          0.209200348999957,
+          0.20585445799997615,
+          0.19562958500000605
+        ],
+        "after": [
+          0.14688744499994755,
+          0.14321681799992803,
+          0.1491336940000565
+        ]
+      },
+      "before_queries": 3,
+      "after_queries": 2,
+      "before_runs": 2,
+      "after_runs": 1
+    },
+    {
+      "scenario": "starter_tap",
+      "before_median_seconds": 0.1210341429998607,
+      "after_median_seconds": 0.10846571399997629,
+      "samples": {
+        "before": [
+          0.12966066000012688,
+          0.1210341429998607,
+          0.10163053700011915
+        ],
+        "after": [
+          0.10846571399997629,
+          0.11369202699984271,
+          0.094289893999985
+        ]
+      },
+      "before_queries": 1,
+      "after_queries": 1,
+      "before_runs": 1,
+      "after_runs": 1
+    },
+    {
+      "scenario": "warm_season",
+      "before_median_seconds": 0.09929823399988891,
+      "after_median_seconds": 0.10073213999999098,
+      "samples": {
+        "before": [
+          0.11076933300000746,
+          0.09929823399988891,
+          0.09257584599981783
+        ],
+        "after": [
+          0.09284358299987616,
+          0.11752080799988107,
+          0.10073213999999098
+        ]
+      },
+      "before_queries": 1,
+      "after_queries": 1,
+      "before_runs": 1,
+      "after_runs": 1
+    },
+    {
+      "scenario": "live_expired_cache",
+      "before_median_seconds": 0.5401427659999172,
+      "after_median_seconds": 0.5529051309999886,
+      "samples": {
+        "before": [
+          0.5338637449999624,
+          0.5401427659999172,
+          0.5503488499998639
+        ],
+        "after": [
+          0.5759874340001261,
+          0.5529051309999886,
+          0.5287949900000513
+        ]
+      },
+      "before_queries": 11,
+      "after_queries": 11,
+      "before_runs": 1,
+      "after_runs": 1
+    }
+  ],
+  "example_next_generated_protobuf_bytes": {
+    "before": 55891,
+    "after": 28284
+  },
+  "limits": [
+    "Synthetic transport waiting; no production or physical iPhone timing.",
+    "Timings include instrumentation and AppTest overhead; not correctness thresholds.",
+    "UI normalization removes runtime IDs and the deliberate Build version label only.",
+    "Separate sessions receive the same existing randomized pool order; runtime shuffling is unchanged.",
+    "Generated protobuf bytes precede coalescing/compression and are not measured wire traffic."
+  ]
+}

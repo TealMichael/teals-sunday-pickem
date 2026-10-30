@@ -1,0 +1,55 @@
+2026-10-29 13:11:26.822 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-29 13:11:26.823 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-29 13:11:26.823 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-29 13:11:26.823 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-29 13:11:26.823 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-29 13:11:26.823 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-29 13:11:26.823 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-29 13:11:26.823 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+home_cold 1 5 1.174
+home_warm 1 2 0.142
+build_my_five 1 3 0.199
+starter_tap 1 1 0.114
+next_first_save 1 4 0.233
+starter_tap_rb 1 1 0.113
+next_existing_lineup 1 3 0.192
+back 1 1 0.104
+next_unchanged 1 1 0.105
+starter_tap_expired_cache 1 3 0.194
+next_failed_save 1 2 0.14
+next_retry_save 1 3 0.19
+starter_tap_te 1 1 0.111
+next_te 1 3 0.196
+starter_tap_k 1 1 0.1
+next_to_review 1 3 0.182
+confirm_lineup 1 6 0.316
+edit_lineup 1 2 0.143
+review_edit_qb 1 1 0.12
+owner_revoked_card_tap 1 1 0.115
+owner_revoked_next 1 3 0.205
+owner_revoked_review_edit 1 1 0.109
+questionable_pool_refresh 1 3 0.188
+questionable_starter_tap 1 1 0.107
+enter_backup 1 1 0.112
+backup_tap 1 1 0.109
+change_starter 1 1 0.108
+questionable_reselect 1 1 0.108
+enter_backup_again 1 1 0.113
+backup_reselect 1 1 0.109
+save_backup_return_review 1 3 0.193
+hidden_starter_review 1 4 0.238
+nav_season 1 3 0.188
+nav_history 1 1 0.113
+nav_profile 1 2 0.155
+nav_sunday 1 2 0.152
+cold_season 1 4 0.237
+warm_season 1 1 0.118
+cold_history 1 3 0.216
+warm_history 1 1 0.132
+cold_profile 1 4 0.24
+warm_profile 1 1 0.107
+return_sunday 1 3 0.185
+live_cold 1 13 0.624
+live_warm 1 3 0.201
+live_expired_cache 1 11 0.553
+live_nav_season 1 2 0.151

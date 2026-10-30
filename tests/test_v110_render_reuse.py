@@ -174,7 +174,7 @@ config.APP_BUILD_VERSION = "1.0.9-commissioner-unified"
 store.STORE_SCHEMA_VERSION = 6
 player_season_stats.PLAYER_SEASON_STATS_LOGIC_VERSION = 0
 gate5.GATE5_LOGIC_SCHEMA_VERSION = 0
-weekly_ui.WEEKLY_UI_SCHEMA_VERSION = 15
+weekly_ui.WEEKLY_UI_SCHEMA_VERSION = 16
 gate5_ui.GATE5_UI_SCHEMA_VERSION = 10
 nfl_sources.NFL_SOURCES_SCHEMA_VERSION = 2
 nfl_sync.NFL_SYNC_SCHEMA_VERSION = 6
@@ -182,10 +182,10 @@ from pathlib import Path
 prefix = Path("app.py").read_text().split("\\npage_config()", 1)[0]
 scope = {"__name__": "warm_deploy_probe"}
 exec(compile(prefix, "app.py", "exec"), scope)
-assert scope["APP_BUILD_VERSION"] == "1.0.12-performance3"
-assert scope["APP_VERSION"] == "1.0.12"
+assert scope["APP_BUILD_VERSION"] == "1.0.13-performance4"
+assert scope["APP_VERSION"] == "1.0.13"
 assert store.STORE_SCHEMA_VERSION == 8
-assert weekly_ui.WEEKLY_UI_SCHEMA_VERSION == 16
+assert weekly_ui.WEEKLY_UI_SCHEMA_VERSION == 17
 assert gate5_ui.GATE5_UI_SCHEMA_VERSION == 11
 assert nfl_sources.NFL_SOURCES_SCHEMA_VERSION == 3
 assert nfl_sync.NFL_SYNC_SCHEMA_VERSION == 7

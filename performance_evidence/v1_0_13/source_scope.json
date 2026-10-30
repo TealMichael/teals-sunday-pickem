@@ -1,0 +1,16 @@
+{
+  "baseline_files_verified": 302,
+  "changed_original_files": [
+    "app.py",
+    "config.py",
+    "tests/test_gate2_edit_backup_polish.py",
+    "tests/test_v103_launch_polish.py",
+    "tests/test_v108_hotfix81_pulse_placement.py",
+    "tests/test_v110_render_reuse.py",
+    "weekly_ui.py"
+  ],
+  "deleted_original_files": [],
+  "app_body_after_page_config": "byte-identical",
+  "python_compiled": 121,
+  "unchanged": "All other original files, including store, scoring, security, providers, dependencies, SQL, workflows, newsletter and AWTRIX"
+}

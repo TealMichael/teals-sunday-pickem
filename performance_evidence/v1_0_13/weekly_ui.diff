@@ -1,0 +1,536 @@
+diff --git a/audit_v113_source/teals-sunday-pickem-main/weekly_ui.py b/release_v113/teals-sunday-pickem-main/weekly_ui.py
+index dfdebdd..a62efad 100644
+--- a/audit_v113_source/teals-sunday-pickem-main/weekly_ui.py
++++ b/release_v113/teals-sunday-pickem-main/weekly_ui.py
+@@ -48,7 +48,8 @@ from weekly import (
+ )
+ 
+ UTC = timezone.utc
+-WEEKLY_UI_SCHEMA_VERSION = 16
++WEEKLY_UI_SCHEMA_VERSION = 17
++# Previous performance release: WEEKLY_UI_SCHEMA_VERSION = 16
+ # Previous release: WEEKLY_UI_SCHEMA_VERSION = 15
+ # Previous release: WEEKLY_UI_SCHEMA_VERSION = 14
+ # Previous release: WEEKLY_UI_SCHEMA_VERSION = 13
+@@ -176,15 +177,8 @@ def _render_sunday_status_card(week: dict, picks: list[dict], pool_by_id: dict[s
+         st.caption("NFL status data is older than expected this close to lock. Your saved lineup is safe; check again after the next refresh.")
+ 
+ 
+-@st.fragment(run_every="60s")
+-def _render_live_prelock_status(store, week: dict, player: dict) -> tuple[dict | None, list[dict], list[dict], dict[str, dict]]:
+-    """Keep the Sunday confidence card fresh while a phone sits open.
+-
+-    This fragment never edits a lineup. It rereads the current week/pool/lineup
+-    and can invoke the already-leased automation fallback if the final injury
+-    refresh is late. A lock transition gets a full app rerun so the builder
+-    cannot remain visually open after 1 PM ET.
+-    """
++def _load_prelock_status(store, week: dict, player: dict) -> tuple[dict, tuple]:
++    """Read the same current status for a home render or a home-origin action."""
+     fresh_week = store.get_week(str(week["id"])) or week
+     fresh_week, _recovery = maybe_recover_critical_automation(store, fresh_week)
+     if week_phase(fresh_week) == "locked":
+@@ -197,6 +191,14 @@ def _render_live_prelock_status(store, week: dict, player: dict) -> tuple[dict |
+         fresh_pool,
+         snapshot_ttl_seconds=0,
+     )
++    return fresh_week, (_lineup, picks, resolved_pool, pool_by_id)
++
++
++@st.fragment(run_every="60s")
++def _render_live_prelock_status(store, week: dict, player: dict) -> tuple[dict | None, list[dict], list[dict], dict[str, dict]]:
++    """Independently reread status on every full or timed fragment invocation."""
++    fresh_week, context = _load_prelock_status(store, week, player)
++    _lineup, picks, resolved_pool, pool_by_id = context
+     _render_sunday_status_card(fresh_week, picks, pool_by_id)
+     # Full renders reuse this invocation's fresh read for the lineup below.
+     # Timed fragment reruns still execute recovery and a new read above; no
+@@ -695,12 +697,61 @@ def _picker_progress_html(picks: list[dict], current_position: str) -> str:
+     )
+ 
+ 
+-def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -> None:
+-    # While the builder is open, keep the already-loaded lineup snapshot warm.
+-    # The database remains authoritative when Next performs the actual write.
+-    lineup, picks, pool, pool_by_id = _load_lineup(
+-        store, week, player, pool, snapshot_ttl_seconds=300.0
++def _action_session_context() -> tuple:
++    # An extra discard guard, never an authorization decision. Login restores
++    # and profile updates replace the player object; device changes also expire
++    # a pending intent, including sign-out/sign-in to the same player ID.
++    return (
++        id(st.session_state.get("player")),
++        st.session_state.get("active_device_token"),
++        bool(st.session_state.get("commish")),
++        bool(st.session_state.get("gate2_demo")),
++        st.session_state.get("gate2_demo_player_id"),
+     )
++
++
++def _queue_lineup_action(request: dict) -> None:
++    """A widget callback stages intent only; it never reads or writes Supabase."""
++    if request.get("generation") != st.session_state.get("lineup_render_generation", 0):
++        return
++    if request.get("session") != _action_session_context():
++        return
++    st.session_state.lineup_action = dict(request)
++
++
++def _lineup_action(action: str, label: str, week: dict, player: dict) -> dict:
++    """Bind scalar origin data, not old week/pool snapshots, to a button."""
++    request = {
++        "action": action, "label": label,
++        "week_id": str(week["id"]), "player_id": str(player["id"]),
++        "mode": str(st.session_state.get("builder_mode") or "home"),
++        "position": st.session_state.get("builder_position"),
++        "return_mode": st.session_state.get("builder_return_mode"),
++        "generation": st.session_state.get("lineup_render_generation", 0),
++        "session": _action_session_context(),
++    }
++    return {"on_click": _queue_lineup_action, "args": (request,)}
++
++
++def _take_lineup_action(player: dict) -> dict | None:
++    # Pop before any early return or data read. Requests cannot survive a tab
++    # change, failed render, missing week, lock transition or failed save.
++    request = st.session_state.pop("lineup_action", None)
++    generation = st.session_state.get("lineup_render_generation", 0)
++    st.session_state.lineup_render_generation = generation + 1
++    if not isinstance(request, dict):
++        return None
++    expected = {
++        "player_id": str(player["id"]), "generation": generation,
++        "session": _action_session_context(),
++        "mode": str(st.session_state.get("builder_mode") or "home"),
++        "position": st.session_state.get("builder_position"),
++        "return_mode": st.session_state.get("builder_return_mode"),
++    }
++    return request if all(request.get(k) == value for k, value in expected.items()) else None
++
++
++def _builder_selection(week: dict, player: dict, position: str, picks: list[dict], pool_by_id: dict) -> tuple:
+     by_pos = picks_by_position(picks)
+     saved_current = by_pos.get(position)
+     saved_starter_id = str(saved_current.get("pool_player_id") or "") if saved_current else ""
+@@ -721,6 +772,150 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
+     else:
+         backup_id = ""
+ 
++    starter = pool_by_id.get(current_id) if current_id else None
++    backup = pool_by_id.get(backup_id) if backup_id else None
++    backup_ready = bool(
++        starter
++        and backup
++        and str(backup.get("id")) != str(starter.get("id"))
++        and safe_status(backup.get("availability_status")) != "OUT"
++    )
++    return current_id, backup_id, starter, backup_ready
++
++
++def _next_builder_label(position: str, *, needs_backup: bool = False) -> str:
++    if needs_backup:
++        return "Choose Emergency Backup →"
++    return_mode = st.session_state.get("builder_return_mode")
++    if return_mode == "review":
++        return "Return to Review →"
++    if return_mode == "home":
++        return "Return to Lineup →"
++    nxt = next_position(position)
++    return f"Next: {nxt} →" if nxt else "Review My Five →"
++
++
++def _apply_lineup_action(store, week: dict, player: dict, pool: list[dict], request: dict) -> tuple:
++    """Apply one validated request before rendering the destination screen.
++
++    Return (week, transitioned, error, original_context). The original context
++    is reusable only when staying on the same builder/review after a rejection
++    or failed save. Successful transitions must reload just as the old second
++    full run did, especially after store cache invalidation.
++    """
++    mode = str(st.session_state.get("builder_mode") or "home")
++    position = st.session_state.get("builder_position")
++    if request.get("week_id") != str(week["id"]) or week_phase(week) != "open":
++        return week, False, "", None
++    if mode not in {"pick", "backup", "review"} and not week.get("is_demo"):
++        week, context = _load_prelock_status(store, week, player)
++    else:
++        context = _load_lineup(store, week, player, pool,
++                               snapshot_ttl_seconds=300.0 if mode in {"pick", "backup"} else LINEUP_SNAPSHOT_TTL_SECONDS)
++    lineup, picks, resolved_pool, pool_by_id = context
++    action, label = request.get("action"), request.get("label")
++    chosen, total = lineup_progress(picks)
++    needs = required_backup_positions(picks, pool_by_id)
++    unavailable = unavailable_starter_positions(picks, pool_by_id)
++    ready = chosen == total and not needs and not unavailable
++
++    if mode in {"pick", "backup"} and position in POSITIONS:
++        current_id, backup_id, starter, backup_ready = _builder_selection(week, player, position, picks, pool_by_id)
++        questionable = bool(starter and safe_status(starter.get("availability_status")) == "QUESTIONABLE")
++        if mode == "backup" and not questionable:
++            # Keep the pre-existing safety transition if an injury changed.
++            st.session_state.builder_mode = "pick"
++            st.rerun()
++        return_mode = st.session_state.get("builder_return_mode")
++        prev = previous_position(position)
++        back_label = "← Review" if return_mode == "review" else ("← Lineup" if return_mode == "home" else "← Back")
++        if action == "back" and mode == "pick" and label == back_label and (prev or return_mode in {"review", "home"}):
++            _clear_pending_builder(week, player, position)
++            if return_mode in {"review", "home"}:
++                st.session_state.pop("builder_return_mode", None)
++                st.session_state.builder_position = None
++                st.session_state.builder_mode = return_mode
++            else:
++                st.session_state.builder_position = prev
++                st.session_state.builder_mode = "pick"
++            return week, True, "", None
++        if action == "change_starter" and mode == "backup" and label == "Change starter":
++            st.session_state.pop(_pending_builder_key("backup", week, player, position), None)
++            st.session_state.builder_mode = "pick"
++            return week, True, "", None
++        needs_backup = mode == "pick" and questionable and not backup_ready
++        if action == "next" and label == _next_builder_label(position, needs_backup=needs_backup):
++            if not current_id or (mode == "backup" and not backup_ready):
++                return week, False, "", context
++            if needs_backup:
++                st.session_state.builder_mode = "backup"
++                return week, True, "", None
++            try:
++                _save_selected_position(
++                    store, week, player, position, lineup=lineup, picks=picks,
++                    pool=resolved_pool, starter_id=current_id,
++                    backup_id=backup_id if questionable else "",
++                )
++            except Exception as exc:
++                return week, False, str(exc), context
++            _complete_builder_step(position)
++            return week, True, "", None
++
++    elif mode == "review":
++        if action == "review_continue" and label == "Continue Building" and chosen < total:
++            st.session_state.pop("builder_return_mode", None)
++            st.session_state.builder_position = first_incomplete_position(picks, pool_by_id) or POSITIONS[0]
++            st.session_state.builder_mode = "pick"
++            return week, True, "", None
++        if chosen == total and action == "review_replace" and label == "Replace unavailable player" and unavailable:
++            st.session_state.builder_return_mode = "review"
++            st.session_state.builder_position = unavailable[0]
++            st.session_state.builder_mode = "pick"
++            return week, True, "", None
++        if chosen == total and not unavailable and action == "review_backup" and label == "Fix injury backup" and needs:
++            st.session_state.builder_return_mode = "review"
++            st.session_state.builder_position = needs[0]
++            st.session_state.builder_mode = "backup"
++            return week, True, "", None
++        if action == "confirm" and label == "SAVE MY LINEUP" and ready:
++            try:
++                updated_lineup = store.confirm_lineup(
++                    str(week["id"]), str(player["id"]),
++                    lineup_id=str(lineup["id"]) if lineup else None, known_week=week,
++                )
++            except Exception as exc:
++                return week, False, str(exc), context
++            _stash_lineup_snapshot(week, player, updated_lineup, picks)
++            st.session_state.builder_position = None
++            st.session_state.builder_mode = "home"
++            st.session_state.lineup_saved_flash = True
++            return week, True, "", None
++
++    else:
++        if action == "home_edit" and label == "EDIT LINEUP" and ready:
++            st.session_state.pop("builder_return_mode", None)
++            st.session_state.builder_position = None
++            st.session_state.builder_mode = "review"
++            return week, True, "", None
++        current_label = "Replace Unavailable Player" if unavailable else ("Fix Injury Backup" if needs else ("Continue Building" if chosen else "Build My Five"))
++        if action == "home_build" and label == current_label and not ready:
++            if needs or unavailable:
++                st.session_state.builder_return_mode = "home"
++            else:
++                st.session_state.pop("builder_return_mode", None)
++            st.session_state.builder_position = (unavailable[0] if unavailable else (needs[0] if needs else first_incomplete_position(picks, pool_by_id))) or POSITIONS[0]
++            st.session_state.builder_mode = "backup" if needs and not unavailable else "pick"
++            return week, True, "", None
++    return week, False, "", context if mode in {"pick", "backup", "review"} else None
++
++
++def _builder(store, week: dict, player: dict, position: str, pool: list[dict], *, context=None, error: str = "") -> None:
++    # While the builder is open, keep the already-loaded lineup snapshot warm.
++    # The database remains authoritative when Next performs the actual write.
++    lineup, picks, pool, pool_by_id = context if context is not None else _load_lineup(
++        store, week, player, pool, snapshot_ttl_seconds=300.0
++    )
++    current_id, backup_id, starter, backup_ready = _builder_selection(week, player, position, picks, pool_by_id)
+     rows = _stable_order(str(player["id"]), str(week["id"]), position, position_pool(pool, position))
+     mode = st.session_state.get("builder_mode", "pick")
+ 
+@@ -734,15 +929,6 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
+         else:
+             st.caption("Season stats begin after Week 1.")
+ 
+-    starter = pool_by_id.get(current_id) if current_id else None
+-    backup = pool_by_id.get(backup_id) if backup_id else None
+-    backup_ready = bool(
+-        starter
+-        and backup
+-        and str(backup.get("id")) != str(starter.get("id"))
+-        and safe_status(backup.get("availability_status")) != "OUT"
+-    )
+-
+     if starter and not bool(starter.get("is_visible", True)):
+         if safe_status(starter.get("availability_status")) == "OUT":
+             st.warning(
+@@ -780,38 +966,16 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
+                 args=(week, player, position, row),
+             )
+ 
+-        return_mode = st.session_state.get("builder_return_mode")
+         left, right = st.columns(2)
+         with left:
+-            if st.button("Change starter", use_container_width=True):
+-                st.session_state.pop(_pending_builder_key("backup", week, player, position), None)
+-                st.session_state.builder_mode = "pick"
+-                st.rerun()
++            st.button("Change starter", use_container_width=True,
++                      **_lineup_action("change_starter", "Change starter", week, player))
+         with right:
+-            if return_mode == "review":
+-                next_label = "Return to Review →"
+-            elif return_mode == "home":
+-                next_label = "Return to Lineup →"
+-            else:
+-                nxt = next_position(position)
+-                next_label = f"Next: {nxt} →" if nxt else "Review My Five →"
+-            if st.button(next_label, type="primary", use_container_width=True, disabled=not backup_ready):
+-                try:
+-                    _save_selected_position(
+-                        store,
+-                        week,
+-                        player,
+-                        position,
+-                        lineup=lineup,
+-                        picks=picks,
+-                        pool=pool,
+-                        starter_id=current_id,
+-                        backup_id=backup_id,
+-                    )
+-                    _complete_builder_step(position)
+-                    st.rerun()
+-                except Exception as exc:
+-                    st.error(str(exc))
++            next_label = _next_builder_label(position)
++            st.button(next_label, type="primary", use_container_width=True, disabled=not backup_ready,
++                      **_lineup_action("next", next_label, week, player))
++            if error:
++                st.error(error)
+         return
+ 
+     for row in rows:
+@@ -829,53 +993,16 @@ def _builder(store, week: dict, player: dict, position: str, pool: list[dict]) -
+         prev = previous_position(position)
+         back_disabled = prev is None and return_mode not in {"review", "home"}
+         back_label = "← Review" if return_mode == "review" else ("← Lineup" if return_mode == "home" else "← Back")
+-        if st.button(back_label, use_container_width=True, disabled=back_disabled):
+-            # Back means "discard this unconfirmed tap"; only Next commits it.
+-            _clear_pending_builder(week, player, position)
+-            if return_mode in {"review", "home"}:
+-                st.session_state.pop("builder_return_mode", None)
+-                st.session_state.builder_position = None
+-                st.session_state.builder_mode = return_mode
+-            else:
+-                st.session_state.builder_position = prev
+-                st.session_state.builder_mode = "pick"
+-            st.rerun()
++        st.button(back_label, use_container_width=True, disabled=back_disabled,
++                  **_lineup_action("back", back_label, week, player))
+     with right:
+-        starter = pool_by_id.get(current_id) if current_id else None
+         starter_is_questionable = bool(starter and safe_status(starter.get("availability_status")) == "QUESTIONABLE")
+         starter_needs_backup = bool(starter_is_questionable and not backup_ready)
+-        if starter_needs_backup:
+-            next_label = "Choose Emergency Backup →"
+-        elif return_mode == "review":
+-            next_label = "Return to Review →"
+-        elif return_mode == "home":
+-            next_label = "Return to Lineup →"
+-        else:
+-            nxt = next_position(position)
+-            next_label = f"Next: {nxt} →" if nxt else "Review My Five →"
+-
+-        if st.button(next_label, type="primary", use_container_width=True, disabled=not current_id):
+-            if starter_needs_backup:
+-                st.session_state.builder_position = position
+-                st.session_state.builder_mode = "backup"
+-                st.rerun()
+-            else:
+-                try:
+-                    _save_selected_position(
+-                        store,
+-                        week,
+-                        player,
+-                        position,
+-                        lineup=lineup,
+-                        picks=picks,
+-                        pool=pool,
+-                        starter_id=current_id,
+-                        backup_id=backup_id if starter_is_questionable else "",
+-                    )
+-                    _complete_builder_step(position)
+-                    st.rerun()
+-                except Exception as exc:
+-                    st.error(str(exc))
++        next_label = _next_builder_label(position, needs_backup=starter_needs_backup)
++        st.button(next_label, type="primary", use_container_width=True, disabled=not current_id,
++                  **_lineup_action("next", next_label, week, player))
++        if error:
++            st.error(error)
+ 
+ 
+ def _render_pool_change_disclaimer() -> None:
+@@ -888,8 +1015,8 @@ def _render_pool_change_disclaimer() -> None:
+     )
+ 
+ 
+-def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
+-    lineup, picks, pool, pool_by_id = _load_lineup(store, week, player, pool)
++def _review(store, week: dict, player: dict, pool: list[dict], *, context=None, error: str = "") -> None:
++    lineup, picks, pool, pool_by_id = context if context is not None else _load_lineup(store, week, player, pool)
+     chosen, total = lineup_progress(picks)
+     needs = required_backup_positions(picks, pool_by_id)
+     unavailable = unavailable_starter_positions(picks, pool_by_id)
+@@ -901,48 +1028,28 @@ def _review(store, week: dict, player: dict, pool: list[dict]) -> None:
+ 
+     if chosen < total:
+         st.warning(f"Finish all five positions first. You have {chosen} of {total}.")
+-        if st.button("Continue Building", type="primary", use_container_width=True):
+-            st.session_state.pop("builder_return_mode", None)
+-            st.session_state.builder_position = first_incomplete_position(picks, pool_by_id) or POSITIONS[0]
+-            st.session_state.builder_mode = "pick"
+-            st.rerun()
++        st.button("Continue Building", type="primary", use_container_width=True,
++                  **_lineup_action("review_continue", "Continue Building", week, player))
+         return
+     if unavailable:
+         st.warning("Replace the unavailable player at: " + ", ".join(unavailable))
+-        if st.button("Replace unavailable player", type="primary", use_container_width=True):
+-            st.session_state.builder_return_mode = "review"
+-            st.session_state.builder_position = unavailable[0]
+-            st.session_state.builder_mode = "pick"
+-            st.rerun()
++        st.button("Replace unavailable player", type="primary", use_container_width=True,
++                  **_lineup_action("review_replace", "Replace unavailable player", week, player))
+         return
+     if needs:
+         st.warning("Choose a healthy emergency backup for: " + ", ".join(needs))
+-        if st.button("Fix injury backup", type="primary", use_container_width=True):
+-            st.session_state.builder_return_mode = "review"
+-            st.session_state.builder_position = needs[0]
+-            st.session_state.builder_mode = "backup"
+-            st.rerun()
++        st.button("Fix injury backup", type="primary", use_container_width=True,
++                  **_lineup_action("review_backup", "Fix injury backup", week, player))
+         return
+ 
+     # The five player rows themselves are now the edit controls, so the primary
+     # save action can stay immediately below the lineup without a second bank
+     # of Change QB/RB/WR/TE/K buttons.
+     st.markdown("**Everything look right?**")
+-    if st.button("SAVE MY LINEUP", type="primary", use_container_width=True):
+-        try:
+-            updated_lineup = store.confirm_lineup(
+-                str(week["id"]),
+-                str(player["id"]),
+-                lineup_id=str(lineup["id"]) if lineup else None,
+-                known_week=week,
+-            )
+-            _stash_lineup_snapshot(week, player, updated_lineup, picks)
+-            st.session_state.builder_position = None
+-            st.session_state.builder_mode = "home"
+-            st.session_state.lineup_saved_flash = True
+-            st.rerun()
+-        except Exception as exc:
+-            st.error(str(exc))
++    st.button("SAVE MY LINEUP", type="primary", use_container_width=True,
++              **_lineup_action("confirm", "SAVE MY LINEUP", week, player))
++    if error:
++        st.error(error)
+ 
+ 
+ 
+@@ -973,11 +1080,8 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
+             _render_pool_change_disclaimer()
+         if bool(week.get("is_demo")):
+             st.markdown('<div class="status-test"><strong>TEST WEEK • LOCK OPEN</strong><br>Build and edit freely while testing.</div>', unsafe_allow_html=True)
+-        if st.button("EDIT LINEUP", type="primary", use_container_width=True):
+-            st.session_state.pop("builder_return_mode", None)
+-            st.session_state.builder_position = None
+-            st.session_state.builder_mode = "review"
+-            st.rerun()
++        st.button("EDIT LINEUP", type="primary", use_container_width=True,
++                  **_lineup_action("home_edit", "EDIT LINEUP", week, player))
+     else:
+         st.markdown(
+             f'<div class="card"><div class="eyebrow">Your lineup</div><div class="big-number">{chosen} of {total}</div><div class="small">picks complete</div></div>',
+@@ -986,14 +1090,8 @@ def _open_home(store, week: dict, player: dict, pool: list[dict]) -> None:
+         if bool(week.get("is_demo")):
+             st.markdown('<div class="status-test"><strong>TEST WEEK • LOCK OPEN</strong><br>Build and edit freely while testing.</div>', unsafe_allow_html=True)
+         label = "Replace Unavailable Player" if unavailable else ("Fix Injury Backup" if needs else ("Continue Building" if chosen else "Build My Five"))
+-        if st.button(label, type="primary", use_container_width=True):
+-            if needs or unavailable:
+-                st.session_state.builder_return_mode = "home"
+-            else:
+-                st.session_state.pop("builder_return_mode", None)
+-            st.session_state.builder_position = (unavailable[0] if unavailable else (needs[0] if needs else first_incomplete_position(picks, pool_by_id))) or POSITIONS[0]
+-            st.session_state.builder_mode = "backup" if needs and not unavailable else "pick"
+-            st.rerun()
++        st.button(label, type="primary", use_container_width=True,
++                  **_lineup_action("home_build", label, week, player))
+ 
+ 
+ def _locked_home(store, week: dict, player: dict, pool: list[dict]) -> None:
+@@ -1017,6 +1115,7 @@ def render_player_game(
+     commissioner_available: bool = False,
+     on_commissioner=None,
+ ) -> None:
++    action = _take_lineup_action(player)
+     if st.session_state.get("gate4_demo"):
+         render_gate4_demo(player)
+         return
+@@ -1128,12 +1227,36 @@ def render_player_game(
+         _locked_home(store, week, player, pool)
+         return
+ 
++    context, action_error = None, ""
++    if action is not None:
++        week, transitioned, action_error, context = _apply_lineup_action(store, week, player, pool, action)
++        if transitioned:
++            # Preserve the data/recovery work that used to happen on the
++            # second run, without regenerating the app shell or old screen.
++            current = store.get_demo_week() if week.get("is_demo") else store.get_real_week()
++            if not current or str(current["id"]) != str(week["id"]):
++                st.rerun()
++            week = current
++            if not week.get("is_demo"):
++                week, _automation_recovery = maybe_recover_critical_automation(store, week)
++            if week_phase(week) != "open":
++                st.rerun()
++            pool = store.get_week_pool(str(week["id"]), visible_only=True)
++            if not pool_is_ready(pool):
++                st.info("This week's player pool is being prepared. Picks will appear as soon as all five positions are ready.")
++                return
++            if not week.get("is_demo") and st.session_state.get("builder_mode") in {"pick", "backup", "review"}:
++                try:
++                    pool = attach_snapshot(pool, load_or_prepare_snapshot(store, week))
++                except Exception:
++                    pass
++
+     mode = str(st.session_state.get("builder_mode") or "home")
+     position = st.session_state.get("builder_position")
+     if mode in {"pick", "backup"} and position in POSITIONS:
+-        _builder(store, week, player, str(position), pool)
++        _builder(store, week, player, str(position), pool, context=context, error=action_error)
+     elif mode == "review":
+-        _review(store, week, player, pool)
++        _review(store, week, player, pool, context=context, error=action_error)
+     else:
+         _open_home(store, week, player, pool)
+ 

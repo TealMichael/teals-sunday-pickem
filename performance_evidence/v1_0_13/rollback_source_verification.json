@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "original_files_restored_byte_for_byte": 302,
+  "restored": [
+    "app.py",
+    "config.py",
+    "tests/test_gate2_edit_backup_polish.py",
+    "tests/test_v103_launch_polish.py",
+    "tests/test_v108_hotfix81_pulse_placement.py",
+    "tests/test_v110_render_reuse.py",
+    "weekly_ui.py"
+  ],
+  "deleted": [
+    "tests/test_v113_lineup_actions.py",
+    "tests/lineup_ui_fixture.py"
+  ],
+  "rollback_source": "/workspace/scratch/9bb78c2f3e37/release_v113_rollback/teals-sunday-pickem-main"
+}
