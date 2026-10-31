@@ -15,7 +15,8 @@ from weekly import POSITIONS, parse_timestamp, safe_status
 
 UTC = timezone.utc
 PICKEM_SCHEMA = "pickem"
-STORE_SCHEMA_VERSION = 9
+STORE_SCHEMA_VERSION = 10
+# Previous release: STORE_SCHEMA_VERSION = 9
 # Previous performance release: STORE_SCHEMA_VERSION = 8
 # Previous performance release: STORE_SCHEMA_VERSION = 7
 # Previous release: STORE_SCHEMA_VERSION = 6
@@ -70,6 +71,11 @@ class SupabaseStore:
         self._fresh_bundle_active: dict[tuple, int] = {}
         self._season_card_stats_cache: dict[tuple, dict[str, Any]] = {}
         self._season_card_stats_lock = RLock()
+        self._refresh_protocol = True
+        self._service_key = service_key
+        self._refresh_context = None
+        self._background_worker = None
+        self._background_lock = RLock()
         self.url = str(url).rstrip("/")
         self.client = create_client(
             url,
@@ -87,7 +93,30 @@ class SupabaseStore:
         self.client.postgrest
 
     def _table(self, name: str):
+        from refresh_protocol import native, PROTECTED, ProtectedTable
+        if native(self) and (name in PROTECTED or (name == "lineup_picks" and self._refresh_context)):
+            return ProtectedTable(self, name)
         return self.client.table(name)
+
+    def new_refresh_store(self):
+        return SupabaseStore(self.url, self._service_key)
+
+    def close_refresh_store(self):
+        try:
+            self.client.postgrest.session.close()
+        finally:
+            self.client.auth.close()
+
+    def background_worker(self):
+        from background_refresh import BackgroundRefresh
+        with self._background_lock:
+            if self._background_worker is None or self._background_worker.closed:
+                self._background_worker = BackgroundRefresh(self)
+            return self._background_worker
+
+    def read_live_week(self, week_id: str):
+        from refresh_protocol import rpc
+        return rpc(self, "refresh_read_week", p_week_id=str(week_id))
 
     def _cache_get(self, key: tuple) -> Any | None:
         cache = getattr(self, "_public_cache", None)
@@ -1506,6 +1535,11 @@ class SupabaseStore:
         }
 
     def set_manual_score_override(self, week_id: str, pool_player_id: str, score: float, note: str) -> dict[str, Any]:
+        from refresh_protocol import native, rpc
+        if native(self):
+            result = rpc(self, "refresh_override", p_week_id=str(week_id), p_pool_id=str(pool_player_id), p_score=float(score), p_note=note)
+            self.clear_week_cache(str(week_id))
+            return result
         stamp = _iso(datetime.now(UTC))
         res = (
             self._table("player_pool")
@@ -1526,6 +1560,11 @@ class SupabaseStore:
         return dict(res.data[0])
 
     def clear_manual_score_override(self, week_id: str, pool_player_id: str) -> dict[str, Any]:
+        from refresh_protocol import native, rpc
+        if native(self):
+            result = rpc(self, "refresh_override", p_week_id=str(week_id), p_pool_id=str(pool_player_id), p_score=None, p_note=None)
+            self.clear_week_cache(str(week_id))
+            return result
         stat_rows = list(
             self._table("player_week_stats")
             .select("points")
@@ -1840,6 +1879,11 @@ class SupabaseStore:
         return result
 
     def purge_prior_week_rosters(self, *, season: int, before_nfl_week: int) -> list[int]:
+        from refresh_protocol import native, rpc
+        if native(self):
+            result = rpc(self, "refresh_purge", p_season=int(season), p_before=int(before_nfl_week), p_claim=self._refresh_context)
+            self.clear_week_cache()
+            return result
         candidates = list(
             self._table("weeks")
             .select("id,nfl_week,finalized_at,rosters_purged_at")

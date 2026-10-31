@@ -31,7 +31,8 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp, week_phase
 
-GATE4_UI_SCHEMA_VERSION = 13
+GATE4_UI_SCHEMA_VERSION = 14
+# Previous release: GATE4_UI_SCHEMA_VERSION = 13
 # Previous performance release: GATE4_UI_SCHEMA_VERSION = 12
 # Previous release: GATE4_UI_SCHEMA_VERSION = 11
 # Previous cumulative marker: GATE4_UI_SCHEMA_VERSION = 10
@@ -555,7 +556,11 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
     phone simply rereads shared Supabase state every 15 seconds. The older
     recovery path still provides a last-resort rescue if both lanes fall behind.
     """
-    fresh_week = store.get_week(str(week["id"])) or week
+    from refresh_protocol import native
+    try:
+        fresh_week = (store.read_live_week(str(week["id"])) if native(store) else store.get_week(str(week["id"]))) or week
+    except Exception:
+        fresh_week = store.get_week(str(week["id"])) or week
     fresh_week, _active_refresh = maybe_refresh_active_live_lane(store, fresh_week)
     fresh_week, _recovery = maybe_recover_critical_automation(store, fresh_week)
     # FINAL is a structural page transition because the full app owns the
@@ -586,6 +591,10 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
     season: list[dict[str, Any]] = []
     if data_status == "FINAL":
         season, _ = _weekly_recap(store, fresh_week, bundle, leaderboard)
+    if fresh_week.get("refresh_status") == "running":
+        st.caption("Updating live scores…")
+    elif fresh_week.get("refresh_status") == "delayed":
+        st.caption("Live update delayed. Showing the last saved scores.")
     st.markdown("### Standings")
     _leaderboard_rows(leaderboard, str(player["id"]), detail=True)
     render_reactions(store, fresh_week, player, leaderboard)

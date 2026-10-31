@@ -18,7 +18,8 @@ from config import GATE3_HTTP_TIMEOUT_SECONDS, NFL_SEASON_TYPE, TIMEZONE_NAME
 
 UTC = timezone.utc
 ET = ZoneInfo(TIMEZONE_NAME)
-NFL_SOURCES_SCHEMA_VERSION = 3
+NFL_SOURCES_SCHEMA_VERSION = 4
+# Previous release: NFL_SOURCES_SCHEMA_VERSION = 3
 ESPN_SUMMARY_MAX_WORKERS = 3
 
 TEAM_ALIASES = {
@@ -94,6 +95,9 @@ class ESPNProvider:
 
     def __init__(self, session: requests.Session | None = None):
         self.session = session or _session()
+        if session is None:
+            from refresh_transport import register_session
+            register_session(self.session)
         # Explicitly supplied sessions may have custom adapters or mutable
         # behavior. Keep those providers on the original sequential path.
         self._default_summary_session = self.session if session is None else None
@@ -381,6 +385,9 @@ class SleeperProvider:
 
     def __init__(self, session: requests.Session | None = None):
         self.session = session or _session()
+        if session is None:
+            from refresh_transport import register_session
+            register_session(self.session)
         self._players_payload_cache: dict[str, Any] | list[dict[str, Any]] | None = None
 
     def active_players(self, position: str) -> list[dict[str, Any]]:
@@ -444,6 +451,9 @@ class NFLverseProvider:
 
     def __init__(self, session: requests.Session | None = None):
         self.session = session or _session()
+        if session is None:
+            from refresh_transport import register_session
+            register_session(self.session)
         self._schedule_rows_cache: list[dict[str, str]] | None = None
 
     def schedule_games(self, season: int, week: int, week_id: str | None = None, *, game_type: str = "REG") -> list[dict[str, Any]]:

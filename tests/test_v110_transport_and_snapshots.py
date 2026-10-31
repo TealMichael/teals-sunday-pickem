@@ -47,7 +47,7 @@ def test_one_transport_for_repeated_and_concurrent_independent_queries(wire_stor
     assert len(clients) == 1
     with ThreadPoolExecutor(max_workers=8) as executor:
         rows = list(executor.map(
-            lambda i: store._table('weeks').select('id').eq('id', str(i)).execute().data,
+            lambda i: store._table('app_meta').select('id').eq('id', str(i)).execute().data,
             range(100),
         ))
     assert len(clients) == 1
@@ -75,8 +75,8 @@ def test_request_semantics_match_original_schema_route(wire_store, operation):
         return table.delete().eq('id', 'w1')
 
     # Execute both constructions only through the in-memory HTTP transport.
-    prepare(store.client.schema(PICKEM_SCHEMA).table('weeks')).execute()
-    prepare(store._table('weeks')).execute()
+    prepare(store.client.schema(PICKEM_SCHEMA).table('app_meta')).execute()
+    prepare(store._table('app_meta')).execute()
     old, new = requests[-2:]
     assert old.method == new.method
     assert old.url == new.url

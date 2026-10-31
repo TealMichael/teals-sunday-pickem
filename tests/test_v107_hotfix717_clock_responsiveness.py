@@ -133,8 +133,8 @@ def test_build_and_warm_reload_markers_are_bumped():
     assert 'AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 6' in app
     assert 'GATE5_UI_SCHEMA_VERSION", 0) < 8' in app
     assert clock_broadcast.CLOCK_SNAPSHOT_VERSION == 5
-    assert nfl_sync.NFL_SYNC_SCHEMA_VERSION == 7
-    assert automation_recovery.AUTOMATION_RECOVERY_SCHEMA_VERSION == 6
+    assert nfl_sync.NFL_SYNC_SCHEMA_VERSION == 8
+    assert automation_recovery.AUTOMATION_RECOVERY_SCHEMA_VERSION == 7
 
 
 def test_worker_keeps_caleb_code_parked_without_refreshing_special_provider():

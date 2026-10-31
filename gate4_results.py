@@ -6,6 +6,7 @@ from typing import Any
 from gate4 import build_season_standings, build_weekly_leaderboard, season_points_for_rank
 
 UTC = timezone.utc
+COORDINATED_ARCHIVE_VERSION = 1
 
 
 def _iso_now() -> str:
@@ -18,6 +19,12 @@ def archive_week_results(store, week: dict[str, Any]) -> dict[str, Any]:
     Idempotent: weekly_results upserts by (week_id, player_id), so a Monday
     retry or Commissioner re-run cannot duplicate awards.
     """
+    if getattr(store, "_defer_archive", False):
+        store.archive_requested = True
+        return {"rows": [None] * store.lineup_count, "champions": []}
+    from refresh_protocol import native, archive_current
+    if native(store):
+        return archive_current(store, week, archive_week_results)
     # Monday archives must not reuse a live UI bundle cached before scoring.
     bundle = store.get_week_public_bundle(str(week["id"]), ttl_seconds=0.01, fresh=True)
     leaderboard = build_weekly_leaderboard(bundle)

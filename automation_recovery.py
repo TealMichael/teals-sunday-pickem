@@ -22,7 +22,8 @@ from nfl_sync import (
 from weekly import parse_timestamp
 
 UTC = timezone.utc
-AUTOMATION_RECOVERY_SCHEMA_VERSION = 6
+AUTOMATION_RECOVERY_SCHEMA_VERSION = 7
+# Previous release: AUTOMATION_RECOVERY_SCHEMA_VERSION = 6
 # Prior two-speed live engine generation: AUTOMATION_RECOVERY_SCHEMA_VERSION = 5
 # Legacy regression marker only: AUTOMATION_RECOVERY_SCHEMA_VERSION = 4
 ACTIVE_LIVE_LANE_SCHEMA_VERSION = 1
@@ -137,6 +138,11 @@ def maybe_refresh_active_live_lane(
         return week, None
     if status in {"FINAL", "PROVISIONAL"}:
         return week, None
+
+    from refresh_protocol import native
+    if native(store):
+        from background_refresh import live_lane
+        return live_lane(store, week, "active")
 
     # Fantasy scoring is the more valuable/heavier lane. If it is due, let it
     # run first; its ESPN summary responses also refresh score/period/clock, so
@@ -279,6 +285,11 @@ def maybe_recover_critical_automation(store, week: dict[str, Any], *, now: datet
     normally rather than failing.
     """
     now = (now or datetime.now(UTC)).astimezone(UTC)
+    from refresh_protocol import native
+    lock = parse_timestamp(week.get("locks_at")) if week else None
+    if native(store) and week and not week.get("is_demo") and week.get("published_at") and lock and lock <= now <= lock + timedelta(hours=12):
+        from background_refresh import live_lane
+        return live_lane(store, week, "recovery")
     action = recovery_action_due(store, week, now=now)
     if not action:
         return week, None

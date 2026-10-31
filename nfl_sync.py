@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from refresh_protocol import coordinated, native, execute, rpc
+
 from collections import defaultdict
 from datetime import datetime, timedelta, time as dtime, timezone
 import time
@@ -15,7 +17,8 @@ from weekly import POSITIONS, parse_timestamp
 
 UTC = timezone.utc
 ET = ZoneInfo(TIMEZONE_NAME)
-NFL_SYNC_SCHEMA_VERSION = 7
+NFL_SYNC_SCHEMA_VERSION = 8
+# Previous release: NFL_SYNC_SCHEMA_VERSION = 7
 # Prior safety-audit generation: NFL_SYNC_SCHEMA_VERSION = 5
 # Legacy regression marker only: NFL_SYNC_SCHEMA_VERSION = 3
 
@@ -73,6 +76,7 @@ def _is_transient_network_failure(exc: BaseException) -> bool:
     return False
 
 
+@coordinated("schedule")
 def sync_schedule(
     store,
     week: dict[str, Any],
@@ -218,6 +222,7 @@ def build_pool_preview(
     return ranked, games, players
 
 
+@coordinated("publish")
 def publish_week_pool(store, week: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
     # Once a real weekly pool is published, the ranked pool is immutable.
     # Injury/schedule handling may promote a hidden replacement through the
@@ -290,6 +295,7 @@ def _refresh_injuries_once(store, week: dict[str, Any]) -> dict[str, Any]:
         raise
 
 
+@coordinated("injury")
 def refresh_injuries(store, week: dict[str, Any]) -> dict[str, Any]:
     """Refresh schedule/injury data, retrying only transient transport failures.
 
@@ -320,6 +326,7 @@ def _game_by_team(games: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return result
 
 
+@coordinated("games")
 def refresh_live_game_state(store, week: dict[str, Any], espn: ESPNProvider | None = None) -> dict[str, Any]:
     """Refresh only Sunday NFL game state with one lightweight scoreboard call.
 
@@ -563,6 +570,7 @@ def _refresh_live_player_stats_from_games(
         raise
 
 
+@coordinated("stats")
 def refresh_live_player_stats(store, week: dict[str, Any], espn: ESPNProvider | None = None) -> dict[str, Any]:
     """Fast-lane fantasy-stat refresh using the already-synced weekly games.
 
@@ -585,6 +593,7 @@ def refresh_live_player_stats(store, week: dict[str, Any], espn: ESPNProvider | 
     )
 
 
+@coordinated("durable")
 def refresh_live_scores(store, week: dict[str, Any], espn: ESPNProvider | None = None) -> dict[str, Any]:
     """Five-minute shared live refresh used by GitHub and recovery paths.
 
@@ -626,6 +635,7 @@ def _nflverse_row_index(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dic
     return index
 
 
+@coordinated("final")
 def reconcile_final(store, week: dict[str, Any], *, nflverse: NFLverseProvider | None = None, espn: ESPNProvider | None = None) -> dict[str, Any]:
     nflverse = nflverse or NFLverseProvider()
     espn = espn or ESPNProvider()
@@ -819,6 +829,25 @@ def run_auto(store, *, now: datetime | None = None) -> dict[str, Any]:
         store.finish_data_run(heartbeat_run_id, success=success, message=message, metadata=metadata)
 
     try:
+        if native(store):
+            for pending in rpc(store, "refresh_pending_archives") or []:
+                try:
+                    archive_week_results(store, pending)
+                    actions.append("archive_recovered")
+                except Exception as exc:
+                    actions.append(f"archive_pending:{type(exc).__name__}")
+            latest = store.read_live_week(str(week["id"])) or week
+            if latest.get("data_status") == "FINAL":
+                if latest.get("archive_pending"):
+                    archive_week_results(store, latest)
+                    actions.append("archive_recovered")
+                next_week_num = int(latest["nfl_week"]) + 1
+                if next_week_num <= 18:
+                    week = ensure_week_shell_from_scoreboard(store, season=int(latest["season"]), nfl_week=next_week_num)
+                    actions.append("next_week_shell")
+                else:
+                    finish_heartbeat()
+                    return {"actions": actions}
         # Finalization is normally Monday at 9 AM ET, but keep retrying on later
         # runs if nflverse or an official game was not settled at exactly 9:00.
         lock = parse_timestamp(week.get("locks_at"))
@@ -871,8 +900,9 @@ def run_auto(store, *, now: datetime | None = None) -> dict[str, Any]:
             last_live = store.last_successful_run("live_scores", week_id=str(week["id"]))
             if _run_due(last_live, LIVE_SCORE_REFRESH_MINUTES, now):
                 try:
-                    refresh_live_scores(store, week)
-                    actions.append("live_scores")
+                    result = execute(store, week, "durable") if native(store) else refresh_live_scores(store, week)
+                    if result is not None:
+                        actions.append("live_scores")
                 except Exception as exc:
                     actions.append(f"scores_failed:{exc}")
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+COORDINATED_CLOCK_VERSION = 1
+
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import hashlib
@@ -681,6 +683,11 @@ def refresh_clock_snapshot(
 ) -> dict[str, Any] | None:
     """Refresh the server-side clock snapshot if the optional v1.0.7 schema exists."""
     try:
+        from refresh_protocol import native, rpc
+        revision = rpc(store, "refresh_revision") if native(store) else None
+        if native(store):
+            store.clear_week_cache()
+            week = store.get_week(str(week["id"])) or week
         existing_row = store.get_clock_snapshot(str(week["id"])) if hasattr(store, "get_clock_snapshot") else None
         existing_payload = (existing_row or {}).get("payload") or {}
         existing_watch = existing_payload.get("caleb_watch") or {}
@@ -700,7 +707,12 @@ def refresh_clock_snapshot(
                 # down the real Pick'em broadcast or erase the last good watch.
                 caleb_watch = existing_watch
         payload = build_clock_snapshot(store, week, now=now, caleb_watch=caleb_watch)
-        store.upsert_clock_snapshot(str(week["id"]), payload)
+        if native(store):
+            rpc(store, "refresh_edit", p_table="clock_snapshots", p_operation="upsert",
+                p_rows=[{"week_id": str(week["id"]), "payload": payload, "updated_at": datetime.now(UTC).isoformat()}],
+                p_conflict="week_id", p_expected_revision=revision)
+        else:
+            store.upsert_clock_snapshot(str(week["id"]), payload)
         return payload
     except Exception:
         # Clock broadcasting is intentionally optional and may never take the

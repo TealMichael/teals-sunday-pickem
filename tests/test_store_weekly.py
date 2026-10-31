@@ -18,6 +18,11 @@ def test_all_gate2_tables_still_route_explicitly_to_pickem_schema(monkeypatch):
     store = SupabaseStore("https://audit.invalid", "test-only-key")
     fake = store.client
     for name in ["weeks", "player_pool", "lineups", "lineup_picks"]:
-        assert store._table(name) == (name, PICKEM_SCHEMA)
+        from refresh_protocol import ProtectedTable
+        routed = store._table(name)
+        if isinstance(routed, ProtectedTable):
+            assert routed.store is store and routed.name == name
+            routed = routed.store.client.table(routed.name)
+        assert routed == (name, PICKEM_SCHEMA)
     assert fake.options.schema == PICKEM_SCHEMA
     assert fake.tables == ["weeks", "player_pool", "lineups", "lineup_picks"]
