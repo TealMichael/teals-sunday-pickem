@@ -8,6 +8,7 @@ from security import hash_pin, new_session_secret, session_token_hash, verify_pi
 from validation import nickname_key, normalize_nickname, validate_nickname, validate_player_pin, validate_single_emoji
 
 UTC = timezone.utc
+AUTH_LOGIC_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -45,8 +46,8 @@ def register_player(store, *, nickname: str, emoji: str, pin: str, pin_confirm: 
         message = str(exc) or "Could not create player."
         return AuthResult(False, message)
 
-    cookie = _new_cookie(store, str(player["id"]), session_pepper) if remember else None
-    return AuthResult(True, "Welcome to Teal's Sunday Pick'em!", player=player, cookie_value=cookie)
+    # New accounts are requests only: no session and no access before approval.
+    return AuthResult(True, "Request sent! The Commissioner must approve your account before you can sign in.")
 
 
 def login_player(store, *, nickname: str, pin: str, pin_pepper: str, session_pepper: str, remember: bool) -> AuthResult:
@@ -76,6 +77,11 @@ def login_player(store, *, nickname: str, pin: str, pin_pepper: str, session_pep
 
     if not valid:
         return AuthResult(False, "Nickname or PIN is incorrect.")
+    status = str(player.get("account_status") or "")
+    if status == "pending":
+        return AuthResult(False, "Your account is awaiting Commissioner approval.")
+    if status != "approved":
+        return AuthResult(False, "This account is not active. Contact the Commissioner.")
 
     try:
         store.touch_player(str(player["id"]))
@@ -124,7 +130,7 @@ def restore_from_cookie(store, cookie_value: str, *, session_pepper: str) -> Aut
         player = store.get_player_by_id(str(session["player_id"]))
     except Exception:
         return AuthResult(False, "TEMPORARY_SESSION_CHECK_FAILURE")
-    if not player:
+    if not player or str(player.get("account_status") or "") != "approved":
         return AuthResult(False, "Remembered session expired.")
 
     try:

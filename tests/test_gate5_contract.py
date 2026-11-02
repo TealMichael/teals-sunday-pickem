@@ -22,7 +22,7 @@ def test_gate5_ui_contains_required_admin_controls():
         "Refresh NFL Data Now",
         "Generate Again",
         "Reconcile / Finalize Now",
-        "Players & PINs",
+        "Existing players & PINs",
         "Reset Player PIN",
         "Emergency Player Pool Override",
         "Manual Score Override",

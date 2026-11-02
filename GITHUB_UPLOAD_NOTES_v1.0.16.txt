@@ -1,0 +1,24 @@
+VERSION: v1.0.16
+COMMIT: v1.0.16 — Commissioner approvals and safe account removal
+TAG: v1.0.16
+BRANCH: main
+
+IMPORTANT FIRST STEP: Run db/015_commissioner_approval_accounts.sql in SQL Editor
+of the existing shared Supabase project BEFORE uploading Python source files.
+Read START_HERE_v1.0.16.md for exact instructions and rollback caveat.
+
+NEW
+- Registration is a pending request; cannot create a playable session.
+- Commissioner → Players shows pending requests with Approve or Reject.
+- Commissioner → Players safely removes approved players (two-step confirmation).
+- Removal hard-deletes players without game history, otherwise disables access
+  and retains lineups, picks and archived results; all sessions revoked.
+- Commissioner-linked owner cannot be removed, including at DB function level.
+- Global pending-request burst guard; existing players grandfathered approved.
+- Every in-memory authenticated Streamlit session rechecks active status.
+
+UNCHANGED
+- Player PINs, normal sign-in, remembered device option for approved users.
+- Unified Commissioner tab, all controls, 5-player lineups, backups, locks,
+  scoring, ESPN refresh, standings, results, newsletters, AWTRIX/ticker.
+- Existing shared Yahtzee public schema, no new secrets.

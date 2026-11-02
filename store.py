@@ -15,7 +15,7 @@ from weekly import POSITIONS, parse_timestamp, safe_status
 
 UTC = timezone.utc
 PICKEM_SCHEMA = "pickem"
-STORE_SCHEMA_VERSION = 10
+STORE_SCHEMA_VERSION = 11
 # Previous release: STORE_SCHEMA_VERSION = 9
 # Previous performance release: STORE_SCHEMA_VERSION = 8
 # Previous performance release: STORE_SCHEMA_VERSION = 7
@@ -275,18 +275,21 @@ class SupabaseStore:
                 "emoji": emoji,
                 "pin_salt": pin_salt,
                 "pin_hash": pin_hash,
+                "account_status": "pending",
             }).execute()
             self._public_cache.pop(("registered_players",), None)
             return res.data[0]
         except Exception as exc:
             if "duplicate" in str(exc).lower() or "unique" in str(exc).lower():
                 raise NicknameTaken("That nickname is already taken.") from exc
+            if "pending requests" in str(exc).lower() or "new player requests are temporarily limited" in str(exc).lower():
+                raise StoreError("New-player requests are temporarily full. Ask the Commissioner to review them.") from exc
             raise StoreError("Could not create player. Try again.") from exc
 
     def get_player_by_nickname_key(self, nickname_key: str) -> dict[str, Any] | None:
         res = (
             self._table("players")
-            .select("id,nickname,nickname_key,emoji,pin_salt,pin_hash,created_at,last_seen_at,onboarding_completed_at")
+            .select("id,nickname,nickname_key,emoji,pin_salt,pin_hash,created_at,last_seen_at,onboarding_completed_at,account_status")
             .eq("nickname_key", nickname_key)
             .limit(1)
             .execute()
@@ -300,12 +303,58 @@ class SupabaseStore:
             return None
         res = (
             self._table("players")
-            .select("id,nickname,nickname_key,emoji,created_at,last_seen_at,onboarding_completed_at")
+            .select("id,nickname,nickname_key,emoji,created_at,last_seen_at,onboarding_completed_at,account_status")
             .eq("id", str(player_id))
             .limit(1)
             .execute()
         )
         return res.data[0] if res.data else None
+
+    def get_account_status(self, player_id: str) -> str:
+        """Fail closed when an account no longer exists or the migration is absent."""
+        try:
+            UUID(str(player_id))
+        except (TypeError, ValueError):
+            return ""
+        res = (self._table("players").select("account_status")
+               .eq("id", str(player_id)).limit(1).execute())
+        return str(res.data[0].get("account_status") or "") if res.data else ""
+
+    def list_pending_accounts(self) -> list[dict[str, Any]]:
+        rows = (self._table("players")
+                .select("id,nickname,emoji,created_at,account_status")
+                .eq("account_status", "pending")
+                .order("created_at").execute().data or [])
+        return list(rows)
+
+    def list_managed_accounts(self) -> list[dict[str, Any]]:
+        rows = (self._table("players")
+                .select("id,nickname,emoji,created_at,account_status")
+                .in_("account_status", ["approved", "disabled"])
+                .order("nickname").execute().data or [])
+        return list(rows)
+
+    def approve_player_account(self, player_id: str) -> dict[str, Any]:
+        UUID(str(player_id))
+        stamp = _iso(datetime.now(UTC))
+        res = (self._table("players")
+               .update({"account_status": "approved", "approved_at": stamp})
+               .eq("id", str(player_id)).eq("account_status", "pending")
+               .execute())
+        if not res.data:
+            raise StoreError("Request is no longer pending. Refresh the player list.")
+        self._public_cache.pop(("registered_players",), None)
+        return res.data[0]
+
+    def remove_player_account(self, player_id: str) -> str:
+        """Atomic database RPC: hard delete no-history players, otherwise disable."""
+        UUID(str(player_id))
+        result = self.client.rpc("commissioner_remove_account", {"p_player_id": str(player_id)}).execute()
+        disposition = str(result.data or "")
+        if disposition not in {"deleted", "disabled"}:
+            raise StoreError("Could not safely remove player account.")
+        self._public_cache.pop(("registered_players",), None)
+        return disposition
 
     def touch_player(self, player_id: str) -> None:
         self._table("players").update({"last_seen_at": _iso(datetime.now(UTC))}).eq("id", player_id).execute()
@@ -1630,6 +1679,7 @@ class SupabaseStore:
         rows = list(
             self._table("players")
             .select("id,nickname,emoji,created_at,last_seen_at")
+            .eq("account_status", "approved")
             .order("nickname")
             .execute()
             .data

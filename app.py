@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
-import importlib
 import inspect
 
 import streamlit as st
 
+import importlib
+import auth as _auth
+if getattr(_auth, "AUTH_LOGIC_SCHEMA_VERSION", 0) < 2:
+    _auth = importlib.reload(_auth)
 from auth import login_player, register_player, restore_from_cookie, revoke_cookie_session
 # Prior warm-reload marker: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.7-hotfix7.16"
 # The app file is re-executed on Streamlit reruns, but config.py may still be
@@ -19,7 +22,7 @@ import config as _config
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.11-performance2"
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.12-performance3"
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.13-performance4"
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.15-background":
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.16-access":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -54,7 +57,7 @@ import store as _store
 # Legacy regression marker only: getattr(_store, "STORE_SCHEMA_VERSION", 0) < 4
 # Previous release guard: getattr(_store, "STORE_SCHEMA_VERSION", 0) < 6
 if (
-    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 10
+    getattr(_store, "STORE_SCHEMA_VERSION", 0) < 11
     or not hasattr(_store.SupabaseStore, "get_app_meta")
     or not hasattr(_store.SupabaseStore, "set_app_meta")
 ):
@@ -142,7 +145,7 @@ render_player_game = _weekly_ui.render_player_game
 # Prior Gate 5 warm-reload marker: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 8
 # Historical guard: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 9
 # Previous release guard: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 10
-if _reloaded_nfl_sync or getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 11:
+if _reloaded_nfl_sync or getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 12:
     _gate5_ui = importlib.reload(_gate5_ui)
 render_commissioner_dashboard = _gate5_ui.render_commissioner_dashboard
 
@@ -441,6 +444,10 @@ def _apply_player_auth_result(result, *, error_key: str) -> None:
         return
 
     st.session_state[error_key] = ""
+    if result.player is None:
+        # Approval requests do not create or restore a playable login.
+        st.session_state["signup_notice"] = result.message
+        return
     st.session_state.player = result.player
     st.session_state.commish_ephemeral_player_id = None
     st.session_state.remember_restore_checked = True
@@ -464,6 +471,7 @@ def _signin_submit() -> None:
 
 
 def _signup_submit() -> None:
+    st.session_state["signup_notice"] = ""
     result = register_player(
         store,
         nickname=str(st.session_state.get("signup_nickname") or ""),
@@ -472,7 +480,7 @@ def _signup_submit() -> None:
         pin_confirm=str(st.session_state.get("signup_pin_confirm") or ""),
         pin_pepper=secret("PIN_PEPPER"),
         session_pepper=secret("SESSION_PEPPER"),
-        remember=bool(st.session_state.get("signup_remember", True)),
+        remember=False,  # No playable session exists until approval.
     )
     _apply_player_auth_result(result, error_key="signup_error")
 
@@ -512,7 +520,7 @@ def player_login_ui() -> None:
             st.error(st.session_state.signin_error)
 
     with tab_new:
-        st.caption("One nickname. One emoji. One PIN. That's it.")
+        st.caption("Request a nickname, emoji and PIN. You can play after the Commissioner approves you.")
         with st.form("signup_form"):
             st.text_input("Choose a nickname", max_chars=15, key="signup_nickname")
             st.text_input(
@@ -540,7 +548,7 @@ def player_login_ui() -> None:
                 icon="",
                 key="signup_pin_confirm",
             )
-            st.checkbox("Keep me signed in this season", value=True, key="signup_remember")
+            st.caption("After approval, sign in normally to remember this device.")
             st.form_submit_button(
                 "Create Player",
                 type="primary",
@@ -549,6 +557,8 @@ def player_login_ui() -> None:
             )
         if st.session_state.get("signup_error"):
             st.error(st.session_state.signup_error)
+        if st.session_state.get("signup_notice"):
+            st.success(st.session_state.signup_notice)
 
 
 def commish_login_ui() -> None:
@@ -687,6 +697,17 @@ if st.session_state.commish:
     st.stop()
 
 if st.session_state.player:
+    # Recheck an existing in-memory login; remembered-session validation alone
+    # would not remove access from an already-open Streamlit tab.
+    try:
+        _account_status = store.get_account_status(str(st.session_state.player.get("id") or ""))
+    except Exception:
+        st.error("Player access verification is temporarily unavailable. Please refresh.")
+        st.stop()
+    if _account_status != "approved":
+        _sign_out_submit()
+        st.warning("Your player access is no longer active. Contact the Commissioner.")
+        st.stop()
     try:
         eligible = commissioner_tab_available(store, st.session_state.player)
     except Exception:

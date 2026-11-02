@@ -4,7 +4,7 @@ APP_NAME = "Teal's Sunday Pick'em"
 APP_TAGLINE = "Pick five. Own Sunday."
 # Prior public version: APP_VERSION = "1.0.8"
 # Historical public-version regression marker: APP_VERSION = "1.0.7"
-APP_VERSION = "1.0.15"
+APP_VERSION = "1.0.16"
 # Previous release: APP_VERSION = "1.0.14"
 # Previous performance release: APP_VERSION = "1.0.13"
 # Previous performance release: APP_VERSION = "1.0.12"
@@ -15,7 +15,7 @@ APP_VERSION = "1.0.15"
 # every hotfix a distinct Streamlit resource-cache generation. Without this,
 # a warm Streamlit Cloud process can reuse a SupabaseStore instance created by
 # an older class definition across a multi-file deploy.
-APP_BUILD_VERSION = "1.0.15-background"
+APP_BUILD_VERSION = "1.0.16-access"
 # Previous release: APP_BUILD_VERSION = "1.0.14-performance5"
 # Previous performance release: APP_BUILD_VERSION = "1.0.13-performance4"
 # Previous performance release: APP_BUILD_VERSION = "1.0.12-performance3"

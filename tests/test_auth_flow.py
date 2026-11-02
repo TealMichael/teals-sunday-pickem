@@ -18,7 +18,7 @@ class MemoryStore:
     def create_player(self, **row):
         if row["nickname_key"] in self.players:
             raise NicknameTaken("That nickname is already taken.")
-        out = {"id": str(uuid.uuid4()), **row}
+        out = {"id": str(uuid.uuid4()), "account_status": "pending", **row}
         self.players[row["nickname_key"]] = out
         return out
 
@@ -55,11 +55,19 @@ class MemoryStore:
 def test_register_login_and_restore_cookie():
     store = MemoryStore()
     r = register_player(store, nickname="TealDuck", emoji="🦆", pin="1234", pin_confirm="1234", pin_pepper="pinpep", session_pepper="sesspep", remember=True)
-    assert r.ok and r.cookie_value
-    assert login_player(store, nickname="tealduck", pin="1234", pin_pepper="pinpep", session_pepper="sesspep", remember=False).ok
-    restored = restore_from_cookie(store, r.cookie_value, session_pepper="sesspep")
+    assert r.ok and r.player is None and r.cookie_value is None
+    blocked = login_player(store, nickname="tealduck", pin="1234", pin_pepper="pinpep", session_pepper="sesspep", remember=True)
+    assert not blocked.ok and "awaiting" in blocked.message.lower()
+    assert not store.sessions
+    # The Commissioner has approved the request.
+    store.players["tealduck"]["account_status"] = "approved"
+    signed_in = login_player(store, nickname="tealduck", pin="1234", pin_pepper="pinpep", session_pepper="sesspep", remember=True)
+    assert signed_in.ok and signed_in.cookie_value
+    restored = restore_from_cookie(store, signed_in.cookie_value, session_pepper="sesspep")
     assert restored.ok
     assert restored.player["nickname"] == "TealDuck"
+    store.players["tealduck"]["account_status"] = "disabled"
+    assert not restore_from_cookie(store, signed_in.cookie_value, session_pepper="sesspep").ok
 
 
 def test_duplicate_nickname_is_case_insensitive():
@@ -75,3 +83,12 @@ def test_wrong_pin_fails():
     register_player(store, nickname="TealDuck", emoji="🦆", pin="1234", pin_confirm="1234", pin_pepper="p", session_pepper="s", remember=False)
     result = login_player(store, nickname="TealDuck", pin="9999", pin_pepper="p", session_pepper="s", remember=False)
     assert not result.ok
+
+
+def test_disabled_player_cannot_log_in_with_correct_pin():
+    store = MemoryStore()
+    register_player(store, nickname="Removed", emoji="🦆", pin="1234", pin_confirm="1234", pin_pepper="p", session_pepper="s", remember=False)
+    store.players["removed"]["account_status"] = "disabled"
+    denied = login_player(store, nickname="Removed", pin="1234", pin_pepper="p", session_pepper="s", remember=True)
+    assert not denied.ok
+    assert not store.sessions

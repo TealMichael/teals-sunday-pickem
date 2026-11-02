@@ -32,7 +32,7 @@ load_newsletter_data = _newsletter.load_newsletter_data
 sms_segment_estimate = _newsletter.sms_segment_estimate
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 11
+GATE5_UI_SCHEMA_VERSION = 12
 # Previous release: GATE5_UI_SCHEMA_VERSION = 10
 # Previous release: GATE5_UI_SCHEMA_VERSION = 9
 # Prior schema marker retained for legacy regression checks: GATE5_UI_SCHEMA_VERSION = 8
@@ -185,8 +185,32 @@ def _render_week_overview(store, week: dict[str, Any]) -> None:
 
 
 def _render_players(store, week: dict[str, Any], pin_pepper: str) -> None:
+    st.markdown("#### New player requests")
+    st.caption("New visitors cannot play until you approve their account. Your existing players are already approved.")
+    pending = store.list_pending_accounts()
+    if not pending:
+        st.success("No pending player requests.")
+    for request in pending:
+        rid = str(request["id"])
+        cols = st.columns([3, 1, 1])
+        cols[0].write(f"{request.get('emoji') or '🏈'} **{request.get('nickname')}**")
+        cols[0].caption(f"Requested {_ago(request.get('created_at'))}")
+        if cols[1].button("Approve", key=f"g5_approve_{rid}", use_container_width=True):
+            try:
+                store.approve_player_account(rid)
+                try:
+                    store.record_commissioner_action("account_approved", player_id=rid, message="Approved player account")
+                except Exception:
+                    pass  # Audit logging must not misreport an already-committed approval.
+                _set_flash(f"Approved {request.get('nickname')}. They can now sign in with their PIN.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Approval failed: {exc}")
+        if cols[2].button("Reject", key=f"g5_reject_{rid}", use_container_width=True):
+            st.session_state.g5_remove_candidate = rid
+
+    st.markdown("#### Existing players & PINs")
     statuses = week_snapshot(store, week).get("statuses") or []
-    st.markdown("#### Players & PINs")
     st.caption("PINs are never readable. A reset creates a replacement PIN and signs that player out on every remembered device.")
 
     display = []
@@ -219,6 +243,57 @@ def _render_players(store, week: dict[str, Any], pin_pepper: str) -> None:
                 st.success(f"PIN reset for {player.get('nickname')}. Their remembered-device sessions were revoked.")
             except Exception as exc:
                 st.error(str(exc))
+
+    st.markdown("#### Remove an account")
+    st.caption("No-game-history accounts are deleted. Players with picks or results are disabled instead, preserving season history. Both actions revoke their sessions.")
+    managed = store.list_managed_accounts()
+    # Never present the owner account as removable. The database independently
+    # protects this account, even if the UI is bypassed or becomes stale.
+    removable = [row for row in managed if str(row.get("nickname") or "").strip().casefold() != "mike t."
+                 and row.get("account_status") == "approved"]
+    by_id = {str(row["id"]): row for row in [*pending, *removable]}
+    disabled = [row for row in managed if row.get("account_status") == "disabled"]
+    if disabled:
+        with st.expander(f"Disabled accounts ({len(disabled)}) — history retained"):
+            for row in disabled:
+                st.caption(f"{row.get('emoji') or '🏈'} {row.get('nickname')} • Access revoked")
+    if removable:
+        choices = [""] + [str(row["id"]) for row in removable]
+        picked = st.selectbox("Choose an approved player", choices,
+                              format_func=lambda pid: "Select player…" if not pid else
+                              f"{by_id[pid].get('emoji') or '🏈'} {by_id[pid].get('nickname')}",
+                              key="g5_remove_player_select")
+        if st.button("Review account removal", disabled=not bool(picked),
+                     key="g5_remove_review", use_container_width=True):
+            st.session_state.g5_remove_candidate = picked
+    else:
+        st.caption("No approved non-Commissioner accounts to remove.")
+
+    candidate = str(st.session_state.get("g5_remove_candidate") or "")
+    row = by_id.get(candidate)
+    if row:
+        st.warning(f"Remove {row.get('emoji') or '🏈'} {row.get('nickname')}? This will end their access on all devices. Existing game history will be preserved.")
+        confirm, cancel = st.columns(2)
+        if confirm.button("Confirm removal", type="primary", key="g5_remove_confirm", use_container_width=True):
+            try:
+                outcome = store.remove_player_account(candidate)
+                try:
+                    store.record_commissioner_action("account_removed", player_id=candidate,
+                                                     message=f"Account {outcome}: {row.get('nickname')}")
+                except Exception:
+                    pass  # Database removal already committed; don't falsely report failure.
+                st.session_state.pop("g5_remove_candidate", None)
+                _set_flash(f"Removed {row.get('nickname')}: " +
+                           ("account deleted (no game history)." if outcome == "deleted" else
+                            "access disabled; historical results preserved."))
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Removal failed: {exc}")
+        if cancel.button("Cancel", key="g5_remove_cancel", use_container_width=True):
+            st.session_state.pop("g5_remove_candidate", None)
+            st.rerun()
+    elif candidate:
+        st.session_state.pop("g5_remove_candidate", None)
 
 
 def _pool_option(row: dict[str, Any]) -> str:
@@ -1110,7 +1185,7 @@ def _render_commissioner_home(store, week: dict[str, Any]) -> None:
     destinations = [
         ("Week", "📅 Week & NFL", "Generate / finalize"),
         ("Newsletter", "✉️ Newsletter", "Tuesday recap"),
-        ("Players", "👥 Players", "Lineups & PINs"),
+        ("Players", "👥 Players", "Approvals & PINs"),
         ("Corrections", "🛠️ Corrections", "Pool & scores"),
         ("Clock", "🕒 AWTRIX Clock", "Messages & setup"),
         ("Diagnostics", "⚙️ Diagnostics", "Recovery & tests"),
