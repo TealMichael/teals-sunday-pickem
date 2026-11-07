@@ -22,7 +22,7 @@ import config as _config
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.11-performance2"
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.12-performance3"
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.13-performance4"
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.16-access":
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.17-clock":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -145,7 +145,7 @@ render_player_game = _weekly_ui.render_player_game
 # Prior Gate 5 warm-reload marker: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 8
 # Historical guard: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 9
 # Previous release guard: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 10
-if _reloaded_nfl_sync or getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 12:
+if _reloaded_nfl_sync or getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 13:
     _gate5_ui = importlib.reload(_gate5_ui)
 render_commissioner_dashboard = _gate5_ui.render_commissioner_dashboard
 

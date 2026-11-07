@@ -98,7 +98,7 @@ old_weekly=weekly_ui.render_player_game
 from pathlib import Path
 scope={'__name__':'warm_v114'}
 exec(compile(Path('app.py').read_text().split('\\npage_config()',1)[0],'app.py','exec'),scope)
-assert scope['APP_BUILD_VERSION']=='1.0.16-access'
+assert scope['APP_BUILD_VERSION']=='1.0.17-clock'
 assert store.STORE_SCHEMA_VERSION==11 and gate4_ui.GATE4_UI_SCHEMA_VERSION==14
 assert store.SupabaseStore is not old_store and scope['SupabaseStore'] is store.SupabaseStore
 assert gate4_ui.render_live_sunday is not old_live

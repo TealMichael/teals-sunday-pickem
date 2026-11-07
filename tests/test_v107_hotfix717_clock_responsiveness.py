@@ -137,7 +137,8 @@ def test_build_and_warm_reload_markers_are_bumped():
     assert automation_recovery.AUTOMATION_RECOVERY_SCHEMA_VERSION == 7
 
 
-def test_worker_keeps_caleb_code_parked_without_refreshing_special_provider():
+def test_v117_worker_restores_caleb_special_provider_without_rewriting_old_migration():
     worker = (ROOT / "scripts" / "nfl_refresh.py").read_text("utf-8")
-    assert "refresh_specials=False" in worker
-    assert "Caleb Watch is parked" in worker
+    old_sql = (ROOT / "db" / "012_clock_responsiveness_saturday_preview.sql").read_text("utf-8")
+    assert "refresh_specials=True" in worker
+    assert "Caleb 4K Watch is parked" in old_sql

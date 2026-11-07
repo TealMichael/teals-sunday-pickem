@@ -45,10 +45,10 @@ def _refresh_clock_best_effort(store: SupabaseStore, week=None) -> None:
         target = week or store.get_real_week()
         if target:
             target = store.get_week(str(target["id"])) or target
-            # Legacy regression marker only: refresh_clock_snapshot(store, target, refresh_specials=True)
-            # Caleb Watch is parked in Hotfix 7.17. Keep its builder/code intact
-            # for a future return, but do not spend provider work refreshing it.
-            refresh_clock_snapshot(store, target, refresh_specials=False)
+            # v1.0.17: Caleb 4K Watch is optional and only the scheduled worker
+            # refreshes its special provider data. Active Streamlit scoring jobs
+            # keep using the inexpensive, already-saved special snapshot.
+            refresh_clock_snapshot(store, target, refresh_specials=True)
     except Exception:
         pass
 

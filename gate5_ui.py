@@ -32,7 +32,8 @@ load_newsletter_data = _newsletter.load_newsletter_data
 sms_segment_estimate = _newsletter.sms_segment_estimate
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 12
+GATE5_UI_SCHEMA_VERSION = 13
+# Previous release: GATE5_UI_SCHEMA_VERSION = 12
 # Previous release: GATE5_UI_SCHEMA_VERSION = 10
 # Previous release: GATE5_UI_SCHEMA_VERSION = 9
 # Prior schema marker retained for legacy regression checks: GATE5_UI_SCHEMA_VERSION = 8
@@ -743,11 +744,12 @@ def _render_clock(store, week: dict[str, Any]) -> None:
     st.caption("No setup needed each week. Before 1 PM the clock keeps picks private. After lock, it rotates app-owned updates without calculating anything on the clock itself.")
     st.markdown(
         "**Saturday:** NFL Sunday Preview every ~15 min, all day  \n"
-        "**Sunday after lock:** live NFL scores every ~15 min  \n"
-        "**Every ~15 min:** full current-week Pick'em standings  \n"
-        "**Twice/hour:** Player Update from this week's 25-player pool only  \n"
+        "**Sunday after lock:** live NFL scores at :00/:15/:30/:45  \n"
+        "**Weekly standings:** full current-week Pick'em leaderboard at :05/:20/:35/:50  \n"
+        "**:10 each hour:** Player Update from this week's 25-player pool  \n"
+        "**:40 each hour:** Caleb 4K Watch (regular player update if unavailable)  \n"
         "**Starting Week 2:** season standings remain in the normal rotation  \n"
-        "**Manual slot:** enabled Welcome / Party / Custom messages rotate hourly"
+        "**:55 each hour:** enabled Welcome / Party / Custom messages rotate"
     )
 
     snap_row = store.get_clock_snapshot(str(week["id"]))
@@ -767,6 +769,7 @@ def _render_clock(store, week: dict[str, Any]) -> None:
             ("Saturday NFL preview", payload.get("sunday_preview")),
             ("Live NFL scores", payload.get("live_games")),
             ("Season standings", payload.get("season_text")),
+            ("Caleb 4K Watch", (payload.get("caleb_watch") or {}).get("text")),
             ("Weekly champion", payload.get("champion")),
         ]
         for label, text in previews:
