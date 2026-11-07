@@ -15,7 +15,8 @@ from weekly import POSITIONS, parse_timestamp, safe_status
 
 UTC = timezone.utc
 PICKEM_SCHEMA = "pickem"
-STORE_SCHEMA_VERSION = 11
+STORE_SCHEMA_VERSION = 12
+# Previous release: STORE_SCHEMA_VERSION = 11
 # Previous release: STORE_SCHEMA_VERSION = 9
 # Previous performance release: STORE_SCHEMA_VERSION = 8
 # Previous performance release: STORE_SCHEMA_VERSION = 7
@@ -1207,6 +1208,44 @@ class SupabaseStore:
             return True
         except Exception:
             return False
+
+    def get_clock_schedules(self) -> dict[str, list[str]]:
+        """Read the three persistent schedules, failing clearly if migration 017 is absent."""
+        from clock_schedule import PHASES, validate_slots
+
+        columns = ",".join(config["column"] for config in PHASES.values())
+        rows = (
+            self._table("clock_control")
+            .select(columns)
+            .eq("singleton", True)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if not rows:
+            raise StoreError("Ticker schedule settings are unavailable. Apply migration 017.")
+        row = rows[0]
+        return {
+            phase: validate_slots(phase, row.get(config["column"]))
+            for phase, config in PHASES.items()
+        }
+
+    def save_clock_schedule(self, phase: str, slots: list[str]) -> list[str]:
+        """Save only one validated phase so other settings and tests are untouched."""
+        from clock_schedule import PHASES, validate_slots
+
+        values = validate_slots(phase, slots)
+        column = PHASES[phase]["column"]
+        res = (
+            self._table("clock_control")
+            .update({column: values, "updated_at": _iso(datetime.now(UTC))})
+            .eq("singleton", True)
+            .execute()
+        )
+        if not (res.data or []):
+            raise StoreError("The ticker schedule could not be saved.")
+        return values
 
     def get_clock_week_settings(self, week_id: str) -> dict[str, Any]:
         defaults = {

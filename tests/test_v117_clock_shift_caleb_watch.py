@@ -99,11 +99,11 @@ def test_release_is_distinct_and_preserves_physical_awtrix_script():
     config = (ROOT / "config.py").read_text("utf-8")
     app = (ROOT / "app.py").read_text("utf-8")
     script = (ROOT / "awtrix/PickemSunday.ax").read_text("utf-8")
-    assert 'APP_VERSION = "1.0.17"' in config
-    assert 'APP_BUILD_VERSION = "1.0.17-clock"' in config
-    assert '"1.0.17-clock"' in app
+    assert 'APP_VERSION = "1.0.18"' in config
+    assert 'APP_BUILD_VERSION = "1.0.18-ticker-manager"' in config
+    assert '"1.0.18-ticker-manager"' in app
     assert '"/rest/v1/rpc/pickem_clock_feed"' in script
     assert 'if category == "preview" || category == "live_games" || category == "weekly" || category == "manual"' in script
     ui = (ROOT / "gate5_ui.py").read_text("utf-8")
-    assert "GATE5_UI_SCHEMA_VERSION = 13" in ui
+    assert "GATE5_UI_SCHEMA_VERSION = 14" in ui
     assert '("Caleb 4K Watch", (payload.get("caleb_watch") or {}).get("text"))' in ui

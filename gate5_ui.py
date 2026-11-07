@@ -32,7 +32,8 @@ load_newsletter_data = _newsletter.load_newsletter_data
 sms_segment_estimate = _newsletter.sms_segment_estimate
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 13
+GATE5_UI_SCHEMA_VERSION = 14
+# Previous release: GATE5_UI_SCHEMA_VERSION = 13
 # Previous release: GATE5_UI_SCHEMA_VERSION = 12
 # Previous release: GATE5_UI_SCHEMA_VERSION = 10
 # Previous release: GATE5_UI_SCHEMA_VERSION = 9
@@ -633,6 +634,94 @@ def _render_live_dress_rehearsal(store, week: dict[str, Any]) -> None:
         )
 
 
+def _render_clock_schedule_editor(store) -> None:
+    """Commissioner-only configuration for one clock phase at a time."""
+    from clock_schedule import CATEGORY_LABELS, DEFAULT_SLOTS, PHASES, slot_label
+
+    st.markdown("##### Edit Broadcast Schedule")
+    st.caption("Save the repeating Saturday, Sunday pregame, and Sunday live schedules once; they carry into future NFL weeks.")
+    if not st.checkbox("Open Schedule Manager", key="g5_schedule_manager_open"):
+        return
+
+    try:
+        saved = store.get_clock_schedules()
+    except Exception:
+        st.warning(
+            "Ticker schedules are unavailable. If you have not run "
+            "db/017_clock_schedule_manager.sql in Supabase, install it first. "
+            "Otherwise check the Supabase connection and reload."
+        )
+        return
+
+    phases = ("live", "pregame", "saturday")
+    phase = st.selectbox(
+        "Which schedule?",
+        phases,
+        format_func=lambda name: PHASES[name]["label"],
+        key="g5_schedule_manager_phase",
+    )
+    config = PHASES[phase]
+    current = saved[phase]
+    allowed = config["allowed"]
+    st.caption(config["description"] + " • Changes are saved for every week.")
+    if phase != "live":
+        st.info("Pregame protection: current-week picks, fantasy standings, and player updates cannot be selected here.")
+
+    # Widget keys remain isolated by phase; editing Saturday cannot overwrite
+    # the two Sunday configurations. Reset actions run before widget creation.
+    keys = [f"g5_schedule_{phase}_slot_{i}" for i in range(len(current))]
+    init_key = f"g5_schedule_{phase}_initialized"
+    if not st.session_state.get(init_key):
+        for key, value in zip(keys, current):
+            st.session_state[key] = value
+        st.session_state[init_key] = True
+
+    col_default, col_reload = st.columns(2)
+    with col_default:
+        restore_default = st.button("Load v1.0.17 Default", key=f"g5_schedule_{phase}_default", use_container_width=True)
+    with col_reload:
+        reload_saved = st.button("Reload Saved", key=f"g5_schedule_{phase}_reload", use_container_width=True)
+    if restore_default or reload_saved:
+        replacements = DEFAULT_SLOTS[phase] if restore_default else current
+        for key, value in zip(keys, replacements):
+            st.session_state[key] = value
+        st.caption("Choices loaded. Press Save Schedule below to make them active.")
+
+    selections = []
+    for index, key in enumerate(keys):
+        time_column, choice_column = st.columns([1, 4])
+        with time_column:
+            st.markdown(f"**{slot_label(phase, index)}**")
+        with choice_column:
+            choice = st.selectbox(
+                f"Broadcast at {slot_label(phase, index)}",
+                allowed,
+                format_func=lambda category: CATEGORY_LABELS[category],
+                key=key,
+                label_visibility="collapsed",
+            )
+        selections.append(choice)
+
+    with st.expander("Preview this schedule before saving", expanded=False):
+        st.table([
+            {"Time": slot_label(phase, index), "Message": CATEGORY_LABELS[choice]}
+            for index, choice in enumerate(selections)
+        ])
+    if all(category == "off" for category in selections):
+        st.warning("All slots are Off: this entire broadcast phase will be silent.")
+    st.caption("A saved change will be picked up at the next applicable slot without replaying the current slot. No ESPN refresh or clock-token change is triggered.")
+
+    if st.button("Save Schedule", type="primary", use_container_width=True, key=f"g5_schedule_{phase}_save"):
+        try:
+            store.save_clock_schedule(phase, selections)
+        except Exception as exc:
+            st.error(f"Schedule could not be saved: {exc}")
+        else:
+            st.session_state[init_key] = False
+            _set_flash(f"{config['label']} saved. The physical clock will use this schedule automatically.")
+            st.rerun()
+
+
 def _render_clock(store, week: dict[str, Any]) -> None:
     import clock_broadcast as _clock_broadcast
     if getattr(_clock_broadcast, "CLOCK_SNAPSHOT_VERSION", 0) < 5:
@@ -740,16 +829,15 @@ def _render_clock(store, week: dict[str, Any]) -> None:
             _set_flash("Sunday Clock messages saved for this week.")
             st.rerun()
 
+    _render_clock_schedule_editor(store)
+
     st.markdown("##### Automatic Sunday broadcast")
     st.caption("No setup needed each week. Before 1 PM the clock keeps picks private. After lock, it rotates app-owned updates without calculating anything on the clock itself.")
     st.markdown(
-        "**Saturday:** NFL Sunday Preview every ~15 min, all day  \n"
-        "**Sunday after lock:** live NFL scores at :00/:15/:30/:45  \n"
-        "**Weekly standings:** full current-week Pick'em leaderboard at :05/:20/:35/:50  \n"
-        "**:10 each hour:** Player Update from this week's 25-player pool  \n"
-        "**:40 each hour:** Caleb 4K Watch (regular player update if unavailable)  \n"
-        "**Starting Week 2:** season standings remain in the normal rotation  \n"
-        "**:55 each hour:** enabled Welcome / Party / Custom messages rotate"
+        "**Saturday:** configurable 15-minute slots, all day  \n"
+        "**Sunday pregame:** configurable five-minute privacy-safe slots from 10:30 AM to 1 PM  \n"
+        "**Sunday after lock:** configurable five-minute slots through midnight  \n"
+        "**Automatic content:** NFL scores, weekly standings, pool players, season standings, Caleb Watch and Commissioner messages follow your saved schedule"
     )
 
     snap_row = store.get_clock_snapshot(str(week["id"]))
