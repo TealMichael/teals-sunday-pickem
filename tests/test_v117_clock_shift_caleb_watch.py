@@ -105,5 +105,5 @@ def test_release_is_distinct_and_preserves_physical_awtrix_script():
     assert '"/rest/v1/rpc/pickem_clock_feed"' in script
     assert 'if category == "preview" || category == "live_games" || category == "weekly" || category == "manual"' in script
     ui = (ROOT / "gate5_ui.py").read_text("utf-8")
-    assert "GATE5_UI_SCHEMA_VERSION = 14" in ui
+    assert "GATE5_UI_SCHEMA_VERSION = 15" in ui
     assert '("Caleb 4K Watch", (payload.get("caleb_watch") or {}).get("text"))' in ui
