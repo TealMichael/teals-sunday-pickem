@@ -2,6 +2,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 from threading import get_ident
+from types import SimpleNamespace
 
 import streamlit as st
 from streamlit.testing.v1 import AppTest
@@ -58,6 +59,9 @@ class LineupStore(SupabaseStore):
         self.reject_write = ''
         self.after_write = None
         self._public_cache = {}
+        # Use the real event-query path without live Supabase. The existing
+        # Sunday fixtures intentionally have no Thanksgiving event.
+        self.client = SimpleNamespace(table=self._table)
         self.week = {'id':'week', 'is_demo':False, 'season':2026, 'nfl_week':8,
                      'opens_at':'2026-10-20T10:00:00+00:00',
                      'locks_at':'2026-10-25T17:00:00+00:00',
@@ -74,7 +78,8 @@ class LineupStore(SupabaseStore):
                        'app_meta':[{'key':snapshot_key(self.week), 'value':{
                            'schema':STATS_SNAPSHOT_SCHEMA, 'through_week':7,
                            'players':{'fixture-placeholder':{'gp':1}}}}],
-                       'weekly_results':[], 'season_champions':[], 'data_runs':[]}
+                       'weekly_results':[], 'season_champions':[], 'data_runs':[],
+                       'special_events': []}
         if complete:
             self.tables['lineups'] = [{'id':'lineup', 'week_id':'week', 'player_id':self.player['id']}]
             self.tables['lineup_picks'] = [{'id':'pick-'+pos, 'lineup_id':'lineup', 'position':pos,
