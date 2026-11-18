@@ -22,7 +22,7 @@ import config as _config
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.11-performance2"
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.12-performance3"
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.13-performance4"
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.18-ticker-manager":
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.19-turkey-bowl":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -75,15 +75,17 @@ if getattr(_nfl_sources, "NFL_SOURCES_SCHEMA_VERSION", 0) < 4:
 
 # Previous guard: AUTOMATION_RECOVERY_SCHEMA_VERSION", 0) < 6
 import gate4_results as _gate4_results
-if getattr(_gate4_results, "COORDINATED_ARCHIVE_VERSION", 0) < 1:
+_reloaded_gate4_results = False
+if getattr(_gate4_results, "COORDINATED_ARCHIVE_VERSION", 0) < 2:
     _gate4_results = importlib.reload(_gate4_results)
+    _reloaded_gate4_results = True
 import clock_broadcast as _clock_broadcast
 if getattr(_clock_broadcast, "COORDINATED_CLOCK_VERSION", 0) < 1:
     _clock_broadcast = importlib.reload(_clock_broadcast)
 import nfl_sync as _nfl_sync
 _reloaded_nfl_sync = False
 # Previous performance guard: getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 6
-if getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 8:
+if _reloaded_gate4_results or getattr(_nfl_sync, "NFL_SYNC_SCHEMA_VERSION", 0) < 8:
     _nfl_sync = importlib.reload(_nfl_sync)
     _reloaded_nfl_sync = True
 
@@ -114,7 +116,7 @@ import gate5_ui as _gate5_ui
 # Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 9
 _reloaded_gate4_ui = False
 # Previous guard: if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 10:
-if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 14:
+if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 15:
     _gate4_ui = importlib.reload(_gate4_ui)
     _reloaded_gate4_ui = True
 render_gate4_demo = _gate4_ui.render_gate4_demo
@@ -131,7 +133,7 @@ if (
     _reloaded_automation_recovery
     or _reloaded_gate4_ui
     # Previous performance guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 16
-    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 17
+    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 18
     or not hasattr(_weekly_ui, "_render_player_card_button")
     or "on_sign_out" not in _weekly_params
     or "allow_demo_week" not in _weekly_params
@@ -145,7 +147,7 @@ render_player_game = _weekly_ui.render_player_game
 # Prior Gate 5 warm-reload marker: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 8
 # Historical guard: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 9
 # Previous release guard: getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 10
-if _reloaded_nfl_sync or getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 14:
+if _reloaded_nfl_sync or getattr(_gate5_ui, "GATE5_UI_SCHEMA_VERSION", 0) < 15:
     _gate5_ui = importlib.reload(_gate5_ui)
 render_commissioner_dashboard = _gate5_ui.render_commissioner_dashboard
 

@@ -31,7 +31,25 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp, week_phase
 
-GATE4_UI_SCHEMA_VERSION = 14
+GATE4_UI_SCHEMA_VERSION = 15
+
+
+def _turkey_service(store):
+    from turkey_bowl import TurkeyBowlService
+    return TurkeyBowlService(store)
+
+
+def _season_results_with_turkey(store, season: int) -> list[dict[str, Any]]:
+    """Only season-facing views combine awards; Sunday social statistics stay Sunday-only."""
+    return store.get_weekly_results(season=season) + _turkey_service(store).results(season=season)
+
+
+def _turkey_badge_ids(store, season: int) -> set[str]:
+    if season <= 2026:
+        return set()  # No database read or extra Sunday load in the current season.
+    return _turkey_service(store).next_season_champions(season)
+
+
 # Previous release: GATE4_UI_SCHEMA_VERSION = 13
 # Previous performance release: GATE4_UI_SCHEMA_VERSION = 12
 # Previous release: GATE4_UI_SCHEMA_VERSION = 11
@@ -393,7 +411,9 @@ button.addEventListener("click", copyText);
 
 def _weekly_recap(store, week: dict[str, Any], bundle: dict[str, Any], leaderboard: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     season_results = store.get_weekly_results(season=int(week.get("season") or NFL_SEASON))
-    season = add_zero_point_players(build_season_standings(season_results), store.get_registered_players())
+    season = add_zero_point_players(build_season_standings(
+        season_results + _turkey_service(store).results(season=int(week.get("season") or NFL_SEASON))
+    ), store.get_registered_players())
     recap = build_weekly_recap(
         bundle,
         leaderboard,
@@ -570,6 +590,10 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
 
     bundle = store.get_week_public_bundle(str(fresh_week["id"]))
     leaderboard = build_weekly_leaderboard(bundle)
+    trophy_ids = _turkey_badge_ids(store, int(week.get("season") or NFL_SEASON))
+    if trophy_ids:
+        leaderboard = [dict(row, nickname=str(row["nickname"]) + (" 🦃🏆" if str(row["player_id"]) in trophy_ids else ""))
+                       for row in leaderboard]
     data_status = str(fresh_week.get("data_status") or "LIVE").upper()
     title = "Final Results" if data_status == "FINAL" else ("Provisional Results" if data_status == "PROVISIONAL" else "Live Sunday")
     st.markdown(f"### {title}")
@@ -614,7 +638,7 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
             )
 
 
-def _render_season_rows(standings: list[dict[str, Any]], current_player_id: str | None = None) -> None:
+def _render_season_rows(standings: list[dict[str, Any]], current_player_id: str | None = None, *, trophy_ids: set[str] | None = None) -> None:
     if not standings:
         st.info("Season standings will appear after the first finalized Sunday.")
         return
@@ -622,8 +646,9 @@ def _render_season_rows(standings: list[dict[str, Any]], current_player_id: str 
         rank = int(row.get("rank") or 0)
         is_self = current_player_id is not None and str(row.get("player_id")) == str(current_player_id)
         you = '<span class="you-badge">YOU</span>' if is_self else ""
+        trophy = " 🦃🏆" if str(row.get("player_id")) in (trophy_ids or set()) else ""
         st.markdown(
-            f'<div class="season-row"><div class="season-left"><div class="season-name">{_medal(rank)} {rank}. {escape(str(row.get("emoji") or "🏈"))} {escape(str(row.get("nickname") or "Player"))} {you}</div><div class="small">{float(row.get("total_fantasy_points") or 0):.1f} total fantasy pts</div></div><div class="season-points">{int(row.get("season_points") or 0)} pts</div></div>',
+            f'<div class="season-row"><div class="season-left"><div class="season-name">{_medal(rank)} {rank}. {escape(str(row.get("emoji") or "🏈"))} {escape(str(row.get("nickname") or "Player"))}{trophy} {you}</div><div class="small">{float(row.get("total_fantasy_points") or 0):.1f} total fantasy pts</div></div><div class="season-points">{int(row.get("season_points") or 0)} pts</div></div>',
             unsafe_allow_html=True,
         )
 
@@ -651,11 +676,14 @@ def render_leaderboards(store, week: dict[str, Any], player: dict[str, Any], pha
     this function name avoids churn in the Gate 4 integration layer.
     """
     st.markdown("### Season")
-    results = store.get_weekly_results(season=int(week.get("season") or NFL_SEASON))
+    season = int(week.get("season") or NFL_SEASON)
+    results = _season_results_with_turkey(store, season)
     standings = add_zero_point_players(build_season_standings(results), store.get_registered_players())
     if not results:
         st.caption("Season points begin after Week 1 becomes FINAL on Monday.")
-    _render_season_rows(standings, str(player.get("id")))
+    _render_season_rows(standings, str(player.get("id")), trophy_ids=_turkey_badge_ids(store, season))
+    if any(r.get("is_special_event") for r in results):
+        st.caption("🦃 Turkey Bowl results count as one additional full season-points round.")
     with st.expander("ⓘ How season points work"):
         st.write("1st 12 • 2nd 9 • 3rd 7 • 4th 6 • 5th 5 • 6th 4 • 7th 3 • 8th 2 • 9th 1 • 10th+ 0")
         st.caption("Ties receive the full points for that rank; the next rank skips appropriately.")
@@ -663,8 +691,16 @@ def render_leaderboards(store, week: dict[str, Any], player: dict[str, Any], pha
 def render_history(store, season: int) -> None:
     st.markdown("### History")
     results = store.get_weekly_results(season=season)
+    holiday_results = _turkey_service(store).results(season=season)
+    if holiday_results:
+        with st.expander("🦃 Turkey Bowl — Thanksgiving", expanded=True):
+            for row in sorted(holiday_results, key=lambda r: (int(r["finish_rank"]), str(r["nickname_snapshot"]).casefold())):
+                title = " 🦃🏆" if row.get("is_champion") else ""
+                st.markdown(f"**{int(row['finish_rank'])}. {escape(row['emoji_snapshot'])} {escape(row['nickname_snapshot'])}{title}** — {float(row['weekly_score']):.1f} pts")
+            st.caption("An extra full season-points round, separate from Sunday Week 12.")
     if not results:
-        st.info("Your first finalized Sunday will appear here Monday morning.")
+        if not holiday_results:
+            st.info("Your first finalized Sunday will appear here Monday morning.")
         return
     by_week: dict[int, list[dict[str, Any]]] = {}
     for row in results:
@@ -785,13 +821,21 @@ def _render_personal_season_story(story: dict[str, Any]) -> None:
 
 
 def render_profile(store, player: dict[str, Any], season: int, on_sign_out: Callable[[], None] | None) -> None:
-    st.markdown(f"### {player.get('emoji','🏈')} {player.get('nickname','Player')}")
+    trophy = " 🦃🏆" if str(player.get("id")) in _turkey_badge_ids(store, season) else ""
+    st.markdown(f"### {player.get('emoji','🏈')} {player.get('nickname','Player')}{trophy}")
     # One cached archive read supplies both personal totals and full-group
     # historical ranks. Never read current lineups or run NFL provider requests.
     archived = store.get_weekly_results(season=season)
+    combined = archived + _turkey_service(store).results(season=season)
     player_id = str(player["id"])
-    own_results = [row for row in archived if str(row.get("player_id")) == player_id]
-    stats = profile_stats(player_id, own_results)
+    own_sundays = [row for row in archived if str(row.get("player_id")) == player_id]
+    own_results = [row for row in combined if str(row.get("player_id")) == player_id]
+    stats = profile_stats(player_id, own_sundays)
+    total = profile_stats(player_id, own_results)
+    # Preserve the existing Sunday wins/seconds/thirds. Only championship
+    # season points and fantasy-points tiebreakers include Turkey Bowl.
+    stats["season_points"] = total["season_points"]
+    stats["total_fantasy_points"] = total["total_fantasy_points"]
     _profile_stat_grid(stats)
     _render_personal_season_story(build_personal_season_story(archived, player_id))
 
@@ -814,6 +858,14 @@ def render_profile(store, player: dict[str, Any], season: int, on_sign_out: Call
 
     _how_to_play()
     st.markdown("#### Trophy Case")
+    all_turkey = _turkey_service(store).results()
+    by_turkey_year = {}
+    for winner in all_turkey:
+        if winner.get("is_champion"):
+            by_turkey_year.setdefault(int(winner["season"]), []).append(winner)
+    for year, winners in sorted(by_turkey_year.items(), reverse=True):
+        names = " + ".join(escape(str(r["nickname_snapshot"])) for r in winners)
+        st.markdown(f'<div class="card-tight"><strong>🦃🏆 {year} Turkey Bowl</strong><div class="small">{names}</div></div>', unsafe_allow_html=True)
     champions = store.get_season_champions()
     if champions:
         by_season: dict[int, list[dict[str, Any]]] = {}

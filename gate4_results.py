@@ -6,7 +6,7 @@ from typing import Any
 from gate4 import build_season_standings, build_weekly_leaderboard, season_points_for_rank
 
 UTC = timezone.utc
-COORDINATED_ARCHIVE_VERSION = 1
+COORDINATED_ARCHIVE_VERSION = 2
 
 
 def _iso_now() -> str:
@@ -51,6 +51,8 @@ def archive_week_results(store, week: dict[str, Any]) -> dict[str, Any]:
     champions: list[dict[str, Any]] = []
     if int(week.get("nfl_week") or 0) == 18:
         season_results = store.get_weekly_results(season=int(week["season"]))
+        from turkey_bowl import TurkeyBowlService
+        season_results = season_results + TurkeyBowlService(store).results(season=int(week["season"]))
         standings = build_season_standings(season_results)
         if standings:
             top = standings[0]

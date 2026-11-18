@@ -32,7 +32,7 @@ load_newsletter_data = _newsletter.load_newsletter_data
 sms_segment_estimate = _newsletter.sms_segment_estimate
 
 UTC = timezone.utc
-GATE5_UI_SCHEMA_VERSION = 14
+GATE5_UI_SCHEMA_VERSION = 15
 # Previous release: GATE5_UI_SCHEMA_VERSION = 13
 # Previous release: GATE5_UI_SCHEMA_VERSION = 12
 # Previous release: GATE5_UI_SCHEMA_VERSION = 10
@@ -1330,6 +1330,10 @@ def render_commissioner_dashboard(store, *, pin_pepper: str, linked_player: bool
         _render_commissioner_home(store, week)
     elif tool == "Week":
         _render_week_overview(store, week)
+        if int(week.get("season") or 0) == 2026:
+            from turkey_bowl_ui import render_commissioner_turkey
+            with st.expander("🦃 Turkey Bowl — special event controls", expanded=False):
+                render_commissioner_turkey(store)
     elif tool == "Newsletter":
         _render_newsletter(store, week)
     elif tool == "Players":

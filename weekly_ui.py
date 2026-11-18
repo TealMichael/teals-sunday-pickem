@@ -48,7 +48,7 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 17
+WEEKLY_UI_SCHEMA_VERSION = 18
 # Previous performance release: WEEKLY_UI_SCHEMA_VERSION = 16
 # Previous release: WEEKLY_UI_SCHEMA_VERSION = 15
 # Previous release: WEEKLY_UI_SCHEMA_VERSION = 14
@@ -1178,6 +1178,15 @@ def render_player_game(
         # work, and any recovery failure is deliberately invisible/non-fatal.
         week, _automation_recovery = maybe_recover_critical_automation(store, week)
         phase = week_phase(week)
+
+    # A separate event is shown on the existing Sunday destination. This is
+    # intentionally NOT a fifth/sixth navigation tab on small iPhones.
+    if not bool(week.get("is_demo")) and int(week.get("season") or 0) == 2026:
+        from turkey_bowl import TurkeyBowlService
+        from turkey_bowl_ui import render_home_card
+        holiday = TurkeyBowlService(store).event(2026)
+        if holiday and render_home_card(store, holiday, player):
+            return
 
     _week_header(week)
 
