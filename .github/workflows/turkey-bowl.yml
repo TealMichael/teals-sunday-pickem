@@ -1,0 +1,49 @@
+name: Pickem Turkey Bowl
+
+on:
+  schedule:
+    # Last Tuesday of November: Thanksgiving pool publishing retries.
+    - cron: "7,17,27,37,47,57 12-13 22-28 11 2"
+      timezone: "America/New_York"
+    # Late November status checks, including Wednesday and Thursday morning.
+    - cron: "7 1,7,13,19 22-28 11 2-4"
+      timezone: "America/New_York"
+    # Thursday 10 AM-noon: injury and pool health, every ten minutes.
+    - cron: "7,17,27,37,47,57 10-12 22-28 11 4"
+      timezone: "America/New_York"
+    # Thanksgiving 1 PM-11:55 PM: live box-score updates every five minutes.
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 13-23 22-28 11 4"
+      timezone: "America/New_York"
+    # Friday overnight through morning: scores and finalization retries.
+    - cron: "7,17,27,37,47,57 0-3 23-29 11 5"
+      timezone: "America/New_York"
+    - cron: "7,37 8-13 23-29 11 5"
+      timezone: "America/New_York"
+    # Outage recovery: late Friday box scores may not settle until the weekend.
+    - cron: "7 9,15,21 24-30 11 0,1,6"
+      timezone: "America/New_York"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pickem-turkey-bowl
+  cancel-in-progress: false
+
+jobs:
+  holiday:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: pip install -r requirements-backend.txt
+      - name: Refresh Turkey Bowl data and awards
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: python scripts/turkey_refresh.py
