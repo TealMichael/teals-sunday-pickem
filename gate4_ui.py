@@ -18,6 +18,7 @@ from config import APP_VERSION, LIVE_APP_DISPLAY_REFRESH_SECONDS, NFL_SEASON
 from lineup_reveal import build_lineup_reveal
 from sunday_drama import build_personal_sunday_drama
 from personal_season_story import build_personal_season_story
+from turkey_trophy_badge import trophy_badge_html, trophy_badge_markdown
 from pulse_ui import render_live_pulse, render_reactions
 from gate4 import (
     add_zero_point_players,
@@ -31,7 +32,7 @@ from gate4 import (
 from validation import validate_single_emoji
 from weekly import parse_timestamp, week_phase
 
-GATE4_UI_SCHEMA_VERSION = 15
+GATE4_UI_SCHEMA_VERSION = 16
 
 
 def _turkey_service(store):
@@ -534,7 +535,7 @@ def _toggle_leaderboard_detail(player_id: str) -> None:
         st.session_state.gate4_detail_player_id = player_id
 
 
-def _leaderboard_rows(leaderboard: list[dict[str, Any]], current_player_id: str, *, detail: bool = True) -> None:
+def _leaderboard_rows(leaderboard: list[dict[str, Any]], current_player_id: str, *, detail: bool = True, trophy_ids: set[str] | None = None) -> None:
     if not leaderboard:
         st.info("No one has a lineup in this week yet.")
         return
@@ -554,7 +555,8 @@ def _leaderboard_rows(leaderboard: list[dict[str, Any]], current_player_id: str,
         is_self = row_player_id == str(current_player_id)
         medal = _medal(rank)
         prefix = f"{medal} " if medal else ""
-        label = f"{prefix}{rank}. {row.get('emoji','🏈')} {row.get('nickname','Player')}  ·  {float(row.get('score') or 0):.1f} pts"
+        badge = " " + trophy_badge_markdown() if row_player_id in (trophy_ids or set()) else ""
+        label = f"{prefix}{rank}. {row.get('emoji','🏈')} {row.get('nickname','Player')}{badge}  ·  {float(row.get('score') or 0):.1f} pts"
         if is_self:
             label += "  ← YOU"
         st.button(
@@ -591,9 +593,8 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
     bundle = store.get_week_public_bundle(str(fresh_week["id"]))
     leaderboard = build_weekly_leaderboard(bundle)
     trophy_ids = _turkey_badge_ids(store, int(week.get("season") or NFL_SEASON))
-    if trophy_ids:
-        leaderboard = [dict(row, nickname=str(row["nickname"]) + (" 🦃🏆" if str(row["player_id"]) in trophy_ids else ""))
-                       for row in leaderboard]
+    # The trophy is a visual label in standings, not a mutation of player names
+    # passed to the recap, reactions, or other Sunday features.
     data_status = str(fresh_week.get("data_status") or "LIVE").upper()
     title = "Final Results" if data_status == "FINAL" else ("Provisional Results" if data_status == "PROVISIONAL" else "Live Sunday")
     st.markdown(f"### {title}")
@@ -620,7 +621,7 @@ def render_live_sunday(store, week: dict[str, Any], player: dict[str, Any], *, s
     elif fresh_week.get("refresh_status") == "delayed":
         st.caption("Live update delayed. Showing the last saved scores.")
     st.markdown("### Standings")
-    _leaderboard_rows(leaderboard, str(player["id"]), detail=True)
+    _leaderboard_rows(leaderboard, str(player["id"]), detail=True, trophy_ids=trophy_ids)
     render_reactions(store, fresh_week, player, leaderboard)
     if show_storylines and data_status != "FINAL":
         if reveal:
@@ -646,7 +647,7 @@ def _render_season_rows(standings: list[dict[str, Any]], current_player_id: str 
         rank = int(row.get("rank") or 0)
         is_self = current_player_id is not None and str(row.get("player_id")) == str(current_player_id)
         you = '<span class="you-badge">YOU</span>' if is_self else ""
-        trophy = " 🦃🏆" if str(row.get("player_id")) in (trophy_ids or set()) else ""
+        trophy = trophy_badge_html() if str(row.get("player_id")) in (trophy_ids or set()) else ""
         st.markdown(
             f'<div class="season-row"><div class="season-left"><div class="season-name">{_medal(rank)} {rank}. {escape(str(row.get("emoji") or "🏈"))} {escape(str(row.get("nickname") or "Player"))}{trophy} {you}</div><div class="small">{float(row.get("total_fantasy_points") or 0):.1f} total fantasy pts</div></div><div class="season-points">{int(row.get("season_points") or 0)} pts</div></div>',
             unsafe_allow_html=True,
@@ -695,8 +696,13 @@ def render_history(store, season: int) -> None:
     if holiday_results:
         with st.expander("🦃 Turkey Bowl — Thanksgiving", expanded=True):
             for row in sorted(holiday_results, key=lambda r: (int(r["finish_rank"]), str(r["nickname_snapshot"]).casefold())):
-                title = " 🦃🏆" if row.get("is_champion") else ""
-                st.markdown(f"**{int(row['finish_rank'])}. {escape(row['emoji_snapshot'])} {escape(row['nickname_snapshot'])}{title}** — {float(row['weekly_score']):.1f} pts")
+                trophy = trophy_badge_html() if row.get("is_champion") else ""
+                st.markdown(
+                    f"<strong>{int(row['finish_rank'])}. {escape(str(row['emoji_snapshot']))} "
+                    f"{escape(str(row['nickname_snapshot']))}{trophy}</strong> "
+                    f"— {float(row['weekly_score']):.1f} pts",
+                    unsafe_allow_html=True,
+                )
             st.caption("An extra full season-points round, separate from Sunday Week 12.")
     if not results:
         if not holiday_results:
@@ -821,8 +827,12 @@ def _render_personal_season_story(story: dict[str, Any]) -> None:
 
 
 def render_profile(store, player: dict[str, Any], season: int, on_sign_out: Callable[[], None] | None) -> None:
-    trophy = " 🦃🏆" if str(player.get("id")) in _turkey_badge_ids(store, season) else ""
-    st.markdown(f"### {player.get('emoji','🏈')} {player.get('nickname','Player')}{trophy}")
+    trophy = trophy_badge_html() if str(player.get("id")) in _turkey_badge_ids(store, season) else ""
+    st.markdown(
+        f"### {escape(str(player.get('emoji') or '🏈'))} "
+        f"{escape(str(player.get('nickname') or 'Player'))}{trophy}",
+        unsafe_allow_html=True,
+    )
     # One cached archive read supplies both personal totals and full-group
     # historical ranks. Never read current lineups or run NFL provider requests.
     archived = store.get_weekly_results(season=season)
@@ -865,7 +875,7 @@ def render_profile(store, player: dict[str, Any], season: int, on_sign_out: Call
             by_turkey_year.setdefault(int(winner["season"]), []).append(winner)
     for year, winners in sorted(by_turkey_year.items(), reverse=True):
         names = " + ".join(escape(str(r["nickname_snapshot"])) for r in winners)
-        st.markdown(f'<div class="card-tight"><strong>🦃🏆 {year} Turkey Bowl</strong><div class="small">{names}</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="card-tight"><strong>{trophy_badge_html()} {year} Turkey Bowl</strong><div class="small">{names}</div></div>', unsafe_allow_html=True)
     champions = store.get_season_champions()
     if champions:
         by_season: dict[int, list[dict[str, Any]]] = {}

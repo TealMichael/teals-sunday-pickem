@@ -7,6 +7,7 @@ from html import escape
 import streamlit as st
 
 from gate4 import build_weekly_leaderboard
+from turkey_trophy_badge import trophy_badge_html, trophy_badge_markdown
 from turkey_bowl import TurkeyBowlError, TurkeyBowlService, is_locked, is_open
 from weekly import ET, POSITIONS, et_label, parse_timestamp
 
@@ -156,7 +157,7 @@ def _live_scores(service: TurkeyBowlService, event: dict, current_player_id: str
         return
     if event.get("finalized_at"):
         winners = [r for r in leaderboard if r["rank"] == 1]
-        st.success("🦃🏆 Turkey Bowl Champion: " + ", ".join(r["nickname"] for r in winners))
+        st.success(trophy_badge_markdown() + " Turkey Bowl Champion: " + ", ".join(r["nickname"] for r in winners))
     elif any(g.get("game_status") in {"LIVE", "FINAL"} for g in games):
         st.caption("Live and provisional until scores are finalized Friday. Equal scores share their rank.")
     else:
@@ -168,7 +169,11 @@ def _live_scores(service: TurkeyBowlService, event: dict, current_player_id: str
         st.caption(f"{away} @ {home} · {status}{score}")
     for r in leaderboard:
         you = " · YOU" if str(r["player_id"]) == current_player_id else ""
-        st.markdown(f"**{r['rank']}. {escape(r['emoji'])} {escape(r['nickname'])}{you}** — {r['score']:.1f} pts")
+        trophy = trophy_badge_html() if event.get("finalized_at") and int(r["rank"]) == 1 else ""
+        st.markdown(
+            f"<strong>{r['rank']}. {escape(str(r['emoji']))} {escape(str(r['nickname']))}{trophy}{escape(you)}</strong> — {r['score']:.1f} pts",
+            unsafe_allow_html=True,
+        )
         with st.expander(f"{r['nickname']} starting five", expanded=False):
             for item in r["roster"]:
                 p = item.get("player") or {}

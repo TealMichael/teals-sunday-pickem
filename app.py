@@ -116,7 +116,7 @@ import gate5_ui as _gate5_ui
 # Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 9
 _reloaded_gate4_ui = False
 # Previous guard: if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 10:
-if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 15:
+if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 16:
     _gate4_ui = importlib.reload(_gate4_ui)
     _reloaded_gate4_ui = True
 render_gate4_demo = _gate4_ui.render_gate4_demo
