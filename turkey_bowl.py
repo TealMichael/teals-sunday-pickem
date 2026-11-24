@@ -19,7 +19,7 @@ from weekly import POSITIONS, parse_timestamp
 
 UTC = timezone.utc
 ET = ZoneInfo("America/New_York")
-TURKEY_BOWL_VERSION = 1
+TURKEY_BOWL_VERSION = 2
 EVENT_TYPE = "turkey_bowl"
 EXPECTED_2026 = {frozenset(("CHI", "DET")), frozenset(("PHI", "DAL")), frozenset(("KC", "BUF"))}
 
@@ -156,7 +156,7 @@ class TurkeyBowlService:
 
     def lineup(self, event_id: str, player_id: str) -> tuple[dict | None, list[dict]]:
         rows = (self.table("special_lineups")
-                .select("id,event_id,player_id,confirmed_at,updated_at,special_picks(id,lineup_id,position,pool_player_id,emergency_pool_player_id)")
+                .select("id,event_id,player_id,confirmed_at,updated_at,special_picks(id,lineup_id,position,pool_player_id)")
                 .eq("event_id", str(event_id)).eq("player_id", str(player_id)).limit(1).execute().data or [])
         if not rows:
             return None, []
@@ -164,10 +164,10 @@ class TurkeyBowlService:
         picks = list(row.pop("special_picks") or [])
         return row, picks
 
-    def save_pick(self, event: dict, player_id: str, pos: str, starter: str, backup: str | None) -> None:
+    def save_pick(self, event: dict, player_id: str, pos: str, starter: str) -> None:
         if not is_open(event):
             raise TurkeyBowlError("Turkey Bowl lineup selections are closed.")
-        if pos not in POSITIONS or (backup and starter == backup):
+        if pos not in POSITIONS:
             raise TurkeyBowlError("Invalid lineup selection.")
         # Always recheck database publication/lock in SQL triggers, not only the UI.
         lineup, _ = self.lineup(str(event["id"]), player_id)
@@ -183,7 +183,8 @@ class TurkeyBowlService:
                     raise
         self.table("special_picks").upsert({
             "lineup_id": str(lineup["id"]), "position": pos,
-            "pool_player_id": str(starter), "emergency_pool_player_id": str(backup) if backup else None,
+            # Explicitly clear any legacy Thanksgiving backup on edit.
+            "pool_player_id": str(starter), "emergency_pool_player_id": None,
         }, on_conflict="lineup_id,position").execute()
         # Re-selecting a starter invalidates the previous 'confirmed' status.
         self.table("special_lineups").update({"confirmed_at": None}).eq("id", str(lineup["id"])).execute()
@@ -194,13 +195,8 @@ class TurkeyBowlService:
         lineup, picks = self.lineup(str(event["id"]), player_id)
         if not lineup or {p["position"] for p in picks} != set(POSITIONS):
             raise TurkeyBowlError("Choose all five positions before confirming.")
-        # A missing backup for a QUESTIONABLE player isn't automatically safe.
-        pool = {str(r["id"]): r for r in self.pool(str(event["id"]))}
-        for pick in picks:
-            starter = pool.get(str(pick["pool_player_id"])) or {}
-            status = str(starter.get("availability_status") or "HEALTHY")
-            if status in {"QUESTIONABLE", "OUT"} and not pick.get("emergency_pool_player_id"):
-                raise TurkeyBowlError(f"Choose an emergency backup for your {pick['position']} starter.")
+        # Thanksgiving is starter-only. QUESTIONABLE/OUT picks are allowed to
+        # confirm; if they do not play, they earn their actual (usually zero) points.
         self.table("special_lineups").update({"confirmed_at": datetime.now(UTC).isoformat()}).eq("id", str(lineup["id"])).execute()
 
     def public_bundle(self, event: dict) -> dict:
@@ -211,13 +207,19 @@ class TurkeyBowlService:
         lineups = list(self.table("special_lineups").select("id,event_id,player_id,confirmed_at").eq("event_id", eid).execute().data or [])
         picks = []
         if lineups:
-            picks = list(self.table("special_picks").select("id,lineup_id,position,pool_player_id,emergency_pool_player_id")
+            picks = list(self.table("special_picks").select("id,lineup_id,position,pool_player_id")
                          .in_("lineup_id", [str(l["id"]) for l in lineups]).execute().data or [])
         profiles = []
         if lineups:
             profiles = list(self.table("players").select("id,nickname,emoji")
                             .in_("id", [str(l["player_id"]) for l in lineups]).execute().data or [])
-        return {"lineups": lineups, "picks": picks, "players": profiles,
+        # IMPORTANT: Never provide legacy emergency_pool_player_id values to
+        # Sunday’s shared scoring helper. That prevents any Thanksgiving
+        # substitution without changing Sunday’s scoring contract.
+        starter_only_picks = [{k: row.get(k) for k in
+                               ("id", "lineup_id", "position", "pool_player_id")}
+                              for row in picks]
+        return {"lineups": lineups, "picks": starter_only_picks, "players": profiles,
                 "pool": self.pool(eid), "games": self.games(eid)}
 
     def leaderboard(self, event: dict) -> list[dict]:
@@ -487,7 +489,7 @@ def run_auto(store, *, now: datetime | None = None) -> dict:
     if now < lock:
         return {"injuries_updated": service.refresh_injuries(event)}
     result = service.refresh_scores(event)
-    # Injury refresh for Thursday evening OUT starters on later games.
+    # Continue updating player availability. No Thanksgiving backups activate.
     try:
         result["injuries_updated"] = service.refresh_injuries(event)
     except Exception as exc:

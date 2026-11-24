@@ -142,10 +142,13 @@ if (
     _weekly_ui = importlib.reload(_weekly_ui)
 render_player_game = _weekly_ui.render_player_game
 
-# Refresh only the small holiday UI module if a Streamlit worker survives this
-# visual deploy; preserve the existing store cache and Sunday UI bindings.
+# Warm-worker safety for this starter-only holiday update. Reload the special
+# event service first, then its UI, without touching Sunday module bindings.
+import turkey_bowl as _turkey_bowl
+if getattr(_turkey_bowl, "TURKEY_BOWL_VERSION", 0) < 2:
+    _turkey_bowl = importlib.reload(_turkey_bowl)
 import turkey_bowl_ui as _turkey_bowl_ui
-if getattr(_turkey_bowl_ui, "TURKEY_BOWL_UI_SCHEMA_VERSION", 0) < 2:
+if getattr(_turkey_bowl_ui, "TURKEY_BOWL_UI_SCHEMA_VERSION", 0) < 3:
     _turkey_bowl_ui = importlib.reload(_turkey_bowl_ui)
 
 # Legacy regression marker: GATE5_UI_SCHEMA_VERSION", 0) < 4
