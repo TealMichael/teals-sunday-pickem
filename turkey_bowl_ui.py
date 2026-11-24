@@ -12,7 +12,7 @@ from turkey_bowl import TurkeyBowlError, TurkeyBowlService, is_locked, is_open
 from weekly import ET, POSITIONS, et_label, parse_timestamp
 
 UTC = timezone.utc
-TURKEY_BOWL_UI_SCHEMA_VERSION = 4  # Thanksgiving review/confirmation/mobile polish only.
+TURKEY_BOWL_UI_SCHEMA_VERSION = 5  # Locked-game live standings destination and display order.
 
 
 def _name(row: dict) -> str:
@@ -47,7 +47,15 @@ def render_home_card(store, event: dict, player: dict) -> bool:
     state = "Champion crowned" if event.get("finalized_at") else (
         "Live scores" if is_locked(event) else ("Picks open" if is_open(event) else "Coming Thanksgiving week"))
     st.markdown(f"**{state}** · Locks {et_label(event['locks_at'])}")
-    if st.button("🦃 Open Turkey Bowl", type="primary", use_container_width=True, key="turkey_open_from_sunday"):
+    # The existing Thursday lock controls both the destination and the label.
+    # Before lock this opens the picker; after lock it opens live standings.
+    # Finished events should no longer advertise scores as live.
+    button_label = (
+        "🏆 View final Turkey Bowl standings" if event.get("finalized_at") else
+        "🦃 Click here for Live Turkey Day standings!" if is_locked(event) else
+        "🦃 Open Turkey Bowl"
+    )
+    if st.button(button_label, type="primary", use_container_width=True, key="turkey_open_from_sunday"):
         st.session_state.turkey_bowl_open = True
         st.rerun()
     st.divider()
@@ -253,10 +261,13 @@ def _lineup_picker(service: TurkeyBowlService, event: dict, player: dict) -> Non
 
 
 def _locked_view(service: TurkeyBowlService, event: dict, player: dict) -> None:
+    # Render the live leaderboard first, before the secondary lineup queries.
+    # Existing 30-second fragment updates and scoring remain unchanged.
+    _live_scores(service, event, str(player["id"]))
     eid = str(event["id"])
     lineup, picks = service.lineup(eid, str(player["id"]))
     pool = {str(p["id"]): p for p in service.pool(eid)}
-    st.markdown("### 🔒 Thanksgiving lineups locked")
+    st.markdown("### 🔒 Your locked Thanksgiving five")
     if picks:
         for p in sorted(picks, key=lambda p: POSITIONS.index(p["position"])):
             starter = pool.get(str(p["pool_player_id"])) or {}
@@ -270,7 +281,6 @@ def _locked_view(service: TurkeyBowlService, event: dict, player: dict) -> None:
         st.caption("Live scores begin with Thursday's games. Refreshing your screen does not alter your lineup.")
     else:
         st.caption(f"Last Thanksgiving scoring update: {et_label(event['refreshed_at'])}")
-    _live_scores(service, event, str(player["id"]))
 
 
 @st.fragment(run_every="30s")

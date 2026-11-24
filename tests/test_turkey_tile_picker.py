@@ -396,3 +396,97 @@ def test_returning_to_sunday_clears_editing_state(monkeypatch):
         raise AssertionError("Back button should navigate")
     assert fake.session_state["turkey_bowl_open"] is False
     assert holiday._view_key("event-2026", "player-1") not in fake.session_state
+
+
+def test_home_button_turns_into_live_standings_at_lock_and_final_after_awards(monkeypatch):
+    """The single Sunday-card button must reflect the Thursday event's own lock."""
+    from datetime import datetime as RealDateTime
+    fake = FakeStreamlit()
+    monkeypatch.setattr(holiday, 'st', fake)
+
+    class ThanksgivingClock(RealDateTime):
+        @classmethod
+        def now(cls, tz=None):
+            return RealDateTime(2026, 11, 26, 12, 59, tzinfo=tz)
+
+    class Service:
+        def __init__(self, store):
+            pass
+
+    monkeypatch.setattr(holiday, 'datetime', ThanksgivingClock)
+    monkeypatch.setattr(holiday, 'TurkeyBowlService', Service)
+    monkeypatch.setattr(holiday, 'is_locked', lambda event: bool(event.get('_locked')))
+    monkeypatch.setattr(holiday, 'is_open', lambda event: True)
+    # The card's divider is an existing Streamlit control, not a database write.
+    fake.divider = lambda: None
+    event = {'id': 'holiday', 'game_date': '2026-11-26',
+             'locks_at': '2026-11-26T13:00:00-05:00'}
+
+    assert holiday.render_home_card(object(), event, {'id': 'player'}) is False
+    assert fake.buttons[-1][0] == '🦃 Open Turkey Bowl'
+    assert fake.buttons[-1][1]['type'] == 'primary'
+    assert fake.buttons[-1][1]['key'] == 'turkey_open_from_sunday'
+
+    fake.buttons.clear()
+    event['_locked'] = True
+    assert holiday.render_home_card(object(), event, {'id': 'player'}) is False
+    assert fake.buttons[-1][0] == '🦃 Click here for Live Turkey Day standings!'
+    assert fake.buttons[-1][1]['type'] == 'primary'
+    assert fake.buttons[-1][1]['key'] == 'turkey_open_from_sunday'
+
+    fake.buttons.clear()
+    event['finalized_at'] = '2026-11-27T14:01:00Z'
+    assert holiday.render_home_card(object(), event, {'id': 'player'}) is False
+    assert fake.buttons[-1][0] == '🏆 View final Turkey Bowl standings'
+
+
+def test_live_button_keeps_existing_sunday_to_turkey_navigation(monkeypatch):
+    from datetime import datetime as RealDateTime
+    fake = FakeStreamlit(click='🦃 Click here for Live Turkey Day standings!')
+    class StreamlitSessionState(dict):
+        __setattr__ = dict.__setitem__
+    fake.session_state = StreamlitSessionState()
+    monkeypatch.setattr(holiday, 'st', fake)
+
+    class ThanksgivingClock(RealDateTime):
+        @classmethod
+        def now(cls, tz=None):
+            return RealDateTime(2026, 11, 26, 13, 1, tzinfo=tz)
+
+    class Service:
+        def __init__(self, store):
+            pass
+
+    monkeypatch.setattr(holiday, 'datetime', ThanksgivingClock)
+    monkeypatch.setattr(holiday, 'TurkeyBowlService', Service)
+    monkeypatch.setattr(holiday, 'is_locked', lambda _: True)
+    fake.divider = lambda: None
+    event = {'id': 'holiday', 'game_date': '2026-11-26',
+             'locks_at': '2026-11-26T13:00:00-05:00'}
+    try:
+        holiday.render_home_card(object(), event, {'id': 'player'})
+    except Rerun:
+        pass
+    else:
+        raise AssertionError('Expected the unchanged destination navigation to rerun')
+    assert fake.session_state['turkey_bowl_open'] is True
+
+
+def test_locked_view_puts_standings_above_locked_lineup_without_changing_scoring(monkeypatch):
+    fake = FakeStreamlit()
+    monkeypatch.setattr(holiday, 'st', fake)
+    service = FakeService()
+    service.picks = [dict(position='QB', pool_player_id='QB-0')]
+    # Observe render order, without requiring live network or scoring.
+    monkeypatch.setattr(
+        holiday, '_live_scores',
+        lambda *args, **kwargs: fake.messages.append(('standings', ('leaderboard',))))
+    holiday._locked_view(service, {'id': 'event-2026', 'refreshed_at': None},
+                         {'id': 'player-1'})
+    labels = [kind for kind, _ in fake.messages]
+    assert labels[0] == 'standings'
+    assert any('Your locked Thanksgiving five' in str(args)
+               for kind, args in fake.messages if kind == 'markdown')
+    assert sum(kind == 'standings' for kind in labels) == 1
+    assert any('QB 0' in str(args) for kind, args in fake.messages if kind == 'markdown')
+    assert 'emergency' not in str(fake.messages).lower()
