@@ -48,7 +48,7 @@ from weekly import (
 )
 
 UTC = timezone.utc
-WEEKLY_UI_SCHEMA_VERSION = 18
+WEEKLY_UI_SCHEMA_VERSION = 19
 # Previous performance release: WEEKLY_UI_SCHEMA_VERSION = 16
 # Previous release: WEEKLY_UI_SCHEMA_VERSION = 15
 # Previous release: WEEKLY_UI_SCHEMA_VERSION = 14
@@ -1179,14 +1179,29 @@ def render_player_game(
         week, _automation_recovery = maybe_recover_critical_automation(store, week)
         phase = week_phase(week)
 
-    # A separate event is shown on the existing Sunday destination. This is
-    # intentionally NOT a fifth/sixth navigation tab on small iPhones.
+    # Keep Turkey Bowl featured through Thanksgiving Sunday (Nov 29, 2026).
+    # From Monday it moves BELOW the normal Sunday home/live content, and
+    # remains a reachable results archive rather than disappearing Dec 6.
+    # The open holiday destination is still handled first so its Back button
+    # works at any time. No regular Sunday selection/scoring paths change.
+    holiday = None
+    holiday_at_bottom = False
+    render_home_card = None
     if not bool(week.get("is_demo")) and int(week.get("season") or 0) == 2026:
         from turkey_bowl import TurkeyBowlService
-        from turkey_bowl_ui import render_home_card
+        from turkey_bowl_ui import home_card_moves_below_sunday, render_home_card
         holiday = TurkeyBowlService(store).event(2026)
-        if holiday and render_home_card(store, holiday, player):
-            return
+        if holiday:
+            holiday_at_bottom = home_card_moves_below_sunday(holiday)
+            if not holiday_at_bottom or st.session_state.get("turkey_bowl_open"):
+                if render_home_card(store, holiday, player):
+                    return
+
+    def _render_bottom_turkey_card() -> None:
+        """Append the archive link only on Sunday's home/live screens."""
+        if holiday is not None and holiday_at_bottom and render_home_card is not None:
+            st.divider()
+            render_home_card(store, holiday, player)
 
     _week_header(week)
 
@@ -1206,11 +1221,13 @@ def render_player_game(
         st.markdown(f"### {label} opens Tuesday")
         _countdown(str(week["opens_at"]), "New picks available in")
         st.caption(et_label(week.get("opens_at")))
+        _render_bottom_turkey_card()
         return
 
     if phase == "locked" and not bool(week.get("is_demo")):
         maybe_render_final_celebration(store, week, player)
         render_live_sunday(store, week, player, show_storylines=True)
+        _render_bottom_turkey_card()
         return
 
     if phase == "open" and not bool(week.get("is_demo")):
@@ -1230,10 +1247,12 @@ def render_player_game(
 
     if phase == "open" and not pool_is_ready(pool):
         st.info("This week's player pool is being prepared. Picks will appear as soon as all five positions are ready.")
+        _render_bottom_turkey_card()
         return
 
     if phase == "locked":
         _locked_home(store, week, player, pool)
+        _render_bottom_turkey_card()
         return
 
     context, action_error = None, ""
@@ -1268,4 +1287,5 @@ def render_player_game(
         _review(store, week, player, pool, context=context, error=action_error)
     else:
         _open_home(store, week, player, pool)
+        _render_bottom_turkey_card()
 

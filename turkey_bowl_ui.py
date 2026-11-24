@@ -1,7 +1,7 @@
 """Small mobile-friendly Thanksgiving surface; Sunday navigation remains unchanged."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from html import escape
 
 import streamlit as st
@@ -12,7 +12,7 @@ from turkey_bowl import TurkeyBowlError, TurkeyBowlService, is_locked, is_open
 from weekly import ET, POSITIONS, et_label, parse_timestamp
 
 UTC = timezone.utc
-TURKEY_BOWL_UI_SCHEMA_VERSION = 5  # Locked-game live standings destination and display order.
+TURKEY_BOWL_UI_SCHEMA_VERSION = 6  # Retain Turkey Bowl link below Sunday after Nov 29.
 
 
 def _name(row: dict) -> str:
@@ -23,6 +23,16 @@ def _name(row: dict) -> str:
 
 def _error(exc: Exception) -> None:
     st.error(f"Turkey Bowl action could not be completed: {exc}")
+
+
+def home_card_moves_below_sunday(event: dict, *, today: date | None = None) -> bool:
+    """Feature Thanksgiving through Sunday; archive below Sunday from Monday.
+
+    For Thanksgiving 2026 this moves the link Monday, November 30, ET.
+    It does not delete the event, alter scoring, or affect Sunday lineups.
+    """
+    event_date = datetime.fromisoformat(str(event["game_date"])).date()
+    return (today if today is not None else datetime.now(ET).date()) > event_date + timedelta(days=3)
 
 
 def render_home_card(store, event: dict, player: dict) -> bool:
@@ -39,8 +49,9 @@ def render_home_card(store, event: dict, player: dict) -> bool:
             st.rerun()
         render_turkey_bowl(service, event, player)
         return True
-    # Only show a launch card around Thanksgiving, not throughout an entire season.
-    if not (0 <= (event_date - date).days <= 21 or 0 <= (date - event_date).days <= 9):
+    # Launch no earlier than three weeks out. Keep completed 2026 results
+    # reachable below Sunday for the remainder of the 2026 app season.
+    if date < event_date - timedelta(days=21):
         return False
     st.markdown("### 🦃 Teal’s Turkey Bowl")
     st.caption("Three Thanksgiving games • A separate starting five • Full season points • The turkey trophy")

@@ -133,7 +133,7 @@ if (
     _reloaded_automation_recovery
     or _reloaded_gate4_ui
     # Previous performance guard: getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 16
-    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 18
+    or getattr(_weekly_ui, "WEEKLY_UI_SCHEMA_VERSION", 0) < 19
     or not hasattr(_weekly_ui, "_render_player_card_button")
     or "on_sign_out" not in _weekly_params
     or "allow_demo_week" not in _weekly_params
@@ -148,7 +148,7 @@ import turkey_bowl as _turkey_bowl
 if getattr(_turkey_bowl, "TURKEY_BOWL_VERSION", 0) < 2:
     _turkey_bowl = importlib.reload(_turkey_bowl)
 import turkey_bowl_ui as _turkey_bowl_ui
-if getattr(_turkey_bowl_ui, "TURKEY_BOWL_UI_SCHEMA_VERSION", 0) < 5:
+if getattr(_turkey_bowl_ui, "TURKEY_BOWL_UI_SCHEMA_VERSION", 0) < 6:
     _turkey_bowl_ui = importlib.reload(_turkey_bowl_ui)
 
 # Legacy regression marker: GATE5_UI_SCHEMA_VERSION", 0) < 4

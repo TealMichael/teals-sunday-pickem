@@ -490,3 +490,127 @@ def test_locked_view_puts_standings_above_locked_lineup_without_changing_scoring
     assert sum(kind == 'standings' for kind in labels) == 1
     assert any('QB 0' in str(args) for kind, args in fake.messages if kind == 'markdown')
     assert 'emergency' not in str(fake.messages).lower()
+
+# Holiday archive placement: after the Sunday following Thanksgiving, the card
+# moves below weekly content but stays available beyond the old December expiry.
+def test_turkey_archive_moves_monday_after_thanksgiving():
+    from datetime import date
+    event = {"game_date": "2026-11-26"}
+    assert not holiday.home_card_moves_below_sunday(event, today=date(2026, 11, 26))
+    assert not holiday.home_card_moves_below_sunday(event, today=date(2026, 11, 29))
+    assert holiday.home_card_moves_below_sunday(event, today=date(2026, 11, 30))
+    assert holiday.home_card_moves_below_sunday(event, today=date(2026, 12, 6))
+
+
+def test_final_turkey_link_still_renders_after_old_expiry(monkeypatch):
+    from datetime import datetime
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 12, 10, 12, tzinfo=tz)
+
+    fake = FakeStreamlit()
+    fake.divider = lambda: fake.messages.append(("divider", ()))
+    monkeypatch.setattr(holiday, "st", fake)
+    monkeypatch.setattr(holiday, "datetime", FrozenDatetime)
+    monkeypatch.setattr(holiday, "TurkeyBowlService", lambda store: None)
+    event = {"id": "holiday", "game_date": "2026-11-26", "locks_at": "2026-11-26T13:00:00-05:00",
+             "finalized_at": "2026-11-27T10:00:00-05:00"}
+    assert holiday.render_home_card(None, event, {"id": "p1"}) is False
+    assert "🏆 View final Turkey Bowl standings" in [label for label, _ in fake.buttons]
+
+
+def _holiday_placement_screen(monkeypatch, *, archived: bool, phase: str, opening: bool = False):
+    """Execute the real Sunday page function with isolated UI/store dependencies."""
+    import ast
+    from pathlib import Path
+    import types
+
+    path = Path(__file__).resolve().parents[1] / "weekly_ui.py"
+    module_ast = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    function = next(node for node in module_ast.body
+                    if isinstance(node, ast.FunctionDef) and node.name == "render_player_game")
+    namespace = {}
+    calls = []
+
+    class Session(dict):
+        def __getattr__(self, key):
+            return self[key]
+        def __setattr__(self, key, val):
+            self[key] = val
+
+    screen = types.SimpleNamespace(
+        session_state=Session(turkey_bowl_open=opening),
+        markdown=lambda *a, **kw: calls.append("sunday_content"),
+        caption=lambda *a, **kw: calls.append("sunday_content"),
+        divider=lambda: calls.append("divider"),
+        info=lambda *a, **kw: calls.append("sunday_content"),
+    )
+    monkeypatch.setattr(holiday, "home_card_moves_below_sunday", lambda event: archived)
+
+    def show_holiday(store, event, player):
+        calls.append("turkey_card")
+        return opening
+
+    monkeypatch.setattr(holiday, "render_home_card", show_holiday)
+    import turkey_bowl
+    monkeypatch.setattr(turkey_bowl, "TurkeyBowlService", lambda store: types.SimpleNamespace(event=lambda season: {"game_date": "2026-11-26"}))
+
+    namespace.update(
+        st=screen,
+        _take_lineup_action=lambda player: None,
+        _onboarding=lambda *a: False,
+        render_gate4_demo=lambda player: None,
+        render_nav=lambda **kw: "🏈 Sunday",
+        week_phase=lambda week: week["phase"],
+        maybe_recover_critical_automation=lambda store, week: (week, None),
+        _week_header=lambda week: calls.append("week_header"),
+        _countdown=lambda *a: calls.append("sunday_content"),
+        et_label=lambda value: str(value),
+        render_live_sunday=lambda *a, **kw: calls.append("sunday_live"),
+        maybe_render_final_celebration=lambda *a: None,
+        _lock_transition_guard=lambda *a: None,
+        pool_is_ready=lambda pool: True,
+        _open_home=lambda *a: calls.append("sunday_open_home"),
+        _locked_home=lambda *a: calls.append("sunday_locked_home"),
+        APP_VERSION="1.0.19",
+    )
+    exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"), namespace)
+    store = types.SimpleNamespace(
+        get_real_week=lambda: {"id": "week13", "season": 2026, "is_demo": False,
+                               "nfl_week": 13, "phase": phase, "label": "Week 13",
+                               "opens_at": "2026-12-01", "locks_at": "2026-12-06"},
+        get_week_pool=lambda week_id, visible_only=False: [],
+    )
+    namespace["render_player_game"](store, {"id": "p1"}, skip_onboarding=True)
+    return calls
+
+
+def test_turkey_card_featured_above_sunday_through_november_29(monkeypatch):
+    calls = _holiday_placement_screen(monkeypatch, archived=False, phase="upcoming")
+    assert calls.index("turkey_card") < calls.index("week_header")
+    assert calls.count("turkey_card") == 1
+
+
+def test_turkey_archive_below_upcoming_week(monkeypatch):
+    calls = _holiday_placement_screen(monkeypatch, archived=True, phase="upcoming")
+    assert calls.index("turkey_card") > calls.index("sunday_content")
+    assert calls.count("turkey_card") == 1
+
+
+def test_turkey_archive_below_live_sunday_standings(monkeypatch):
+    calls = _holiday_placement_screen(monkeypatch, archived=True, phase="locked")
+    assert calls.index("turkey_card") > calls.index("sunday_live")
+    assert calls.count("turkey_card") == 1
+
+
+def test_turkey_archive_below_open_sunday_lineup(monkeypatch):
+    calls = _holiday_placement_screen(monkeypatch, archived=True, phase="open")
+    assert calls.index("turkey_card") > calls.index("sunday_open_home")
+    assert calls.count("turkey_card") == 1
+
+
+def test_turkey_archive_still_opens_standalone_when_tapped(monkeypatch):
+    calls = _holiday_placement_screen(monkeypatch, archived=True, phase="upcoming", opening=True)
+    assert calls == ["turkey_card"]
