@@ -148,7 +148,7 @@ import turkey_bowl as _turkey_bowl
 if getattr(_turkey_bowl, "TURKEY_BOWL_VERSION", 0) < 2:
     _turkey_bowl = importlib.reload(_turkey_bowl)
 import turkey_bowl_ui as _turkey_bowl_ui
-if getattr(_turkey_bowl_ui, "TURKEY_BOWL_UI_SCHEMA_VERSION", 0) < 3:
+if getattr(_turkey_bowl_ui, "TURKEY_BOWL_UI_SCHEMA_VERSION", 0) < 4:
     _turkey_bowl_ui = importlib.reload(_turkey_bowl_ui)
 
 # Legacy regression marker: GATE5_UI_SCHEMA_VERSION", 0) < 4

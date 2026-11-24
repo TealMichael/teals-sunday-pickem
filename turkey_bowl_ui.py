@@ -12,7 +12,7 @@ from turkey_bowl import TurkeyBowlError, TurkeyBowlService, is_locked, is_open
 from weekly import ET, POSITIONS, et_label, parse_timestamp
 
 UTC = timezone.utc
-TURKEY_BOWL_UI_SCHEMA_VERSION = 3  # Thanksgiving starter-only tiles; no Sunday UI changes.
+TURKEY_BOWL_UI_SCHEMA_VERSION = 4  # Thanksgiving review/confirmation/mobile polish only.
 
 
 def _name(row: dict) -> str:
@@ -32,7 +32,10 @@ def render_home_card(store, event: dict, player: dict) -> bool:
     event_date = datetime.fromisoformat(str(event["game_date"])).date()
     if st.session_state.get("turkey_bowl_open"):
         if st.button("← Back to Sunday Pick’em", use_container_width=True, key="turkey_back_sunday"):
-            st.session_state.turkey_bowl_open = False
+            st.session_state["turkey_bowl_open"] = False
+            st.session_state.pop(_view_key(str(event["id"]), str(player["id"])), None)
+            for pos in POSITIONS:
+                _clear_draft(str(event["id"]), str(player["id"]), pos)
             st.rerun()
         render_turkey_bowl(service, event, player)
         return True
@@ -93,6 +96,46 @@ def _turkey_player_tile(row: dict, *, selected: bool, key: str,
     )
 
 
+def _view_key(event_id: str, player_id: str) -> str:
+    # Scope navigation to the holiday event and player; never reuse Sunday state.
+    return f"turkey_view::{event_id}::{player_id}"
+
+
+def _current_view(event_id: str, player_id: str, *, complete: bool, confirmed: bool) -> str:
+    requested = st.session_state.get(_view_key(event_id, player_id))
+    if not complete:
+        return "edit"
+    if confirmed:
+        # A confirmed lineup is the landing screen unless the player chose Edit.
+        return "edit" if requested == "edit" else "confirmed"
+    # A changed starter invalidates confirmation in the existing database service.
+    return "edit" if requested == "edit" else "review"
+
+
+def _set_view(event_id: str, player_id: str, view: str) -> None:
+    st.session_state[_view_key(event_id, player_id)] = view
+
+
+def _lineup_summary(own: dict, all_rows: dict) -> None:
+    # One compact markup block instead of five Streamlit caption blocks, which
+    # otherwise create substantial whitespace on iPhone.
+    entries = []
+    for position in POSITIONS:
+        pick = own.get(position) or {}
+        starter = all_rows.get(str(pick.get("pool_player_id") or "")) or {}
+        name = str(starter.get("player_name") or "Not selected")
+        team = str(starter.get("team_abbr") or "")
+        label = escape(name + (f" ({team})" if team else ""))
+        entries.append(
+            '<div class="tb-summary-row">'
+            f'<span class="tb-summary-pos">{escape(position)}</span>'
+            f'<span class="tb-summary-name">{label}</span>'
+            '</div>'
+        )
+    st.markdown('<div class="tb-summary">' + ''.join(entries) + '</div>',
+                unsafe_allow_html=True)
+
+
 def _lineup_picker(service: TurkeyBowlService, event: dict, player: dict) -> None:
     eid, pid = str(event["id"]), str(player["id"])
     rows = service.pool(eid, visible_only=True)
@@ -102,35 +145,61 @@ def _lineup_picker(service: TurkeyBowlService, event: dict, player: dict) -> Non
     lineup, picks = service.lineup(eid, pid)
     own = {p["position"]: p for p in picks}
     all_rows = {str(p["id"]): p for p in service.pool(eid)}
-    st.markdown(f"**Your Thanksgiving five: {len(own)} of 5 saved**")
-    st.caption("Starter-only Turkey Bowl: each selected player earns their own points. "
-               "No automatic injury substitutions. All five picks lock Thursday at 1 PM ET.")
-    if lineup and lineup.get("confirmed_at"):
-        st.success("✅ Turkey Bowl lineup confirmed. You can still change it before Thursday's lock.")
-    for position in POSITIONS:
-        pick = own.get(position)
-        if pick:
-            starter = all_rows.get(str(pick.get("pool_player_id"))) or {}
-            st.caption(f"{position}: {starter.get('player_name', 'Unavailable')} ({starter.get('team_abbr','?')})")
+    complete = all(pos in own for pos in POSITIONS)
+    confirmed = bool(lineup and lineup.get("confirmed_at"))
+    view = _current_view(eid, pid, complete=complete, confirmed=confirmed)
 
-    # Confirmation stays above the picker so it is reachable on an iPhone.
-    if len(own) == 5:
+    if view == "confirmed":
+        st.success("✅ You're in the Turkey Bowl! Your five starters are confirmed.")
+        st.markdown("#### Your Thanksgiving five")
+        _lineup_summary(own, all_rows)
+        st.caption("Your lineup locks Thursday, Nov 26 at 1:00 PM ET. You can edit it before then, but changed picks must be reconfirmed.")
+        if st.button("Edit my picks", use_container_width=True,
+                     key=f"turkey_edit_confirmed::{eid}::{pid}"):
+            _set_view(eid, pid, "edit")
+            st.rerun()
+        return
+
+    if view == "review":
+        st.markdown("### Review your Thanksgiving five")
+        st.caption("Check your five starters before entering the Turkey Bowl. No injury substitutions.")
+        _lineup_summary(own, all_rows)
+        # An unsaved staged change should never be silently included in the
+        # confirmed lineup. Players must use Save first.
         pending_unsaved = any(
             _draft_selection(eid, pid, pos, own.get(pos) or {}) !=
             str((own.get(pos) or {}).get("pool_player_id") or "")
             for pos in POSITIONS
         )
         if pending_unsaved:
-            st.caption("Save your changed starter before confirming your Thanksgiving five.")
-        if st.button("✅ Confirm my Turkey Bowl lineup", use_container_width=True,
-                     disabled=pending_unsaved, key="turkey_confirm"):
+            st.warning("You have an unsaved player change. Edit and save it before confirming.")
+        if st.button("✅ Confirm my Turkey Bowl lineup", type="primary", use_container_width=True,
+                     disabled=pending_unsaved, key=f"turkey_confirm::{eid}::{pid}"):
             try:
                 service.confirm(event, pid)
-                st.success("Turkey Bowl lineup confirmed!")
+                # Read back the authoritative database state rather than assuming
+                # a successful write; never show a false success banner.
+                checked_lineup, checked_picks = service.lineup(eid, pid)
+                if not checked_lineup or not checked_lineup.get("confirmed_at") or \
+                        {p.get("position") for p in checked_picks} != set(POSITIONS):
+                    raise TurkeyBowlError("Confirmation could not be verified. Please try again.")
+                _set_view(eid, pid, "confirmed")
                 st.rerun()
             except Exception as exc:
                 _error(exc)
+        if st.button("Edit a pick", use_container_width=True,
+                     key=f"turkey_edit_review::{eid}::{pid}"):
+            _set_view(eid, pid, "edit")
+            st.rerun()
+        return
 
+    # Only the edit screen renders the player tiles. Confirmation/review screens
+    # stay short and clear on a phone.
+    st.markdown(f"**Your Thanksgiving five: {len(own)} of 5 saved**")
+    if confirmed:
+        st.caption("Your five are confirmed. Saving a different starter will require reconfirmation.")
+    else:
+        st.caption("Starter-only Turkey Bowl · no emergency backups · locks Thursday at 1 PM ET")
     _move_to_position_on_next_render()
     position = st.segmented_control("Edit position", POSITIONS, default="QB", key="turkey_edit_position") or "QB"
     from weekly_ui import _stable_order
@@ -149,8 +218,12 @@ def _lineup_picker(service: TurkeyBowlService, event: dict, player: dict) -> Non
             key=f"turkey_starter::{eid}::{pid}::{position}::{row['id']}",
             event_id=eid, player_id=pid, position=position)
 
-    following = POSITIONS[POSITIONS.index(position) + 1] if position != POSITIONS[-1] else None
-    label = f"Save {position} · Next: {following} →" if following else "Save K · Review my five →"
+    remaining = [p for p in POSITIONS if p not in set(own) | {position}]
+    next_is_review = not remaining
+    following = (next((p for p in remaining if POSITIONS.index(p) > POSITIONS.index(position)),
+                      remaining[0]) if remaining else None)
+    label = (f"Save {position} · Review my five →" if next_is_review else
+             f"Save {position} · Next: {following} →")
     if st.button(label, type="primary", use_container_width=True,
                  disabled=starter_id not in candidates,
                  key=f"turkey_save_next::{eid}::{pid}::{position}"):
@@ -159,13 +232,24 @@ def _lineup_picker(service: TurkeyBowlService, event: dict, player: dict) -> Non
             if changed:
                 service.save_pick(event, pid, position, starter_id)
             _clear_draft(eid, pid, position)
-            if following:
+            if next_is_review:
+                _set_view(eid, pid, "review")
+            elif following:
                 st.session_state["turkey_next_position"] = following
-            if changed:
-                st.toast(f"{position} saved for Turkey Bowl.")
+            # No rerun-time toast: it disappears before mobile users can see it.
             st.rerun()
         except Exception as exc:
             _error(exc)
+    if complete:
+        # Allows leaving the editor without touching the saved starter.
+        if st.button("Back to my lineup", use_container_width=True,
+                     key=f"turkey_return_summary::{eid}::{pid}"):
+            # Discard staged edits that were never saved; never create a false
+            # mismatch between the review screen and the database.
+            for pos in POSITIONS:
+                _clear_draft(eid, pid, pos)
+            _set_view(eid, pid, "confirmed" if confirmed else "review")
+            st.rerun()
 
 
 def _locked_view(service: TurkeyBowlService, event: dict, player: dict) -> None:
@@ -230,8 +314,29 @@ def _live_scores(service: TurkeyBowlService, event: dict, current_player_id: str
                 st.caption(f"{item['position']} · {name} · {item['points']:.1f}")
 
 
+def _turkey_mobile_styles() -> None:
+    # Scoped classes: no global Sunday styling or shared bottom-navigation changes.
+    st.markdown("""<style>
+    .tb-title {font-size:clamp(1.8rem, 5vw, 2.7rem); font-weight:800;
+      letter-spacing:-.035em; line-height:1.18; margin:1.1rem 0 .75rem;}
+    .tb-summary {background:var(--secondary-background-color, #fff);
+      border:1px solid rgba(120,140,150,.27); border-radius:14px;
+      padding:.45rem .9rem; margin:.65rem 0 1rem;}
+    .tb-summary-row {display:flex; align-items:center; gap:.65rem;
+      padding:.38rem 0; min-height:2rem;}
+    .tb-summary-row + .tb-summary-row {border-top:1px solid rgba(120,140,150,.13);}
+    .tb-summary-pos {flex:0 0 2.3rem; text-align:center; font-size:.8rem;
+      font-weight:750; color:#0f766e; background:#e8f5f2;
+      border-radius:9px; padding:.19rem .15rem;}
+    .tb-summary-name {font-weight:600; font-size:.97rem; overflow-wrap:anywhere;}
+    .tb-bottom-clearance {height:calc(8rem + env(safe-area-inset-bottom, 0px));}
+    @media (max-width:540px) {.tb-title {font-size:1.72rem; margin:.8rem 0 .65rem;}}
+    </style>""", unsafe_allow_html=True)
+
+
 def render_turkey_bowl(service: TurkeyBowlService, event: dict, player: dict) -> None:
-    st.title("🦃 Teal’s Turkey Bowl")
+    _turkey_mobile_styles()
+    st.markdown('<h1 class="tb-title">🦃 Teal’s Turkey Bowl</h1>', unsafe_allow_html=True)
     st.caption("Thanksgiving Day • Three games • Five starters • One Turkey Bowl champion")
     st.markdown("**Bears @ Lions · Eagles @ Cowboys · Chiefs @ Bills**" if int(event["season"]) == 2026 else "Thanksgiving NFL tripleheader")
     st.caption(f"All five picks lock {et_label(event['locks_at'])} · Full regular season points are awarded to the final rankings.")
@@ -246,6 +351,9 @@ def render_turkey_bowl(service: TurkeyBowlService, event: dict, player: dict) ->
         _lineup_picker(service, event, player)
     else:
         st.info(f"Selections open {et_label(event['opens_at'])}.")
+    # Clearance so the final Turkey Bowl control can scroll above the fixed
+    # bottom nav on iPhone; shared Sunday navigation remains untouched.
+    st.markdown('<div class="tb-bottom-clearance"></div>', unsafe_allow_html=True)
 
 
 def render_commissioner_turkey(store) -> None:
