@@ -12,6 +12,7 @@ from turkey_bowl import TurkeyBowlError, TurkeyBowlService, is_locked, is_open
 from weekly import ET, POSITIONS, et_label, parse_timestamp
 
 UTC = timezone.utc
+TURKEY_BOWL_UI_SCHEMA_VERSION = 2  # Thanksgiving tile picker, no scoring or DB changes.
 
 
 def _name(row: dict) -> str:
@@ -50,71 +51,186 @@ def render_home_card(store, event: dict, player: dict) -> bool:
     return False
 
 
+def _draft_key(event_id: str, player_id: str, position: str, field: str) -> str:
+    """A separate draft for every Thanksgiving player/position; never reuse Sunday keys."""
+    return f"turkey_draft::{event_id}::{player_id}::{position}::{field}"
+
+
+def _stage_starter(event_id: str, player_id: str, position: str, row_id: str) -> None:
+    st.session_state[_draft_key(event_id, player_id, position, "starter")] = row_id
+    # A newly selected starter must never silently inherit another starter's backup.
+    st.session_state.pop(_draft_key(event_id, player_id, position, "backup"), None)
+    st.session_state[_draft_key(event_id, player_id, position, "step")] = "starter"
+
+
+def _stage_backup(event_id: str, player_id: str, position: str, row_id: str) -> None:
+    # Empty string explicitly means the user chose no backup, not "keep the old one".
+    st.session_state[_draft_key(event_id, player_id, position, "backup")] = row_id
+
+
+def _draft_selection(event_id: str, player_id: str, position: str,
+                     saved: dict, candidates: dict[str, dict]) -> tuple[str, str]:
+    """Resolve staged choices without writing or altering an existing saved pick."""
+    saved_starter = str(saved.get("pool_player_id") or "")
+    saved_backup = str(saved.get("emergency_pool_player_id") or "")
+    staged_starter = st.session_state.get(_draft_key(event_id, player_id, position, "starter"))
+    starter_id = str(staged_starter) if staged_starter is not None else saved_starter
+    staged_backup = st.session_state.get(_draft_key(event_id, player_id, position, "backup"))
+    if staged_backup is not None:
+        backup_id = str(staged_backup)
+    elif starter_id == saved_starter:
+        backup_id = saved_backup
+    else:
+        backup_id = ""
+    return starter_id, backup_id
+
+
+def _clear_draft(event_id: str, player_id: str, position: str) -> None:
+    for field in ("starter", "backup", "step"):
+        st.session_state.pop(_draft_key(event_id, player_id, position, field), None)
+
+
+def _move_to_position_on_next_render() -> None:
+    """Update an existing segmented widget BEFORE it is instantiated on the next rerun."""
+    nxt = st.session_state.pop("turkey_next_position", None)
+    if nxt in POSITIONS:
+        st.session_state["turkey_edit_position"] = nxt
+
+
+def _turkey_player_tile(row: dict, *, selected: bool, key: str,
+                        event_id: str, player_id: str, position: str, as_backup: bool) -> None:
+    # Reuse Sunday's real full-width button component, including its selected
+    # border, QUESTIONABLE badge, mobile tap target and team/kickoff metadata.
+    # Never reuse Sunday's session keys or lineup save callbacks.
+    from weekly_ui import _render_player_card_button
+
+    stage = _stage_backup if as_backup else _stage_starter
+    _render_player_card_button(
+        row, key=key, selected=selected, on_click=stage,
+        args=(event_id, player_id, position, str(row["id"])),
+    )
+
+
 def _lineup_picker(service: TurkeyBowlService, event: dict, player: dict) -> None:
-    eid = str(event["id"])
+    eid, pid = str(event["id"]), str(player["id"])
     rows = service.pool(eid, visible_only=True)
     if any(len([r for r in rows if r["position"] == p]) != 5 for p in POSITIONS):
         st.info("The Thanksgiving five-player choices are being prepared. Your Sunday lineup is unaffected.")
         return
-    lineup, picks = service.lineup(eid, str(player["id"]))
+    lineup, picks = service.lineup(eid, pid)
     own = {p["position"]: p for p in picks}
     all_rows = {str(p["id"]): p for p in service.pool(eid)}
     complete = len(own)
     st.markdown(f"**Your Thanksgiving five: {complete} of 5 saved**")
     if lineup and lineup.get("confirmed_at"):
         st.success("✅ Turkey Bowl lineup confirmed. You can still change it before Thursday's lock.")
-    for pos in POSITIONS:
-        pick = own.get(pos)
+    for position in POSITIONS:
+        pick = own.get(position)
         if pick:
             starter = all_rows.get(str(pick.get("pool_player_id"))) or {}
             backup = all_rows.get(str(pick.get("emergency_pool_player_id"))) if pick.get("emergency_pool_player_id") else None
             backup_text = f" • Backup: {backup.get('player_name')}" if backup else ""
-            st.caption(f"{pos}: {starter.get('player_name', 'Unavailable')} ({starter.get('team_abbr','?')}){backup_text}")
+            st.caption(f"{position}: {starter.get('player_name', 'Unavailable')} ({starter.get('team_abbr','?')}){backup_text}")
 
-    pos = st.segmented_control("Edit position", POSITIONS, default="QB", key="turkey_edit_position")
-    pos = pos or "QB"
-    candidates = [p for p in rows if p["position"] == pos and p["availability_status"] != "OUT"]
-    by_id = {str(p["id"]): p for p in candidates}
-    current = own.get(pos) or {}
-    starter_id = str(current.get("pool_player_id") or "")
-    backup_id = str(current.get("emergency_pool_player_id") or "")
-    if starter_id and starter_id not in by_id:
-        st.warning("Your saved starter is no longer a selectable option. Please choose a replacement.")
-    st.markdown(f"#### {pos} — Thanksgiving picks")
-    with st.form(f"turkey_position_form_{eid}_{pos}"):
-        starter = st.selectbox("Starter", options=[None, *by_id],
-              index=([None, *by_id].index(starter_id) if starter_id in by_id else 0),
-              format_func=lambda v: "Select a starter" if v is None else _name(by_id[v]),
-              key=f"turkey_starter_{eid}_{pos}")
-        # Keep options stable inside a Streamlit form; the chosen starter is
-        # validated on submit instead of dynamically changing backup choices.
-        backup_options = [None, *by_id]
-        backup = st.selectbox("Emergency backup (recommended for every position)", options=backup_options,
-              index=(backup_options.index(backup_id) if backup_id in backup_options else 0),
-              format_func=lambda v: "No backup" if v is None else _name(by_id[v]),
-              key=f"turkey_backup_{eid}_{pos}")
-        st.caption("An eligible saved backup activates only if your starter is officially OUT. The Thursday 1 PM ET lock applies to all three games.")
-        submitted = st.form_submit_button(f"Save {pos}", type="primary", use_container_width=True)
-    if submitted:
-        try:
-            if not starter:
-                st.warning("Choose a starter before saving.")
-            elif backup and starter == backup:
-                st.warning("Your emergency backup must be a different player.")
-            else:
-                service.save_pick(event, str(player["id"]), pos, starter, backup)
-                st.toast(f"{pos} saved for Turkey Bowl.")
-                st.rerun()
-        except Exception as exc:
-            _error(exc)
+    # Keep the final confirmation immediately after the five-player review,
+    # not beneath another entire page of selectable cards on an iPhone.
     if complete == 5:
-        if st.button("✅ Confirm my Turkey Bowl lineup", use_container_width=True, key="turkey_confirm"):
+        pending_unsaved = any(
+            _draft_selection(eid, pid, p, own.get(p) or {}, {}) != (
+                str((own.get(p) or {}).get("pool_player_id") or ""),
+                str((own.get(p) or {}).get("emergency_pool_player_id") or ""),
+            )
+            for p in POSITIONS
+        )
+        if pending_unsaved:
+            st.caption("Save your changed position before confirming your Thanksgiving five.")
+        if st.button("✅ Confirm my Turkey Bowl lineup", use_container_width=True,
+                     disabled=pending_unsaved, key="turkey_confirm"):
             try:
-                service.confirm(event, str(player["id"]))
+                service.confirm(event, pid)
                 st.success("Turkey Bowl lineup confirmed!")
                 st.rerun()
             except Exception as exc:
                 _error(exc)
+
+    _move_to_position_on_next_render()
+    position = st.segmented_control("Edit position", POSITIONS, default="QB", key="turkey_edit_position") or "QB"
+    # Match Sunday: hold one stable, player-specific card order for each position.
+    from weekly_ui import _stable_order
+    display_rows = _stable_order(pid, eid, position, [p for p in rows if p["position"] == position])
+    candidates = {str(p["id"]): p for p in display_rows
+                  if p.get("availability_status") != "OUT"}
+    current = own.get(position) or {}
+    starter_id, backup_id = _draft_selection(eid, pid, position, current, candidates)
+    step_key = _draft_key(eid, pid, position, "step")
+    step = st.session_state.get(step_key, "starter")
+    if step not in ("starter", "backup"):
+        step = "starter"
+    st.markdown(f"### Choose your {position}" if step == "starter" else f"### Emergency {position} backup")
+    if starter_id and starter_id not in candidates:
+        st.warning("Your saved starter is no longer selectable. Choose an available replacement before saving.")
+    if backup_id and backup_id not in candidates:
+        st.warning("Your previous backup is no longer selectable. Select another backup or clear it before saving.")
+
+    if step == "starter":
+        st.caption("Tap a player tile to highlight your starter. Nothing saves until you finish this position.")
+        for row in display_rows:
+            _turkey_player_tile(row, selected=str(row["id"]) == starter_id,
+                key=f"turkey_starter::{eid}::{pid}::{position}::{row['id']}",
+                event_id=eid, player_id=pid, position=position, as_backup=False)
+        if st.button("Next: Emergency Backup →", type="primary", use_container_width=True,
+                     disabled=starter_id not in candidates,
+                     key=f"turkey_next_backup::{eid}::{pid}::{position}"):
+            st.session_state[step_key] = "backup"
+            st.rerun()
+    else:
+        selected_starter = candidates.get(starter_id)
+        if selected_starter is None:
+            st.session_state[step_key] = "starter"
+            st.rerun()
+        st.caption(f"Starter: {selected_starter['player_name']} ({selected_starter['team_abbr']})")
+        st.info("A saved emergency backup plays only if your starter is officially OUT. "
+                "You can leave it empty unless your starter is QUESTIONABLE.")
+        for row in display_rows:
+            if str(row["id"]) == starter_id:
+                continue
+            _turkey_player_tile(row, selected=str(row["id"]) == backup_id,
+                key=f"turkey_backup::{eid}::{pid}::{position}::{row['id']}",
+                event_id=eid, player_id=pid, position=position, as_backup=True)
+        if st.button("No emergency backup" + (" ✓" if not backup_id else ""),
+                     use_container_width=True, key=f"turkey_clear_backup::{eid}::{pid}::{position}"):
+            _stage_backup(eid, pid, position, "")
+            st.rerun()
+        if str(selected_starter.get("availability_status") or "HEALTHY") == "QUESTIONABLE" and not backup_id:
+            st.warning("Your starter is QUESTIONABLE. Choose a healthy backup before confirming your lineup.")
+
+        left, right = st.columns([1, 2])
+        with left:
+            if st.button("← Change starter", use_container_width=True,
+                         key=f"turkey_back_starter::{eid}::{pid}::{position}"):
+                st.session_state[step_key] = "starter"
+                st.rerun()
+        with right:
+            following = POSITIONS[POSITIONS.index(position) + 1] if position != POSITIONS[-1] else None
+            label = f"Save {position} · Next: {following} →" if following else "Save K · Review my five →"
+            if st.button(label, type="primary", use_container_width=True,
+                         disabled=bool(backup_id and (backup_id not in candidates or backup_id == starter_id)),
+                         key=f"turkey_save_next::{eid}::{pid}::{position}"):
+                try:
+                    changed = (
+                        starter_id != str(current.get("pool_player_id") or "")
+                        or backup_id != str(current.get("emergency_pool_player_id") or "")
+                    )
+                    if changed:
+                        service.save_pick(event, pid, position, starter_id, backup_id or None)
+                    _clear_draft(eid, pid, position)
+                    if following:
+                        st.session_state["turkey_next_position"] = following
+                    if changed:
+                        st.toast(f"{position} saved for Turkey Bowl.")
+                    st.rerun()
+                except Exception as exc:
+                    _error(exc)
 
 
 def _locked_view(service: TurkeyBowlService, event: dict, player: dict) -> None:
