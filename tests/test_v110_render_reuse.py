@@ -182,10 +182,10 @@ from pathlib import Path
 prefix = Path("app.py").read_text().split("\\npage_config()", 1)[0]
 scope = {"__name__": "warm_deploy_probe"}
 exec(compile(prefix, "app.py", "exec"), scope)
-assert scope["APP_BUILD_VERSION"] == "1.0.19-turkey-bowl"
+assert scope["APP_BUILD_VERSION"] == "1.0.19-turkey-loser-badge"
 assert scope["APP_VERSION"] == "1.0.19"
 assert store.STORE_SCHEMA_VERSION == 12
-assert weekly_ui.WEEKLY_UI_SCHEMA_VERSION == 18
+assert weekly_ui.WEEKLY_UI_SCHEMA_VERSION == 19
 assert gate5_ui.GATE5_UI_SCHEMA_VERSION == 15
 assert nfl_sources.NFL_SOURCES_SCHEMA_VERSION == 4
 assert nfl_sync.NFL_SYNC_SCHEMA_VERSION == 8

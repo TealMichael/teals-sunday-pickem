@@ -139,8 +139,12 @@ class TurkeyRules(unittest.TestCase):
     def test_privacy_gate_on_public_bundle(self):
         from turkey_bowl import TurkeyBowlService
         fake = TurkeyBowlService(None)
-        with self.assertRaises(TurkeyBowlError):
-            fake.public_bundle(EVENT)   # No DB access should occur before lock.
+        # The fixture's Thanksgiving 2026 lock is now in the past. Exercise
+        # the privacy rule with a future lock rather than the wall clock date.
+        future_event = dict(EVENT, id="holiday-privacy-test",
+                            locks_at=(datetime.now(UTC) + timedelta(days=1)).isoformat())
+        with self.assertRaisesRegex(TurkeyBowlError, "remain private"):
+            fake.public_bundle(future_event)  # Never read DB before lock.
 
     def test_migration_contains_no_mutations_of_sunday_tables(self):
         sql = (ROOT / "db/018_turkey_bowl.sql").read_text()
