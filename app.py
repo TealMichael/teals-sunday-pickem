@@ -22,7 +22,7 @@ import config as _config
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.11-performance2"
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.12-performance3"
 # Previous performance guard: getattr(_config, "APP_BUILD_VERSION", "") != "1.0.13-performance4"
-if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.19-turkey-bowl":
+if getattr(_config, "APP_BUILD_VERSION", "") != "1.0.19-turkey-loser-badge":
     _config = importlib.reload(_config)
 from config import (
     APP_BUILD_VERSION,
@@ -116,7 +116,7 @@ import gate5_ui as _gate5_ui
 # Prior cumulative guard: getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 9
 _reloaded_gate4_ui = False
 # Previous guard: if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 10:
-if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 16:
+if _reloaded_automation_recovery or getattr(_gate4_ui, "GATE4_UI_SCHEMA_VERSION", 0) < 17:
     _gate4_ui = importlib.reload(_gate4_ui)
     _reloaded_gate4_ui = True
 render_gate4_demo = _gate4_ui.render_gate4_demo
@@ -145,10 +145,10 @@ render_player_game = _weekly_ui.render_player_game
 # Warm-worker safety for this starter-only holiday update. Reload the special
 # event service first, then its UI, without touching Sunday module bindings.
 import turkey_bowl as _turkey_bowl
-if getattr(_turkey_bowl, "TURKEY_BOWL_VERSION", 0) < 2:
+if getattr(_turkey_bowl, "TURKEY_BOWL_VERSION", 0) < 3:
     _turkey_bowl = importlib.reload(_turkey_bowl)
 import turkey_bowl_ui as _turkey_bowl_ui
-if getattr(_turkey_bowl_ui, "TURKEY_BOWL_UI_SCHEMA_VERSION", 0) < 6:
+if getattr(_turkey_bowl_ui, "TURKEY_BOWL_UI_SCHEMA_VERSION", 0) < 7:
     _turkey_bowl_ui = importlib.reload(_turkey_bowl_ui)
 
 # Legacy regression marker: GATE5_UI_SCHEMA_VERSION", 0) < 4

@@ -17,7 +17,7 @@ APP_VERSION = "1.0.19"
 # every hotfix a distinct Streamlit resource-cache generation. Without this,
 # a warm Streamlit Cloud process can reuse a SupabaseStore instance created by
 # an older class definition across a multi-file deploy.
-APP_BUILD_VERSION = "1.0.19-turkey-bowl"
+APP_BUILD_VERSION = "1.0.19-turkey-loser-badge"
 # Previous release: APP_BUILD_VERSION = "1.0.17-clock"
 # Previous release: APP_BUILD_VERSION = "1.0.16-access"
 # Previous release: APP_BUILD_VERSION = "1.0.14-performance5"

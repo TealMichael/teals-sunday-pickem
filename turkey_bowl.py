@@ -19,7 +19,7 @@ from weekly import POSITIONS, parse_timestamp
 
 UTC = timezone.utc
 ET = ZoneInfo("America/New_York")
-TURKEY_BOWL_VERSION = 2
+TURKEY_BOWL_VERSION = 3
 EVENT_TYPE = "turkey_bowl"
 EXPECTED_2026 = {frozenset(("CHI", "DET")), frozenset(("PHI", "DAL")), frozenset(("KC", "BUF"))}
 
@@ -236,6 +236,14 @@ class TurkeyBowlService:
         """Winner from the previous Thanksgiving wears a badge this season."""
         return {str(r["player_id"]) for r in self.results(season=season - 1) if r.get("is_champion")}
 
+    def loser_badge_ids(self, season: int) -> set[str]:
+        """The 2026 Turkey Bowl loser wears the badge for the rest of 2026 only."""
+        row = self.store.get_app_meta(f"turkey_bowl_loser_badge:{int(season)}")
+        value = (row or {}).get("value") or {}
+        if int(season) != 2026:
+            return set()
+        return {str(player_id) for player_id in value.get("player_ids") or [] if str(player_id)}
+
     def sync_schedule(self, event: dict, *, nflverse=None, espn=None) -> list[dict]:
         nflverse = nflverse or NFLverseProvider()
         try:
@@ -445,8 +453,22 @@ class TurkeyBowlService:
         } for row in leaderboard]
         if awards:
             self.table("special_results").upsert(awards, on_conflict="event_id,player_id").execute()
+        loser_ids: list[str] = []
+        loser_nicknames: list[str] = []
+        if leaderboard:
+            loser_score = min(float(row["score"]) for row in leaderboard)
+            losers = [row for row in leaderboard if abs(float(row["score"]) - loser_score) < 0.0005]
+            loser_ids = [str(row["player_id"]) for row in losers]
+            loser_nicknames = [str(row["nickname"]) for row in losers]
+        self.store.set_app_meta(f"turkey_bowl_loser_badge:{int(event['season'])}", {
+            "season": int(event["season"]),
+            "event_id": str(event["id"]),
+            "player_ids": loser_ids,
+            "nicknames": loser_nicknames,
+            "awarded_at": stamp,
+        })
         self.table("special_events").update({"finalized_at": stamp}).eq("id", str(event["id"])).execute()
-        return {"players": len(awards), "champions": [r["nickname_snapshot"] for r in awards if r["is_champion"]]}
+        return {"players": len(awards), "champions": [r["nickname_snapshot"] for r in awards if r["is_champion"]], "losers": loser_nicknames}
 
     def promote_reserve(self, event: dict, outgoing_id: str, incoming_id: str) -> None:
         """One transaction in SQL prevents a brief 4-/6-visible-player pool."""

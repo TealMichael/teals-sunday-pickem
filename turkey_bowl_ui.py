@@ -8,11 +8,12 @@ import streamlit as st
 
 from gate4 import build_weekly_leaderboard
 from turkey_trophy_badge import trophy_badge_html, trophy_badge_markdown
+from turkey_loser_badge import loser_badge_html
 from turkey_bowl import TurkeyBowlError, TurkeyBowlService, is_locked, is_open
 from weekly import ET, POSITIONS, et_label, parse_timestamp
 
 UTC = timezone.utc
-TURKEY_BOWL_UI_SCHEMA_VERSION = 6  # Retain Turkey Bowl link below Sunday after Nov 29.
+TURKEY_BOWL_UI_SCHEMA_VERSION = 7  # Retain Turkey Bowl link below Sunday after Nov 29.
 
 
 def _name(row: dict) -> str:
@@ -309,6 +310,7 @@ def _live_scores(service: TurkeyBowlService, event: dict, current_player_id: str
     if not leaderboard:
         st.caption("Nobody submitted a lineup for this year's Turkey Bowl.")
         return
+    loser_ids = service.loser_badge_ids(int(event["season"])) if event.get("finalized_at") else set()
     if event.get("finalized_at"):
         winners = [r for r in leaderboard if r["rank"] == 1]
         st.success(trophy_badge_markdown() + " Turkey Bowl Champion: " + ", ".join(r["nickname"] for r in winners))
@@ -324,6 +326,7 @@ def _live_scores(service: TurkeyBowlService, event: dict, current_player_id: str
     for r in leaderboard:
         you = " · YOU" if str(r["player_id"]) == current_player_id else ""
         trophy = trophy_badge_html() if event.get("finalized_at") and int(r["rank"]) == 1 else ""
+        loser = loser_badge_html() if str(r.get("player_id") or "") in loser_ids else ""
         st.markdown(
             f"<strong>{r['rank']}. {escape(str(r['emoji']))} {escape(str(r['nickname']))}{trophy}{escape(you)}</strong> — {r['score']:.1f} pts",
             unsafe_allow_html=True,
